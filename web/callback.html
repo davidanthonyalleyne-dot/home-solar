@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Connect SolarEdge · Home Solar</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<style>
+  main { padding-bottom: 40px; }
+  .code { font: 15px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; background: var(--bg); border-radius: 10px; padding: 12px; user-select: all; }
+  .btn { display: flex; align-items: center; justify-content: center; min-height: 50px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; font-size: 17px; font-weight: 600; text-decoration: none; cursor: pointer; }
+  .btn.secondary { background: var(--card); color: var(--accent); }
+  ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 1.4; }
+</style>
+</head>
+<body>
+<main id="m">
+  <h1>Connect SolarEdge</h1>
+</main>
+<script>
+(() => {
+  const m = document.getElementById("m");
+  const q = new URLSearchParams(location.search);
+  const code = q.get("code"), err = q.get("error_description") || q.get("error");
+  const owner = location.hostname.split(".")[0];
+  const repo = location.pathname.split("/").filter(Boolean)[0] || "home-solar";
+  const run = `https://github.com/${owner}/${repo}/actions/workflows/connect.yml`;
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  // keep the code out of the address bar and history
+  history.replaceState(null, "", location.pathname);
+
+  if (!code) {
+    m.insertAdjacentHTML("beforeend", `<section class="card"><span class="label">${err ? "SolarEdge said: " + esc(err) : "There's no code in this address."}</span>
+      <span class="small">Start again from the Connect SolarEdge button on the Sources screen.</span>
+      <a class="btn secondary" href="./#sources">Back to Sources</a></section>`);
+    return;
+  }
+  m.insertAdjacentHTML("beforeend", `
+    <section class="card">
+      <span class="label">SolarEdge approved access${q.get("site_id") ? " to site " + esc(q.get("site_id")) : ""}. Here's your one-time code:</span>
+      <div class="code" id="code">${esc(code)}</div>
+      <button class="btn" type="button" id="copy">Copy code</button>
+    </section>
+    <section class="card">
+      <ol>
+        <li>Open the Connect SolarEdge workflow in GitHub.</li>
+        <li>Tap <b>Run workflow</b>, paste the code, and run it.</li>
+        <li>When it turns green, the site rebuilds with your solar data in a minute or two.</li>
+      </ol>
+      <span class="small">Do this straight away. The code only works once and expires within minutes.</span>
+      <a class="btn secondary" href="${run}" target="_blank" rel="noopener">Open the workflow</a>
+    </section>`);
+  document.getElementById("copy").addEventListener("click", async (e) => {
+    try { await navigator.clipboard.writeText(code); e.target.textContent = "Copied"; }
+    catch { getSelection().selectAllChildren(document.getElementById("code")); e.target.textContent = "Select and copy the code above"; }
+  });
+})();
+</script>
+</body>
+</html>
