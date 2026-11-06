@@ -170,6 +170,15 @@
       const ahead = days.filter((r) => r.imp != null && r.exp > r.imp).length;
       item("var(--solar)", sunIcon, `Best solar day was ${esc(shortDay(best.d))}`, `${fmt(best.prod, 1)} kWh. The dullest was ${esc(shortDay(low.d))} at ${fmt(low.prod, 1)}.${days.some((r) => r.imp != null) ? ` ${ahead ? (ahead === 1 ? "One day" : ahead + " days") + " sent back more than the house drew." : "No day sent back more than the house drew."}` : ""}`);
     }
+    // production against what the sunlight predicted
+    const perf = days.map((r) => [r, r.prod != null ? expectedFor(r.d) : null]).filter(([r, e]) => e != null && e > 1 && parseDay(r.d) < parseDay(torontoToday()));
+    if (perf.length >= 7) {
+      const act = perf.reduce((a, [r]) => a + r.prod, 0), exp = perf.reduce((a, [, e]) => a + e, 0);
+      const weak = perf.filter(([r, e]) => e >= 8 && r.prod < 0.6 * e && !(weatherDay(r.d) && ((weatherDay(r.d)[5] || 0) > 0)));
+      const p = pct(act, exp);
+      item(p >= 85 ? "var(--good)" : "var(--warn)", p >= 85 ? okIc : warnIc, `Panels made ${p}% of what the sunlight predicted`,
+        weak.length ? `${weak.length === 1 ? "One day" : weak.length + " days"} fell well short: ${weak.slice(0, 4).map(([r]) => shortDay(r.d)).join(", ")}${weak.length > 4 ? " and more" : ""}. Outages, snow cover or shade usually explain it.` : "Every day came in close to what the weather allowed.");
+    }
     // the month's weather
     const wdays = days.map((r) => [r, weatherDay(r.d)]).filter(([, w]) => w);
     if (wdays.length >= 5) {
@@ -314,12 +323,102 @@
     </section>`;
   }
 
+
+  // ---------- system health, expected production, extras ----------
+  const alerts = () => (solar() && solar().alerts) || [];
+  const warnIc = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/></svg>';
+  const okIc = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/></svg>';
+  const timeOf = (iso) => iso ? new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: TZNAME }) : "";
+
+  function alertBanner() {
+    const a = alerts();
+    if (!a.length) return "";
+    const first = a[0];
+    return `<a class="banner" href="#solar"><span class="banner-ic">${warnIc}</span><span style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1">
+      <span style="font-weight:600">${a.length === 1 ? "SolarEdge reports an alert" : `SolarEdge reports ${a.length} alerts`}</span>
+      <span class="small">${esc(first.type || "Alert")}${first.component ? " · " + esc(first.component) : ""}</span></span>${chev}</a>`;
+  }
+
+  // kWh per MJ/m² of sunlight, learned from nearby days (skips outages and snow)
+  const _k = {};
+  function factorAround(d) {
+    if (d in _k) return _k[d];
+    const s = solar(), wd = state.data.weather && state.data.weather.daily;
+    if (!s || !wd) return (_k[d] = null);
+    const t = parseDay(d).getTime(), r = [];
+    for (const [day, p] of Object.entries(s.daily)) {
+      const w = wd[day];
+      if (!w || w[4] == null || w[4] < 2 || p == null || p < 0.5 || (w[5] || 0) > 0 || [71, 73, 75, 77, 85, 86].includes(w[2])) continue;
+      if (Math.abs(parseDay(day).getTime() - t) > 30 * 86400000) continue;
+      r.push(p / w[4]);
+    }
+    r.sort((a, b) => a - b);
+    return (_k[d] = r.length >= 7 ? r[Math.floor(r.length / 2)] : (state.data.weather.factor || null));
+  }
+  function expectedFor(d) {
+    const w = weatherDay(d), k = factorAround(d);
+    return w && w[4] != null && k ? k * w[4] : null;
+  }
+
+  const pretty = (name) => name.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase()).replace(/\bAc\b/, "AC").replace(/\bDc\b/, "DC");
+  function inverterRows() {
+    const inv = solar() && solar().inverter;
+    if (!inv || !inv.metrics) return "";
+    const m = inv.metrics, names = Object.keys(m);
+    const pick = (re) => names.find((n) => re.test(n));
+    const order = [pick(/temp/i), pick(/mode|status|state/i), pick(/^ac.*power|^power|activepower/i), pick(/dc.*power/i), pick(/^ac.*volt|^volt/i), pick(/dc.*volt/i), pick(/freq/i)];
+    const shown = [...new Set(order.filter(Boolean)), ...names.filter((n) => !order.includes(n))].slice(0, 8);
+    const unitOf = (x) => { const u = String(x.unit || "").toUpperCase(); return u === "C" || u === "CELSIUS" ? "°C" : u === "W" ? " W" : u === "V" ? " V" : u === "HZ" ? " Hz" : u === "A" ? " A" : x.unit ? " " + x.unit : ""; };
+    const MODES = { MPPT: "Producing", SLEEPING: "Sleeping", NIGHT: "Night", NIGHT_MODE: "Night", THROTTLED: "Limited", FAULT: "Fault", STARTING: "Starting up", OFF: "Off", SHUTTING_DOWN: "Shutting down", STANDBY: "Standby", LOCKED: "Locked" };
+    const val = (x) => typeof x.latest === "number" ? fmt(x.latest, Math.abs(x.latest) < 100 ? 1 : 0) + unitOf(x) : esc(MODES[String(x.latest).toUpperCase()] || String(x.latest ?? "–").replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase()));
+    const rows = shown.map((n) => {
+      const x = m[n], extra = /temp/i.test(n) && typeof x.max === "number" ? ` <span class="small">· high ${fmt(x.max, 0)}${unitOf(x)}</span>` : "";
+      return `<div class="row"><span>${esc(pretty(n))}</span><span class="val num">${val(x)}${extra}</span></div>`;
+    }).join("");
+    return `<div class="section">Inverter</div><div class="list">${rows}</div><div class="foot">Hourly readings from SolarEdge, last at ${esc(timeOf(inv.at))}.</div>`;
+  }
+
+  function healthBlock() {
+    const s = solar();
+    if (!s) return "";
+    const a = alerts();
+    const rows = a.length
+      ? a.map((x) => `<div class="row" style="align-items:flex-start"><span class="hl-ic" style="color:var(--warn)">${warnIc}</span><span style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0">
+          <span style="font-weight:600">${esc(x.type || "Alert")}</span>
+          <span class="small">${[x.component, x.category && pretty(String(x.category).toLowerCase()), x.impact != null && `impact ${x.impact} of 9`, x.first && `since ${timeOf(x.first)}`].filter(Boolean).map(esc).join(" · ")}</span></span></div>`).join("")
+      : `<div class="row" style="justify-content:flex-start;gap:10px"><span class="hl-ic" style="color:var(--good)">${okIc}</span><span>${s.alertsChecked ? "No open alerts" : "Alerts not checked yet"}</span></div>`;
+    return `<div class="section" id="alerts">System health</div><div class="list hl-list">${rows}</div>
+      ${s.alertsChecked ? `<div class="foot">SolarEdge checked ${esc(timeOf(s.alertsChecked))}. New alerts also open an issue in your GitHub repo, which emails you.</div>` : ""}`;
+  }
+
+  function benefitsCard() {
+    const b = solar() && solar().benefits;
+    if (!b) return "";
+    const keys = Object.keys(b), num = (re) => { const k = keys.find((x) => re.test(x) && typeof b[x] === "number"); return k ? [k, b[k]] : null; };
+    const co2 = num(/co2/i), trees = num(/tree/i), bulbs = num(/bulb/i), ev = num(/ev(miles|km)?/i);
+    const unitK = keys.find((k) => /unit/i.test(k)), unit = unitK ? String(b[unitK]).toLowerCase() : "kg";
+    const parts = [];
+    if (co2) { const kg = /lb/.test(unit) ? co2[1] * 0.4536 : /^t|ton/.test(unit) ? co2[1] * 1000 : co2[1]; parts.push(`<div class="tile"><span class="k">CO₂ avoided</span><span class="v num">${kg >= 1000 ? fmt(kg / 1000, 1) + " <small>tonnes</small>" : fmt(kg) + " <small>kg</small>"}</span></div>`); }
+    if (trees) parts.push(`<div class="tile"><span class="k">Like planting</span><span class="v num">${fmt(trees[1])} <small>trees</small></span></div>`);
+    if (!trees && bulbs) parts.push(`<div class="tile"><span class="k">Light bulbs for a day</span><span class="v num">${fmt(bulbs[1])}</span></div>`);
+    if (!trees && !bulbs && ev) parts.push(`<div class="tile"><span class="k">EV driving</span><span class="v num">${fmt(/km/i.test(ev[0]) ? ev[1] : ev[1] * 1.609)} <small>km</small></span></div>`);
+    if (!parts.length) return "";
+    return `<div class="section">Since ${esc(solar().installed ? new Date(solar().installed + "T12:00").toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "install")}</div><div class="tiles">${parts.join("")}</div><div class="foot">SolarEdge's estimate of what your panels have saved.</div>`;
+  }
+
+  function tomorrowRow() {
+    const t = state.data.weather && state.data.weather.tomorrow, k = state.data.weather && state.data.weather.factor;
+    if (!t) return "";
+    const [d, hi, lo, code, , ghi] = t, c = wx(code), exp = k && ghi != null ? k * ghi : null;
+    return `<div class="list"><div class="row"><span style="display:flex;align-items:center;gap:8px"><span style="color:${wxColor(c.icon)}">${wxIcon(c.icon, 20)}</span>Tomorrow · ${esc(c.label)}</span><span class="val num">${exp != null ? `about ${fmt(exp)} kWh` : `H ${deg(hi)} · L ${deg(lo)}`}</span></div></div>`;
+  }
+
   // ---------- screens ----------
   function overview() {
     if (!state.month) return `<h1>Overview</h1><div class="card empty"><h2>No data yet</h2><p class="small">Add a Toronto Hydro export to data/hydro or connect SolarEdge.</p></div>`;
     const days = monthDays(state.month), t = totals(days);
     const name = mName(state.month);
-    let html = monthHeader("Overview");
+    let html = monthHeader("Overview") + alertBanner();
 
     if (t.hDays) {
       const net = t.imp - t.exp;
@@ -425,6 +524,8 @@
     let rows = "";
     if (r.home != null) rows += `<div class="row"><span>Home used</span><span class="val strong num">${kwh(r.home)} kWh</span></div>`;
     if (r.prod != null) rows += `<div class="row"><span>Solar produced</span><span class="val num">${kwh(r.prod)} kWh</span></div>`;
+    const ex = r.prod != null ? expectedFor(r.d) : null;
+    if (ex != null && ex > 0.5) rows += `<div class="row"><span>Expected</span><span class="val num">${kwh(ex)} kWh <span class="small">· made ${pct(r.prod, ex)}%</span></span></div>`;
     if (r.self != null) rows += `<div class="row"><span>Solar used in the house</span><span class="val num">${kwh(r.self)} kWh</span></div>`;
     if (r.imp != null) rows += `<div class="row"><span>From grid</span><span class="val num">${kwh(r.imp)} kWh</span></div><div class="row"><span>Sent back</span><span class="val num">${kwh(r.exp)} kWh</span></div><div class="row"><span>Net from grid</span><span class="val ${r.home == null ? "strong" : ""} num">${signed(r.imp - r.exp)} kWh</span></div>`;
     if (!rows) rows = `<div class="row"><span class="val" style="text-align:left">No data for this day</span></div>`;
@@ -482,20 +583,25 @@
     const updated = s.updated ? new Date(s.updated).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : null;
 
     const stale = needsConnect() ? `<section class="card" style="gap:6px"><span style="font-weight:600;font-size:15px">SolarEdge needs you to sign in again</span><span class="small">These are the last numbers it sent. Reconnect to start updating again.</span></section>${connectBtn()}` : "";
-    return `<div><div class="eyebrow">${esc(today)}</div><h1>Solar</h1></div>${stale}
+    const expT = expectedFor(torontoToday());
+    return `<div><div class="eyebrow">${esc(today)}</div><h1>Solar</h1></div>${stale}${alertBanner()}
       <section class="card">
         <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px">
-          <div style="display:flex;flex-direction:column;gap:6px"><span class="label">Produced today</span><div class="hero num"><b>${fmt(todayKwh, 1)}</b><span>kWh</span></div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><span class="label">Produced today</span><div class="hero num"><b>${fmt(todayKwh, 1)}</b><span>kWh</span></div>${expT ? `<span class="small">Sunlight today suggests about ${fmt(expT)} kWh</span>` : ""}</div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding-bottom:4px"><span class="small">Right now</span><span class="num" style="font-size:20px;font-weight:600">${fmt(nowKw, nowKw ? 2 : 0)} kW</span><span class="small">${nowKw > 0 ? "of " + fmt(s.peakKw, 2) + " kW peak" : nowNote}</span></div>
         </div>${curve}
       </section>
       ${sunCard()}
+      ${tomorrowRow()}
+      ${healthBlock()}
       <div class="list">
         <div class="row"><span>This month</span><span class="val num">${kwh(s.month)} kWh</span></div>
         <div class="row"><span>This year</span><span class="val num">${fmt(s.year)} kWh</span></div>
         <div class="row"><span>Since ${esc(s.installed ? new Date(s.installed + "T12:00").toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "install")}</span><span class="val num">${fmt(s.lifetime)} kWh</span></div>
       </div>
       ${updated ? `<div class="foot">SolarEdge last reported ${esc(updated)}.</div>` : ""}
+      ${inverterRows()}
+      ${benefitsCard()}
       ${panelsLink()}`;
   }
 
@@ -529,6 +635,17 @@
       <div class="foot">${esc(p.note || "")}</div>`;
   }
 
+  function equipmentBlock() {
+    const e = solar() && solar().equipment;
+    if (!e) return "";
+    const inv = (e.inverters || []).map((i) => `
+      <div class="row"><span>Inverter</span><span class="val">${esc([i.manufacturer, i.model].filter(Boolean).join(" ") || i.name || "–")}</span></div>
+      ${i.firmware ? `<div class="row"><span>Firmware</span><span class="val num">${esc(i.firmware)}</span></div>` : ""}
+      ${i.communication ? `<div class="row"><span>Connection</span><span class="val">${esc(({ WIFI: "Wi-Fi", ETHERNET: "Ethernet", LAN: "Ethernet", CELLULAR: "Cellular", ZIGBEE: "ZigBee", RS485: "RS485" })[String(i.communication).toUpperCase()] || pretty(String(i.communication).toLowerCase()))}</span></div>` : ""}`).join("");
+    const opt = e.optimizers != null ? `<div class="row"><span>Optimizers</span><span class="val num">${e.optimizers}${e.optimizerModels && e.optimizerModels.length ? " · " + esc(e.optimizerModels.join(", ")) : ""}</span></div>` : "";
+    return inv || opt ? `<div class="section">Equipment</div><div class="list">${inv}${opt}</div>` : "";
+  }
+
   function sourcesScreen() {
     const d = state.data, s = d.solar, h = Object.keys(hydro()).sort();
     const sol = s && s.connected && !s.needsConnect
@@ -543,6 +660,7 @@
         <div class="row" style="justify-content:flex-start"><span class="icon" style="background:var(--solar)">${sunIcon}</span><span>SolarEdge</span></div>
         ${sol}
       </div>
+      ${equipmentBlock()}
       ${s && s.connected && !s.needsConnect ? "" : connectBtn()}
       <div class="foot">${s && s.connected && !s.needsConnect ? "Refreshes every hour during the day." + (s.error ? " The last refresh failed, so these are the previous numbers." : "") : state.data.connectUrl ? "You'll sign in with SolarEdge, then paste a one-time code into GitHub." : "Add SOLAREDGE_CLIENT_ID, SOLAREDGE_CLIENT_SECRET, SOLAREDGE_SITE_ID and GH_PAT under Settings, Secrets and variables, Actions in your GitHub repository."}</div>
       <div class="section">Grid meter</div>

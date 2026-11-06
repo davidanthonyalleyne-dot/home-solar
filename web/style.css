@@ -160,6 +160,11 @@ a.row { color: var(--text); text-decoration: none; }
 .legend i.dash { width: 12px; height: 0; border-top: 1.5px dashed var(--muted); border-radius: 0; }
 .axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); padding: 0 2px; }
 
+/* alerts */
+.banner { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 14px; background: color-mix(in srgb, var(--warn) 16%, var(--card)); color: var(--text); text-decoration: none; }
+.banner-ic { color: var(--warn); width: 24px; flex-shrink: 0; }
+.banner-ic svg, .hl-list .hl-ic svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
 /* weather and sun */
 .wx { display: flex; align-items: center; gap: 12px; }
 .sunarc { width: 100%; height: auto; display: block; }

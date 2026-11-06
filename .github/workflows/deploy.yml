@@ -12,6 +12,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  issues: write
 
 # never cancel a run part way: it may have just rotated the SolarEdge token
 concurrency:
@@ -41,6 +42,12 @@ jobs:
           SOLAREDGE_CLIENT_SECRET: ${{ secrets.SOLAREDGE_CLIENT_SECRET }}
           SOLAREDGE_REFRESH_TOKEN: ${{ secrets.SOLAREDGE_REFRESH_TOKEN }}
           GH_TOKEN: ${{ secrets.GH_PAT }}
+      - name: Report problems as GitHub issues
+        if: always() && steps.build.outcome == 'success'
+        continue-on-error: true
+        run: python scripts/notify.py
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
