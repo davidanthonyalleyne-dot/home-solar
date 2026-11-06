@@ -13,6 +13,7 @@
   --grid: #0A66D8;
   --solar: #F08A00;
   --back: #1BAF7A;
+  --warn: #D97706;
   --select: #EEF3FB;
   --good: #248A3D;
   color-scheme: light;
@@ -33,6 +34,7 @@
     --grid: #409CFF;
     --solar: #FF9F0A;
     --back: #22B07D;
+    --warn: #FF9F0A;
     --select: #1F2A3A;
     --good: #30D158;
     color-scheme: dark;
@@ -65,7 +67,7 @@ main {
 /* headers */
 .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
 .eyebrow { font-size: 13px; font-weight: 600; letter-spacing: .2px; color: var(--muted); text-transform: uppercase; }
-h1 { margin: 2px 0 0; font-size: 34px; font-weight: 700; letter-spacing: -.4px; }
+h1 { margin: 2px 0 0; font-size: 34px; line-height: 1.1; font-weight: 700; letter-spacing: -.4px; }
 .monthnav { display: flex; gap: 4px; }
 .monthnav button {
   width: 44px; height: 44px; border: 0; border-radius: 22px; background: var(--card);
@@ -73,6 +75,35 @@ h1 { margin: 2px 0 0; font-size: 34px; font-weight: 700; letter-spacing: -.4px; 
 }
 .monthnav button:disabled { color: var(--chev); cursor: default; }
 .monthnav svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+/* month chips */
+.chips { display: flex; gap: 8px; overflow-x: auto; margin: -8px -16px 0; padding: 2px 16px 4px; scrollbar-width: none; scroll-behavior: smooth; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex-shrink: 0; min-height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: var(--card); color: var(--text); font-size: 15px; font-weight: 500; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); color: #fff; }
+
+/* highlights */
+.hls .hl { display: flex; gap: 12px; padding: 14px 16px; }
+.hls .hl + .hl { border-top: .5px solid var(--sep); }
+.hl-ic { width: 22px; flex-shrink: 0; padding-top: 1px; }
+.hl-ic svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.hl-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.hl-t { font-size: 16px; font-weight: 600; }
+.cmp { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.cmp-row { display: grid; grid-template-columns: 76px minmax(0, 1fr) 40px; align-items: center; gap: 8px; font-size: 13px; }
+.cmp-l { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmp-bar { height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; }
+.cmp-bar i { display: block; height: 100%; border-radius: 4px; }
+.cmp-v { text-align: right; font-weight: 500; }
+.cmp-u { font-size: 11px; color: var(--muted); text-align: right; }
+
+/* year chart */
+.ychart { display: flex; gap: 4px; align-items: flex-end; }
+.ybar { flex: 1; min-width: 0; padding: 4px 0 0; border: 0; border-radius: 6px; background: transparent; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; opacity: .4; }
+.ybar.on { opacity: 1; background: var(--select); }
+.ystack { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; width: 100%; }
+.ystack i { display: block; width: min(16px, 70%); }
+.ylab { font-size: 11px; color: var(--muted); padding-bottom: 4px; }
 
 /* cards */
 .card { background: var(--card); border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
