@@ -181,7 +181,7 @@ CALLS = 0
 def api_get(token, path, params=None):
     global CALLS
     CALLS += 1
-    url = f"{API}{path}" + ("?" + urllib.parse.urlencode(params) if params else "")
+    url = f"{API}{path}" + ("?" + urllib.parse.urlencode(params, doseq=True) if params else "")
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json",
                                                "User-Agent": "home-solar"})
     for attempt in range(2):
@@ -291,8 +291,116 @@ def previous_data():
         return {}
 
 
+def sun_times(day):
+    """Sunrise and sunset in Toronto time for a date (NOAA sunrise equation)."""
+    import math
+    rad = math.pi / 180
+    jd = dt.datetime(day.year, day.month, day.day, 12, tzinfo=dt.timezone.utc).timestamp() / 86400 + 2440587.5
+    n = round(jd - 2451545 + 0.0008)
+    js = n - LON / 360
+    M = (357.5291 + 0.98560028 * js) % 360
+    C = 1.9148 * math.sin(M * rad) + 0.02 * math.sin(2 * M * rad) + 0.0003 * math.sin(3 * M * rad)
+    L = (M + C + 180 + 102.9372) % 360
+    jt = 2451545 + js + 0.0053 * math.sin(M * rad) - 0.0069 * math.sin(2 * L * rad)
+    dec = math.asin(math.sin(L * rad) * math.sin(23.4397 * rad))
+    cosw = (math.sin(-0.833 * rad) - math.sin(LAT * rad) * math.sin(dec)) / (math.cos(LAT * rad) * math.cos(dec))
+    w = math.acos(max(-1, min(1, cosw))) / rad
+    to_dt = lambda j: dt.datetime.fromtimestamp((j - 2440587.5) * 86400, dt.timezone.utc).astimezone(TZ)
+    return to_dt(jt - w / 360), to_dt(jt + w / 360)
+
+
+def _flat_numbers(obj, prefix="", out=None):
+    out = {} if out is None else out
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            _flat_numbers(v, f"{prefix}{k}." if isinstance(v, dict) else f"{prefix}{k}", out)
+    elif isinstance(obj, (int, float)) and not isinstance(obj, bool):
+        out[prefix.rstrip(".")] = obj
+    elif isinstance(obj, str) and prefix.lower().endswith(("unit", "units")):
+        out[prefix.rstrip(".")] = obj
+    return out
+
+
+def _list_in(body, *keys):
+    if isinstance(body, list):
+        return body
+    if isinstance(body, dict):
+        for k in keys:
+            if isinstance(body.get(k), list):
+                return body[k]
+        for v in body.values():
+            r = _list_in(v, *keys)
+            if r:
+                return r
+    return []
+
+
+def parse_alerts(body):
+    out = []
+    for a in _list_in(body, "alerts", "list"):
+        if not isinstance(a, dict):
+            continue
+        comp = a.get("component")
+        out.append({
+            "id": a.get("alertId") or a.get("id"),
+            "type": a.get("type") or a.get("name"),
+            "category": a.get("category"),
+            "impact": a.get("impact"),
+            "component": comp.get("name") if isinstance(comp, dict) else comp,
+            "first": a.get("firstTrigger"),
+            "last": a.get("lastTrigger"),
+            "codes": a.get("errorCodes") or [],
+        })
+    return out
+
+
+def parse_equipment(body):
+    devices = [d for d in _list_in(body, "devices", "device", "list") if isinstance(d, dict)]
+    inv = [d for d in devices if str(d.get("type", "")).upper() == "INVERTER"]
+    opt = [d for d in devices if str(d.get("type", "")).upper() == "OPTIMIZER"]
+    return {
+        "inverters": [{"name": i.get("name"), "manufacturer": i.get("manufacturer"),
+                       "model": i.get("model") or i.get("partNumber"), "firmware": i.get("firmwareVersion") or i.get("cpuVersion"),
+                       "communication": i.get("communicationType") or i.get("communicationMethod"),
+                       "optimizers": i.get("connectedOptimizers")} for i in inv],
+        "optimizers": len(opt) if devices else None,
+        "optimizerModels": sorted({o.get("model") or o.get("partNumber") for o in opt} - {None}),
+    }
+
+
+def parse_telemetry(body):
+    """{metric: {unit, latest, max, min, series:[[HH:MM, value]]}} for the first inverter."""
+    invs = body.get("inverters") if isinstance(body, dict) else None
+    if not isinstance(invs, dict) or not invs:
+        return None
+    metrics = next(iter(invs.values()))
+    out = {}
+    for name, series in (metrics or {}).items():
+        if not isinstance(series, dict):
+            continue
+        pts = []
+        for v in series.get("values") or []:
+            if not isinstance(v, dict):
+                continue
+            t = _ts(v.get("timestamp"))
+            pts.append([t.strftime("%H:%M") if t else None, v.get("value")])
+        nums = [x for _, x in pts if isinstance(x, (int, float)) and not isinstance(x, bool)]
+        latest = next((x for _, x in reversed(pts) if x is not None), None)
+        out[name] = {"unit": series.get("unit"), "latest": latest,
+                     "max": max(nums) if nums else None, "min": min(nums) if nums else None, "series": pts[-24:]}
+    return out
+
+
 def read_solaredge(prev):
-    """Returns (solar block, token_lost)."""
+    """Returns (solar block, token_lost).
+
+    Calls are spread out to fit the free tier (about 2,000 a month):
+      daylight, every run   today's quarter hours and live power (2)
+      every 3 hours         open alerts (5 am to 11 pm), inverter readings (daylight)
+      once a day            site details, daily history, lifetime, equipment, benefits (5)
+      once after sunset     final quarter hours for the day (1)
+    Nothing is called, and the token isn't touched, when nothing is due.
+    """
     global SITE
     SITE = os.environ.get("SOLAREDGE_SITE_ID", "").strip()
     refresh = os.environ.get("SOLAREDGE_REFRESH_TOKEN", "").strip()
@@ -306,8 +414,23 @@ def read_solaredge(prev):
 
     now = dt.datetime.now(TZ)
     today = now.date()
-    if os.environ.get("GITHUB_EVENT_NAME") == "schedule" and (now.hour >= NIGHT[0] or now.hour < NIGHT[1]) and prev.get("daily"):
-        log("solaredge: night time, reusing the last data")
+    rise, sset = sun_times(today)
+    fetched = dict(prev.get("fetched") or {})
+    def due(key, hours):
+        t = fetched.get(key)
+        return not t or (now - dt.datetime.fromisoformat(t)) >= dt.timedelta(hours=hours, minutes=-10)
+    daylight = rise - dt.timedelta(minutes=30) <= now <= sset + dt.timedelta(minutes=45)
+    fresh = not prev.get("daily")
+    need = {
+        "history": fresh or (prev.get("historyDate") != today.isoformat() and now.hour >= NIGHT[1]),
+        "today": fresh or daylight or prev.get("todayDate") != today.isoformat()
+                 or (now > sset + dt.timedelta(minutes=45) and prev.get("finalDate") != today.isoformat()),
+        "power": daylight,
+        "alerts": NIGHT[1] <= now.hour < 23 and due("alerts", 3),
+        "telemetry": daylight and due("telemetry", 3),
+    }
+    if not any(need.values()):
+        log("solaredge: nothing due, reusing the last data")
         return prev, False
 
     try:
@@ -325,19 +448,17 @@ def read_solaredge(prev):
 
     solar = dict(prev) if prev.get("connected") or prev.get("daily") else {}
     solar.update({"connected": True, "needsConnect": False, "error": None})
+    stamp = now.isoformat(timespec="minutes")
     try:
-        # once a day: site details, lifetime total and any missing daily history
-        if solar.get("historyDate") != today.isoformat():
+        if need["history"]:
             d = api_get(access, f"/sites/{SITE}")
             solar["peakKw"] = _find(d, "peakPower") or solar.get("peakKw")
             inst = _find(d, "installationDate")
             solar["installed"] = str(inst)[:10] if inst else solar.get("installed")
+            solar["status"] = _find(d, "activationStatus", "status") or solar.get("status")
 
             daily = dict(solar.get("daily") or {})
-            if daily:
-                start = dt.date.fromisoformat(max(daily)) - dt.timedelta(days=3)
-            else:
-                start = today - dt.timedelta(days=364)
+            start = dt.date.fromisoformat(max(daily)) - dt.timedelta(days=3) if daily else today - dt.timedelta(days=364)
             daily.update(fetch_daily(access, start, today))
             cutoff = (today - dt.timedelta(days=400)).isoformat()
             solar["daily"] = {k: v for k, v in sorted(daily.items()) if k >= cutoff}
@@ -349,18 +470,70 @@ def read_solaredge(prev):
                 "to": _instant(now)})
             solar["lifetimeBase"] = round(sum(v for _, v in _series(body) if v) / 1000, 1)
             solar["lifetimeBaseToday"] = solar["daily"].get(today.isoformat(), 0)
+
+            for key, fn in (("equipment", lambda: parse_equipment(api_get(access, f"/sites/{SITE}/devices", {"types": ["INVERTER", "OPTIMIZER"]}))),
+                            ("benefits", lambda: _flat_numbers(api_get(access, f"/sites/{SITE}/environmental-benefits", {"unit": "METRIC"})))):
+                try:
+                    solar[key] = fn()
+                except AuthError:
+                    raise
+                except Exception as e:  # optional extras: never fail the build over them
+                    log(f"solaredge: {key} unavailable: {e}")
             solar["historyDate"] = today.isoformat()
 
-        # every run: today's quarter hours
-        body = api_get(access, f"/sites/{SITE}/energy", {
-            "resolution": "QUARTER_HOUR", "unit": "WH",
-            "from": _instant(dt.datetime.combine(today, dt.time(), TZ)), "to": _instant(now)})
-        qh = [(t, v) for t, v in _series(body) if t and t.date() == today]
-        today_kwh = round(sum(v for _, v in qh if v) / 1000, 2)
-        last = next(((t, v) for t, v in reversed(qh) if v is not None), None)
-        solar["todayCurve"] = [[t.strftime("%H:%M"), round((v or 0) * 4 / 1000, 2)] for t, v in qh]
-        solar["nowKw"] = round(last[1] * 4 / 1000, 2) if last and (now - last[0]) < dt.timedelta(minutes=45) else 0
-        solar["updated"] = last[0].isoformat() if last else solar.get("updated")
+        if need["today"]:
+            body = api_get(access, f"/sites/{SITE}/energy", {
+                "resolution": "QUARTER_HOUR", "unit": "WH",
+                "from": _instant(dt.datetime.combine(today, dt.time(), TZ)), "to": _instant(now)})
+            qh = [(t, v) for t, v in _series(body) if t and t.date() == today]
+            today_kwh = round(sum(v for _, v in qh if v) / 1000, 2)
+            last = next(((t, v) for t, v in reversed(qh) if v is not None), None)
+            solar["todayCurve"] = [[t.strftime("%H:%M"), round((v or 0) * 4 / 1000, 2)] for t, v in qh]
+            solar["nowKw"] = round(last[1] * 4 / 1000, 2) if last and (now - last[0]) < dt.timedelta(minutes=45) else 0
+            solar["updated"] = last[0].isoformat() if last else solar.get("updated")
+            solar["today"], solar["todayDate"] = today_kwh, today.isoformat()
+            if now > sset + dt.timedelta(minutes=45):
+                solar["finalDate"] = today.isoformat()
+
+        if need["power"]:
+            try:
+                body = api_get(access, f"/sites/{SITE}/power", {
+                    "resolution": "QUARTER_HOUR",
+                    "from": _instant(max(dt.datetime.combine(today, dt.time(), TZ), now - dt.timedelta(hours=11))),
+                    "to": _instant(now)})
+                pts = [(t, v) for t, v in _series(body) if t and v is not None]
+                if pts and (now - pts[-1][0]) < dt.timedelta(minutes=45):
+                    solar["nowKw"] = round(pts[-1][1] / 1000, 2)
+                    solar["powerAt"] = pts[-1][0].isoformat()
+                elif not pts or (now - pts[-1][0]) >= dt.timedelta(minutes=45):
+                    solar["nowKw"] = 0
+            except AuthError:
+                raise
+            except Exception as e:
+                log(f"solaredge: power unavailable: {e}")
+
+        if need["alerts"]:
+            try:
+                solar["alerts"] = parse_alerts(api_get(access, f"/sites/{SITE}/alerts", {"only-open": "true", "alerts-in-page": "50"}))
+                solar["alertsChecked"] = stamp
+                fetched["alerts"] = stamp
+            except AuthError:
+                raise
+            except Exception as e:
+                log(f"solaredge: alerts unavailable: {e}")
+
+        if need["telemetry"]:
+            try:
+                tel = parse_telemetry(api_get(access, f"/sites/{SITE}/inverters/telemetry", {
+                    "resolution": "HOUR", "from": _instant(dt.datetime.combine(today, dt.time(), TZ)), "to": _instant(now)}))
+                if tel:
+                    solar["inverter"] = {"at": stamp, "metrics": tel}
+                fetched["telemetry"] = stamp
+            except AuthError:
+                raise
+            except Exception as e:
+                fetched["telemetry"] = stamp  # don't retry every hour if the plan doesn't include it
+                log(f"solaredge: inverter readings unavailable: {e}")
     except AuthError as e:
         log(f"solaredge: {e}")
         return {**prev, "connected": False, "needsConnect": True, "error": "SolarEdge refused the request"}, False
@@ -368,24 +541,25 @@ def read_solaredge(prev):
         log(f"solaredge: request failed, keeping the last data: {e}")
         return {**(prev or {}), "error": str(e)[:200]}, False
 
+    solar["fetched"] = fetched
     daily = solar["daily"]
-    daily[today.isoformat()] = today_kwh
+    if solar.get("todayDate") == today.isoformat():
+        daily[today.isoformat()] = solar["today"]
     ym, y = today.strftime("%Y-%m"), str(today.year)
-    solar["today"] = today_kwh
-    solar["todayDate"] = today.isoformat()
     solar["month"] = round(sum(v for k, v in daily.items() if k.startswith(ym)), 1)
     solar["year"] = round(sum(v for k, v in daily.items() if k.startswith(y)), 1)
-    solar["lifetime"] = round(solar.get("lifetimeBase", 0) - solar.get("lifetimeBaseToday", 0) + today_kwh, 1)
-    log(f"solaredge: {CALLS} API calls, today {today_kwh} kWh")
+    solar["lifetime"] = round(solar.get("lifetimeBase", 0) - solar.get("lifetimeBaseToday", 0) + daily.get(today.isoformat(), 0), 1)
+    log(f"solaredge: {CALLS} API calls ({', '.join(k for k, v in need.items() if v)}), today {daily.get(today.isoformat(), 0)} kWh, "
+        f"{len(solar.get('alerts') or [])} open alerts")
     return solar, False
-
 
 
 # ---------- weather (Open-Meteo, free, no key) ----------
 # Parkdale, rounded to about 1 km. Weather data by Open-Meteo.com, CC BY 4.0.
 LAT, LON = 43.64, -79.43
 WEATHER_START = "2026-01-01"
-DAILY_VARS = "temperature_2m_max,temperature_2m_min,weather_code,sunshine_duration"
+DAILY_VARS = "temperature_2m_max,temperature_2m_min,weather_code,sunshine_duration,shortwave_radiation_sum,snowfall_sum"
+WEATHER_FIELDS = 6  # high, low, code, sunshine hours, sunlight MJ/m², snowfall cm
 
 
 def _get_json(url, params):
@@ -404,8 +578,10 @@ def _daily_rows(body):
         hi, lo = d["temperature_2m_max"][i], d["temperature_2m_min"][i]
         if hi is None or lo is None:
             continue
-        sun = d.get("sunshine_duration", [None] * (i + 1))[i]
-        out[day] = [round(hi, 1), round(lo, 1), d["weather_code"][i], None if sun is None else round(sun / 3600, 1)]
+        col = lambda k: (d.get(k) or [None] * (i + 1))[i]
+        sun, ghi, snow = col("sunshine_duration"), col("shortwave_radiation_sum"), col("snowfall_sum")
+        out[day] = [round(hi, 1), round(lo, 1), d["weather_code"][i], None if sun is None else round(sun / 3600, 1),
+                    None if ghi is None else round(ghi, 2), None if snow is None else round(snow, 1)]
     return out
 
 
@@ -415,6 +591,8 @@ def read_weather(prev):
     weeks come from the forecast service, which also gives today and now."""
     w = dict(prev or {})
     daily = dict(w.get("daily") or {})
+    if any(len(v) < WEATHER_FIELDS for v in daily.values()):  # older format: fetch the history again
+        daily, w = {}, {k: v for k, v in w.items() if k not in ("archivedThrough", "archiveDate")}
     today = dt.datetime.now(TZ).date()
     base = {"latitude": LAT, "longitude": LON, "timezone": "America/Toronto"}
     if w.get("archiveDate") != today.isoformat():
@@ -431,9 +609,12 @@ def read_weather(prev):
             except Exception as e:
                 log(f"weather: archive request failed, keeping what we have: {e}")
     try:
-        body = _get_json("https://api.open-meteo.com/v1/forecast", {**base, "past_days": 14, "forecast_days": 1,
+        body = _get_json("https://api.open-meteo.com/v1/forecast", {**base, "past_days": 14, "forecast_days": 2,
                                                                       "daily": DAILY_VARS, "current": "temperature_2m,weather_code,is_day"})
-        daily.update(_daily_rows(body))
+        rows = _daily_rows(body)
+        tomorrow = (today + dt.timedelta(days=1)).isoformat()
+        w["tomorrow"] = [tomorrow] + rows.pop(tomorrow) if tomorrow in rows else None
+        daily.update({k: v for k, v in rows.items() if k <= today.isoformat()})
         c = body.get("current") or {}
         if c.get("temperature_2m") is not None:
             w["current"] = {"time": c.get("time"), "temp": round(c["temperature_2m"], 1), "code": c.get("weather_code"), "isDay": c.get("is_day")}
@@ -444,6 +625,66 @@ def read_weather(prev):
     log(f"weather: {len(w['daily'])} days")
     return w
 
+
+# ---------- expected production and problems ----------
+
+def solar_factor(solar_daily, weather_daily, around, days=30):
+    """kWh produced per MJ/m² of sunlight, learned from the system's own recent
+    days (median, skipping outages and snowy days)."""
+    lo, hi = (around - dt.timedelta(days=days)).isoformat(), around.isoformat()
+    ratios = []
+    for d, p in solar_daily.items():
+        w = weather_daily.get(d)
+        if not (lo <= d <= hi) or not w or w[4] is None or w[4] < 2 or p is None or p < 0.5:
+            continue
+        if (w[5] or 0) > 0 or w[2] in (71, 73, 75, 77, 85, 86):
+            continue
+        ratios.append(p / w[4])
+    ratios.sort()
+    return ratios[len(ratios) // 2] if len(ratios) >= 7 else None
+
+
+def find_problems(solar, weather):
+    """Things worth a notification. Each has a stable key so it is reported once."""
+    if not solar or not solar.get("connected"):
+        return []
+    out = []
+    now = dt.datetime.now(TZ)
+    today = now.date()
+    for a in solar.get("alerts") or []:
+        detail = "\n".join(f"- **{k}:** {v}" for k, v in (("Type", a.get("type")), ("Part", a.get("component")),
+                           ("Category", a.get("category")), ("Impact (1 low to 9 high)", a.get("impact")),
+                           ("First seen", a.get("first")), ("Last seen", a.get("last")),
+                           ("Error codes", ", ".join(map(str, a.get("codes") or [])) or None)) if v not in (None, ""))
+        out.append({"key": f"alert-{a.get('id')}", "kind": "alert",
+                    "title": f"SolarEdge alert: {a.get('type') or 'unknown'}" + (f" ({a.get('component')})" if a.get("component") else ""),
+                    "body": f"SolarEdge is reporting an open alert on your system.\n\n{detail}\n\nCheck the SolarEdge app for details, or contact your installer if it doesn't clear."})
+    wd = (weather or {}).get("daily") or {}
+    snowy = lambda d: bool(wd.get(d)) and ((wd[d][5] or 0) > 0 or wd[d][2] in (71, 73, 75, 77, 85, 86))
+    rise, sset = sun_times(today)
+    if solar.get("todayDate") == today.isoformat() and rise + dt.timedelta(hours=3) < now < sset - dt.timedelta(hours=1) \
+            and (solar.get("today") or 0) < 0.05 and not snowy(today.isoformat()):
+        out.append({"key": f"outage-{today}", "kind": "outage", "title": f"No solar production yet today ({today:%b} {today.day})",
+                    "body": f"The panels haven't produced anything since sunrise at {rise:%-I:%M %p}, and it's now {now:%-I:%M %p}. "
+                            "If it isn't snow covered, check the inverter (its light should be green) and the SolarEdge app."})
+    mode = ((solar.get("inverter") or {}).get("metrics") or {})
+    for name, m in mode.items():
+        v = str(m.get("latest") or "")
+        if "mode" in name.lower() and any(x in v.upper() for x in ("FAULT", "ERROR", "SHUTDOWN", "LOCKED")) and rise < now < sset:
+            out.append({"key": f"mode-{today}", "kind": "mode", "title": f"Inverter reports {v.title()}",
+                        "body": f"SolarEdge's inverter readings show its mode as **{v}** during daylight. Check the inverter and the SolarEdge app."})
+    y = (today - dt.timedelta(days=1)).isoformat()
+    k = solar_factor(solar.get("daily") or {}, wd, today - dt.timedelta(days=2))
+    p, w = (solar.get("daily") or {}).get(y), wd.get(y)
+    if k and p is not None and w and w[4]:
+        exp = k * w[4]
+        if exp >= 8 and p < 0.4 * exp and not snowy(y):
+            out.append({"key": f"low-{y}", "kind": "low", "title": f"Solar well below expected on {dt.date.fromisoformat(y):%b} {dt.date.fromisoformat(y).day}",
+                        "body": f"The panels made {p:.1f} kWh against about {exp:.0f} kWh expected from that day's sunlight ({p / exp:.0%}). "
+                                "One day can be a fluke; if it keeps happening, look for shading, dirt, or a fault."})
+    return out
+
+
 # ---------- build ----------
 
 def main():
@@ -453,12 +694,19 @@ def main():
     panels_file = ROOT / "data/panels.json"
     panels = json.loads(panels_file.read_text()) if panels_file.exists() else None
 
+    weather = read_weather(prev.get("weather"))
+    if solar and solar.get("daily") and weather.get("daily"):
+        weather["factor"] = solar_factor(solar["daily"], weather["daily"], dt.datetime.now(TZ).date())
+    problems = find_problems(solar, weather)
+    checked = solar and solar.get("alertsChecked")
+    fresh_check = bool(checked) and dt.datetime.now(TZ) - dt.datetime.fromisoformat(checked) < dt.timedelta(minutes=30)
+    (ROOT / "problems.json").write_text(json.dumps({"alertsChecked": fresh_check, "problems": problems}, indent=1))
     data = {
         "generated": dt.datetime.now(TZ).isoformat(timespec="minutes"),
         "hydro": {d: [round(v[0], 2), round(v[1], 2)] for d, v in sorted(hydro.items())},
         "solar": solar,
         "panels": panels,
-        "weather": read_weather(prev.get("weather")),
+        "weather": weather,
         "connectUrl": authorize_url() if solar and solar.get("needsConnect") else None,
         "repo": os.environ.get("GITHUB_REPOSITORY"),
     }
