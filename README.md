@@ -66,6 +66,10 @@ Add a repository secret called `SITE_PASSPHRASE` (Settings, Secrets and variable
 
 Download a month from MyTorontoHydro (the daily "Trending Report" export works; hourly works too). In GitHub open `data/hydro`, click Add file, then Upload files, and drop it in. The site rebuilds on its own within a couple of minutes. Overlapping files are fine because readings are matched by timestamp.
 
+## Adding Toronto Hydro bills
+
+Bills live in `data/bills.json`, typed from the PDFs with only the numbers the app needs (no account, premises or meter numbers, names or address). Each bill shows under the month its meter read ends. After adding one, run `python3 scripts/check_bills.py` to confirm the lines add up to the printed totals. `data/grid_monthly.json` holds monthly grid use read off the bills' usage charts, used only for months without a Toronto Hydro export.
+
 ## If SolarEdge stops updating
 
 The Sources screen will say the sign-in expired and show **Connect SolarEdge** again. Repeat step 6. That happens if access goes unused for about 30 days, when the 24-month approval runs out, if your GitHub token from step 3 expires, or if a build couldn't save the new token. In that last case GitHub emails you that the run failed.

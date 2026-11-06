@@ -157,6 +157,14 @@
       item("var(--solar)", sunIcon, `Solar ${c >= 0 ? "up" : "down"} ${Math.abs(c)}% on ${esc(monthName(lastYear))}`,
         `${fmt(cur.prod, 1)} kWh a day, against ${fmt(ly.prod, 1)} a year earlier.${Math.abs(c) >= 15 ? " Mostly down to the weather, unless the system had problems." : ""}`);
     }
+    // what the panels were worth on this month's bill
+    const sv = solarValue(ym);
+    if (sv && (sv.credit > 0.5 || sv.usedValue)) {
+      const total = sv.credit + (sv.usedValue || 0);
+      item("var(--good)", '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.2c-.5-.8-1.4-1.2-2.5-1.2-1.6 0-2.7.8-2.7 2s1 1.7 2.7 2c1.7.3 2.8.9 2.8 2.1s-1.2 2-2.8 2c-1.2 0-2.2-.5-2.7-1.3M12 6.5v1.5M12 16v1.5"/></svg>',
+        `Solar was worth about ${money(total)}`,
+        `${money(sv.credit)} in credits on the bill${sv.usedValue ? `, plus about ${money(sv.usedValue)} of power the house used straight from the panels (${fmt(sv.used)} kWh at the bill's average ${fmt(sv.rate * 100, 1)}¢), before delivery and tax` : ""}.`);
+    }
     // share of the home covered
     if (cur.cover != null) {
       const p = prev && prev.cover != null ? prev.cover : null;
@@ -243,6 +251,11 @@
       const tot = shown.reduce((a, m) => a + m.t.prod, 0);
       text = `Solar per day by month, ${fmt(tot)} kWh in all. There's no Toronto Hydro data for ${year}, so home use isn't shown.`;
       legend = `<span><i style="background:var(--solar)"></i>Solar produced</span>`;
+    }
+    const yb = (state.data.bills || []).filter((x) => x.to.startsWith(year));
+    if (yb.length) {
+      const cost = yb.reduce((a, x) => a + billParts(x).current, 0), cred = yb.reduce((a, x) => a + billParts(x).credit, 0);
+      text += ` ${yb.length === 1 ? "One bill" : yb.length + " bills"} on file for ${year}: ${money(cost)} in charges, with ${money(cred)} of solar credits.`;
     }
     return `<div class="section">${year}</div>
       <section class="card" style="gap:10px">
@@ -468,6 +481,54 @@
     return `<div class="list"><div class="row"><span style="display:flex;align-items:center;gap:8px"><span style="color:${wxColor(c.icon)}">${wxIcon(c.icon, 20)}</span>Tomorrow · ${esc(c.label)}</span><span class="val num">${exp != null ? `about ${fmt(exp)} kWh` : `H ${deg(hi)} · L ${deg(lo)}`}</span></div></div>`;
   }
 
+
+  // ---------- bills ----------
+  const money = (n) => (n < 0 ? "−$" : "$") + Math.abs(n).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const billFor = (ym) => (state.data.bills || []).find((b) => b.to.slice(0, 7) === ym) || null;
+  const lineSum = (lines) => Object.values(lines).reduce((a, [k, r]) => a + Math.round(k * r * 100) / 100, 0);
+  const billParts = (b) => {
+    const buy = lineSum(b.buy), credit = lineSum(b.credit), kwh = Object.values(b.buy).reduce((a, [k]) => a + k, 0);
+    const current = Math.round((b.due - (b.previous || 0)) * 100) / 100;
+    return { buy, credit, kwh, current, avgRate: kwh ? buy / kwh : 0 };
+  };
+
+  function billCard(ym) {
+    const b = billFor(ym);
+    if (!b) return "";
+    const p = billParts(b), name = mName(ym);
+    const tou = ["on", "mid", "off"].map((k) => [k, b.buy[k]]).filter(([, x]) => x);
+    const touRows = tou.map(([k, [kwh, rate]]) => `<div class="row sub"><span>${{ on: "On-peak", mid: "Mid-peak", off: "Off-peak" }[k]} <span class="small">${fmt(kwh)} kWh at ${fmt(rate * 100, 1)}¢</span></span><span class="val num">${money(kwh * rate)}</span></div>`).join("");
+    const rows = [
+      `<div class="row"><span>Electricity bought <span class="small">${fmt(p.kwh)} kWh</span></span><span class="val num">${money(p.buy)}</span></div>`,
+      touRows,
+      p.credit > 0 ? `<div class="row"><span>Solar credits <span class="small">${fmt(b.generated)} kWh sent back</span></span><span class="val num good">${money(-p.credit)}</span></div>` : "",
+      `<div class="row"><span>Delivery</span><span class="val num">${money(b.delivery)}</span></div>`,
+      `<div class="row"><span>Regulatory</span><span class="val num">${money(b.regulatory)}</span></div>`,
+      b.other ? `<div class="row"><span>Late payment charge</span><span class="val num">${money(b.other)}</span></div>` : "",
+      `<div class="row"><span>HST</span><span class="val num">${money(b.hst)}</span></div>`,
+      b.rebate ? `<div class="row"><span>Ontario Electricity Rebate</span><span class="val num good">${money(-b.rebate)}</span></div>` : "",
+      `<div class="row"><span style="font-weight:600">${esc(name)} charges</span><span class="val strong num">${money(p.current)}</span></div>`,
+    ].join("");
+    const carried = Math.abs(b.previous || 0) >= 0.5 ? `<div class="foot">${b.previous > 0 ? `The amount due was ${money(b.due)}, including ${money(b.previous)} carried over unpaid from the bill before.` : `The amount due was ${money(b.due)} after a ${money(-b.previous)} credit from the bill before.`}</div>` : "";
+    const fromTo = `${shortDay(b.from)} to ${shortDay(b.to)}`;
+    return `<div class="section">Toronto Hydro bill</div>
+      <section class="card" style="gap:6px">
+        <span class="label">${esc(name)} charges</span>
+        <div class="hero num" style="gap:4px"><b style="font-size:44px">${money(p.current)}</b></div>
+        <span class="small">${esc(fromTo)} · ${fmt(p.current / p.kwh * 100, 1)}¢ per kWh all in · ${b.season === "winter" ? "winter" : "summer"} prices</span>
+      </section>
+      <div class="list bill">${rows}</div>${carried}`;
+  }
+
+  // what the panels were worth on a bill: credits, plus solar used in the house at that bill's average price
+  function solarValue(ym) {
+    const b = billFor(ym);
+    if (!b) return null;
+    const p = billParts(b), t = totals(monthDays(ym));
+    const used = t.bothDays ? t.self : null;
+    return { credit: p.credit, used, usedValue: used != null ? used * p.avgRate : null, rate: p.avgRate };
+  }
+
   // ---------- screens ----------
   function overview() {
     if (!state.month) return `<h1>Overview</h1><div class="card empty"><h2>No data yet</h2><p class="small">Add a Toronto Hydro export to data/hydro or connect SolarEdge.</p></div>`;
@@ -497,12 +558,17 @@
         ${t.bothDays ? `<div class="tile"><span class="k">${sunIcon.replace("<svg", '<svg stroke="var(--solar)"')}Used directly</span><span class="v num">${kwh(t.self)} <small>kWh</small></span><span class="small num">${pct(t.self, t.prod)}% of production</span></div>` : ""}
       </div>`;
     } else if (t.pDays) {
+      const gm = (state.data.gridMonthly || {})[state.month];
       html += `<section class="card"><span class="label">Solar produced</span><div class="hero num"><b>${kwh(t.prod)}</b><span>kWh</span></div>
-        <span class="small">No Toronto Hydro data for ${esc(name)} yet. Upload the export to see what you drew from and sent to the grid.</span></section>`;
+        <span class="small">${gm ? `Your bill shows ${fmt(gm)} kWh drawn from the grid this month. Daily detail needs the Toronto Hydro export.` : `No Toronto Hydro data for ${esc(name)} yet. Upload the export to see what you drew from and sent to the grid.`}</span></section>`;
+      if (gm) html += `<div class="tiles">
+        <div class="tile"><span class="k">${down("var(--grid)")}From grid</span><span class="v num">${fmt(gm)} <small>kWh</small></span><span class="small">from your bill</span></div>
+        <div class="tile"><span class="k">${sunIcon.replace("<svg", '<svg stroke="var(--solar)"')}Produced</span><span class="v num">${kwh(t.prod)} <small>kWh</small></span><span class="small num">${fmt(t.prod / t.pDays, 1)} a day</span></div></div>`;
     }
 
     if (!solar()) html += connectCard();
 
+    html += billCard(state.month);
     html += highlights(state.month);
     html += yearChart();
     return html;

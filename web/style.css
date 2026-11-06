@@ -212,3 +212,8 @@ body.locked .tabs { display: none; }
 .btn:disabled { opacity: .6; }
 .err { color: var(--warn); min-height: 1.2em; margin: 0; text-align: center; }
 button.linkrow { width: 100%; border: 0; border-top: .5px solid var(--sep); background: transparent; color: var(--warn); font-size: 17px; text-align: left; cursor: pointer; }
+
+/* bill */
+.bill .row.sub { min-height: 36px; padding-top: 6px; padding-bottom: 6px; padding-left: 28px; font-size: 15px; color: var(--muted); }
+.bill .row.sub + .row.sub, .bill .row + .row.sub { border-top: 0; }
+.val.good { color: var(--good); }
