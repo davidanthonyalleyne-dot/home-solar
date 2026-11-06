@@ -78,14 +78,25 @@
   }
 
   // ---------- shared pieces ----------
+  // the month to open when picking a year: the same month if that year has it, else its latest
+  function monthForYear(y) {
+    const inYear = months().filter((m) => m.startsWith(y));
+    const same = `${y}-${state.month.slice(5)}`;
+    return inYear.includes(same) ? same : inYear.at(-1);
+  }
+
   function monthHeader(title) {
-    const all = months(), latestYear = all.length ? all.at(-1).slice(0, 4) : "";
-    const chips = all.map((ym) => {
+    const all = months(), year = state.month.slice(0, 4);
+    const years = [...new Set(all.map((m) => m.slice(0, 4)))];
+    const yearSeg = years.length > 1 ? `<div class="seg years" role="group" aria-label="Year">${years.map((y) =>
+      `<button type="button" data-ym="${monthForYear(y)}" aria-pressed="${y === year}">${y}</button>`).join("")}</div>` : "";
+    const chips = all.filter((m) => m.startsWith(year)).map((ym) => {
       const [y, m] = ym.split("-").map(Number);
-      const label = new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "short" }) + (String(y) !== latestYear ? ` ’${String(y).slice(2)}` : "");
+      const label = new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "short" });
       return `<button type="button" class="chip" data-ym="${ym}" aria-pressed="${ym === state.month}" aria-label="${esc(monthName(ym))}">${esc(label)}</button>`;
     }).join("");
     return `<div class="head"><div><div class="eyebrow">${esc(title)}</div><h1>${esc(monthName(state.month))}</h1></div></div>
+      ${yearSeg}
       ${all.length > 1 ? `<div class="chips" role="group" aria-label="Month">${chips}</div>` : ""}`;
   }
 
@@ -206,21 +217,35 @@
   }
 
   function yearChart() {
-    const ms = months().map(monthStats).filter((m) => m.imp != null);
-    if (ms.length < 2) return "";
-    const H = 120, max = Math.max(...ms.map((m) => (m.home ?? m.imp))) * 1.05;
+    const year = state.month.slice(0, 4);
+    const ms = months().filter((m) => m.startsWith(year)).map(monthStats);
+    const useHome = ms.some((m) => m.imp != null);
+    const shown = ms.filter((m) => (useHome ? m.imp != null : m.prod != null));
+    if (shown.length < 2) return "";
+    const H = 120, val = (m) => (useHome ? m.home ?? m.imp : m.prod), max = Math.max(...shown.map(val)) * 1.05;
     const px = (v) => Math.round((v / max) * H);
-    const bars = ms.map((m) => {
+    const bars = shown.map((m) => {
       const on = m.ym === state.month, [y, mo] = m.ym.split("-").map(Number);
       const letter = new Date(y, mo - 1, 1).toLocaleDateString("en-US", { month: "narrow" });
-      const segs = m.home != null ? `<i style="height:${px(m.self)}px;background:var(--solar);border-radius:3px 3px 0 0"></i><i style="height:${px(m.home - m.self)}px;background:var(--grid)"></i>` : `<i style="height:${px(m.imp)}px;background:var(--grid);border-radius:3px 3px 0 0"></i>`;
+      const segs = !useHome ? `<i style="height:${px(m.prod)}px;background:var(--solar);border-radius:3px 3px 0 0"></i>`
+        : m.home != null ? `<i style="height:${px(m.self)}px;background:var(--solar);border-radius:3px 3px 0 0"></i><i style="height:${px(m.home - m.self)}px;background:var(--grid)"></i>`
+        : `<i style="height:${px(m.imp)}px;background:var(--grid);border-radius:3px 3px 0 0"></i>`;
       return `<button type="button" class="ybar${on ? " on" : ""}" data-ym="${m.ym}" aria-pressed="${on}" aria-label="${esc(monthName(m.ym))}"><span class="ystack" style="height:${H}px">${segs}</span><span class="ylab">${letter}</span></button>`;
     }).join("");
-    const withBoth = ms.filter((m) => m.home != null), tH = withBoth.reduce((a, m) => a + m.t.home, 0), tS = withBoth.reduce((a, m) => a + m.t.self, 0);
-    return `<div class="section">Your year</div>
+    let text, legend;
+    if (useHome) {
+      const withBoth = shown.filter((m) => m.home != null), tH = withBoth.reduce((a, m) => a + m.t.home, 0), tS = withBoth.reduce((a, m) => a + m.t.self, 0);
+      text = `Home use per day by month. ${withBoth.length ? `Across these months the panels covered ${pct(tS, tH)}% of what the house used.` : ""}`;
+      legend = `<span><i style="background:var(--solar)"></i>Solar</span><span><i style="background:var(--grid)"></i>From grid</span>`;
+    } else {
+      const tot = shown.reduce((a, m) => a + m.t.prod, 0);
+      text = `Solar per day by month, ${fmt(tot)} kWh in all. There's no Toronto Hydro data for ${year}, so home use isn't shown.`;
+      legend = `<span><i style="background:var(--solar)"></i>Solar produced</span>`;
+    }
+    return `<div class="section">${year}</div>
       <section class="card" style="gap:10px">
-        <span class="small">Home use per day by month. ${withBoth.length ? `Across these months the panels covered ${pct(tS, tH)}% of what the house used.` : ""} Tap a month to see it.</span>
-        <div class="legend"><span><i style="background:var(--solar)"></i>Solar</span><span><i style="background:var(--grid)"></i>From grid</span></div>
+        <span class="small">${text} Tap a month to see it.</span>
+        <div class="legend">${legend}</div>
         <div class="ychart">${bars}</div>
       </section>`;
   }
@@ -429,7 +454,7 @@
     const max = Math.max(...years.map((y) => by[y]));
     const rows = years.map((y) => {
       const note = y === thisYear ? " so far" : y === first.slice(0, 4) && first.slice(5) > "01-15" ? ` from ${shortDay(first)}` : "";
-      return `<div class="row" style="gap:12px"><span style="width:110px;flex-shrink:0">${y}<span class="small">${note}</span></span><span class="bar thick" style="flex:1"><i style="width:${(by[y] / max) * 100}%"></i></span><span class="val num" style="min-width:84px">${fmt(by[y])} kWh</span></div>`;
+      return `<a class="row" href="#overview" data-ym="${monthForYear(y)}" style="gap:12px;color:var(--text);text-decoration:none"><span style="width:110px;flex-shrink:0">${y}<span class="small">${note}</span></span><span class="bar thick" style="flex:1"><i style="width:${(by[y] / max) * 100}%"></i></span><span class="val num" style="min-width:84px">${fmt(by[y])} kWh</span>${chev}</a>`;
     }).join("");
     return `<div class="section">By year</div><div class="list">${rows}</div>`;
   }
@@ -692,7 +717,11 @@
 
   view.addEventListener("click", (e) => {
     const m = e.target.closest("[data-ym]");
-    if (m) { state.month = m.dataset.ym; state.day = null; render(); return; }
+    if (m) {
+      state.month = m.dataset.ym; state.day = null;
+      if (m.tagName === "A" && location.hash !== m.getAttribute("href")) return;  // the hash change renders
+      e.preventDefault(); render(); return;
+    }
     const v = e.target.closest("[data-view]");
     if (v) { state.view = v.dataset.view; render(); return; }
     const d = e.target.closest("[data-day]");
