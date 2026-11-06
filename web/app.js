@@ -2,7 +2,7 @@
   "use strict";
 
   const view = document.getElementById("view");
-  const state = { data: null, month: null, day: null };
+  const state = { data: null, month: null, day: null, view: "home" };
 
   // ---------- helpers ----------
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -134,43 +134,88 @@
   function daysScreen() {
     if (!state.month) return `<h1>Days</h1>`;
     const days = monthDays(state.month);
-    const hasProd = days.some((r) => r.prod != null);
-    const upVal = (r) => r.home ?? r.imp ?? r.prod ?? 0;
-    const max = Math.max(1, ...days.map(upVal), ...days.map((r) => r.exp || 0));
+    const hasH = days.some((r) => r.imp != null), hasP = days.some((r) => r.prod != null);
+    const avail = [hasH && "home", hasP && "solar", hasH && "net"].filter(Boolean);
+    if (!avail.includes(state.view)) state.view = avail[0] || "home";
+    const V = state.view;
     if (!state.day || !state.day.startsWith(state.month)) {
       const last = [...days].reverse().find((r) => r.imp != null || r.prod != null);
       state.day = last ? last.d : days[0].d;
     }
-    const UPH = 150, DNH = 96, scale = (v) => Math.round((v / max) * (UPH - 4));
 
-    const bars = days.map((r) => {
-      let upHtml = "";
-      if (r.home != null) upHtml = `<i style="height:${scale(r.imp)}px;background:var(--grid)"></i><i style="height:${scale(r.self)}px;background:var(--solar);order:-1;border-radius:3px 3px 0 0"></i>`;
-      else if (r.imp != null) upHtml = `<i style="height:${scale(r.imp)}px;background:var(--grid)"></i>`;
-      else if (r.prod != null) upHtml = `<i style="height:${scale(r.prod)}px;background:var(--solar)"></i>`;
-      const dn = r.exp != null ? `<i style="height:${Math.min(DNH - 4, scale(r.exp))}px;background:var(--export)"></i>` : "";
-      const empty = r.imp == null && r.prod == null;
-      return `<button type="button" data-day="${r.d}" aria-pressed="${r.d === state.day}" aria-label="${esc(dayName(r.d))}" class="${empty ? "gap" : ""}">
-        <span class="up" style="height:${UPH}px">${upHtml}</span><span class="dn" style="height:${DNH}px">${dn}</span></button>`;
-    }).join("");
+    // what each view plots: stacked segments [value, colour] from the bottom up, or one signed value for net
+    const anyHome = days.some((r) => r.home != null), anySelf = days.some((r) => r.self != null);
+    const segs = (r) => {
+      if (V === "home") return r.home != null ? [[r.imp, "var(--grid)"], [r.self, "var(--solar)"]] : r.imp != null ? [[r.imp, "var(--grid)"]] : null;
+      if (V === "solar") return r.prod == null ? null : r.self != null ? [[r.self, "var(--solar)"], [r.exp, "var(--back)"]] : [[r.prod, "var(--solar)"]];
+      return r.imp != null ? r.imp - r.exp : null;
+    };
+    const value = (r) => { const x = segs(r); return x == null ? null : Array.isArray(x) ? x.reduce((a, b) => a + b[0], 0) : x; };
+    const vals = days.map(value).filter((v) => v != null);
+    const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+    const t = totals(days);
+
+    let label, sub, legend;
+    if (V === "home") {
+      label = anyHome ? "Home use" : "From the grid";
+      sub = anyHome ? `The panels covered ${pct(t.self, t.self + t.imp)}% of what the house used.` : (solar() ? "No solar data for these days." : "Connect SolarEdge to see how much of this the panels covered.");
+      legend = anyHome ? [["Solar", "var(--solar)"], ["From grid", "var(--grid)"]] : [["From grid", "var(--grid)"]];
+    } else if (V === "solar") {
+      label = "Solar produced";
+      sub = anySelf ? `${pct(t.self, t.self + t.exp)}% was used in the house and ${pct(t.exp, t.self + t.exp)}% sent back for credit.` : "Add this month's Toronto Hydro file to see how much was used in the house.";
+      legend = anySelf ? [["Used in the house", "var(--solar)"], ["Sent back", "var(--back)"]] : [["Produced", "var(--solar)"]];
+    } else {
+      const ahead = days.filter((r) => r.imp != null && r.exp > r.imp).length;
+      label = "Net from the grid";
+      sub = ahead ? `${ahead === 1 ? "One day" : ahead + " days"} sent back more than the house drew.` : "Every day drew more from the grid than it sent back.";
+      legend = [["Drew more", "var(--grid)"], ["Sent back more", "var(--back)"]];
+    }
+
+    // geometry
+    const H = 200;
+    let bars, avgBottom;
+    if (V !== "net") {
+      const max = Math.max(1, ...vals) * 1.05, px = (v) => Math.max(0, Math.round((v / max) * H));
+      bars = days.map((r) => {
+        const x = segs(r);
+        const inner = x ? x.map(([v, c], i) => `<i style="height:${px(v)}px;background:${c}${i === x.length - 1 ? ";border-radius:3px 3px 0 0" : ""}"></i>`).reverse().join("") : "";
+        return `<button type="button" data-day="${r.d}" aria-pressed="${r.d === state.day}" aria-label="${esc(dayName(r.d))}" class="${x ? "" : "gap"}"><span class="up" style="height:${H}px">${inner}</span></button>`;
+      }).join("");
+      avgBottom = px(avg);
+    } else {
+      const pos = Math.max(0, ...vals), neg = Math.max(0, ...vals.map((v) => -v));
+      const span = Math.max(1, pos + neg) * 1.05, upH = Math.round((pos / Math.max(1e-9, pos + neg || 1)) * H) || (neg ? 0 : H);
+      const px = (v) => Math.round((Math.abs(v) / span) * H);
+      bars = days.map((r) => {
+        const v = segs(r);
+        const up = v != null && v >= 0 ? `<i style="height:${px(v)}px;background:var(--grid);border-radius:3px 3px 0 0"></i>` : "";
+        const dn = v != null && v < 0 ? `<i style="height:${px(v)}px;background:var(--back);border-radius:0 0 3px 3px"></i>` : "";
+        return `<button type="button" data-day="${r.d}" aria-pressed="${r.d === state.day}" aria-label="${esc(dayName(r.d))}" class="${v == null ? "gap" : ""}"><span class="up" style="height:${upH}px">${up}</span><span class="dn" style="height:${H - upH}px">${dn}</span></button>`;
+      }).join("");
+      avgBottom = (H - upH) + (avg >= 0 ? px(avg) : -px(avg));
+    }
 
     const n = days.length, r = days.find((x) => x.d === state.day);
-    const legend = hasProd
-      ? `<span><i style="background:var(--solar)"></i>Solar used</span><span><i style="background:var(--grid)"></i>From grid</span><span><i style="background:var(--export)"></i>Sent back</span>`
-      : `<span><i style="background:var(--grid)"></i>From grid</span><span><i style="background:var(--export)"></i>Sent back</span>`;
+    const names = { home: "Home use", solar: "Solar", net: "Net grid" };
+    const seg = avail.length > 1 ? `<div class="seg" role="group" aria-label="Chart">${avail.map((v) => `<button type="button" data-view="${v}" aria-pressed="${v === V}">${names[v]}</button>`).join("")}</div>` : "";
 
     let rows = "";
-    if (r.prod != null) rows += `<div class="row"><span>Solar produced</span><span class="val num">${kwh(r.prod)} kWh</span></div>`;
-    if (r.self != null) rows += `<div class="row"><span>Used directly</span><span class="val num">${kwh(r.self)} kWh</span></div>`;
-    if (r.imp != null) rows += `<div class="row"><span>From grid</span><span class="val num">${kwh(r.imp)} kWh</span></div><div class="row"><span>Sent back</span><span class="val num">${kwh(r.exp)} kWh</span></div>`;
     if (r.home != null) rows += `<div class="row"><span>Home used</span><span class="val strong num">${kwh(r.home)} kWh</span></div>`;
-    if (r.imp != null) rows += `<div class="row"><span>Net from grid</span><span class="val ${r.home == null ? "strong" : ""} num">${signed(r.imp - r.exp)} kWh</span></div>`;
+    if (r.prod != null) rows += `<div class="row"><span>Solar produced</span><span class="val num">${kwh(r.prod)} kWh</span></div>`;
+    if (r.self != null) rows += `<div class="row"><span>Solar used in the house</span><span class="val num">${kwh(r.self)} kWh</span></div>`;
+    if (r.imp != null) rows += `<div class="row"><span>From grid</span><span class="val num">${kwh(r.imp)} kWh</span></div><div class="row"><span>Sent back</span><span class="val num">${kwh(r.exp)} kWh</span></div><div class="row"><span>Net from grid</span><span class="val ${r.home == null ? "strong" : ""} num">${signed(r.imp - r.exp)} kWh</span></div>`;
     if (!rows) rows = `<div class="row"><span class="val" style="text-align:left">No data for this day</span></div>`;
 
     return `${monthHeader("Days")}
-      <section class="card" style="padding:14px 10px 10px">
-        <div class="legend" style="padding:0 6px">${legend}</div>
-        <div class="chart">${bars}</div>
+      ${seg}
+      <section class="card" style="padding:16px 10px 10px">
+        <div style="display:flex;flex-direction:column;gap:2px;padding:0 6px">
+          <span class="label">${label}, average a day</span>
+          <div class="hero num" style="gap:5px"><b style="font-size:40px">${signed(avg)}</b><span style="font-size:17px">kWh</span></div>
+          <span class="small">${esc(sub)}</span>
+        </div>
+        <div class="legend" style="padding:0 6px">${legend.map(([l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join("")}<span><i class="dash"></i>Average</span></div>
+        <div class="chartwrap"><div class="chart" style="height:${H}px">${bars}</div><div class="avg" style="bottom:${avgBottom}px" aria-hidden="true"></div></div>
         <div class="axis"><span>1</span><span>${Math.round(n / 4)}</span><span>${Math.round(n / 2)}</span><span>${Math.round((3 * n) / 4)}</span><span>${n}</span></div>
       </section>
       <div class="section">${esc(dayName(r.d))}</div>
@@ -287,6 +332,8 @@
   view.addEventListener("click", (e) => {
     const m = e.target.closest("[data-month]");
     if (m && !m.disabled) { state.month = months()[Number(m.dataset.month)]; state.day = null; render(); return; }
+    const v = e.target.closest("[data-view]");
+    if (v) { state.view = v.dataset.view; render(); return; }
     const d = e.target.closest("[data-day]");
     if (d) { state.day = d.dataset.day; render(); }
   });
