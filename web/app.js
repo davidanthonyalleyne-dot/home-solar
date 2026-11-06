@@ -565,7 +565,7 @@
     if (!s) return `<h1>Solar</h1>
       <section class="card empty"><span class="big">${sunIcon}</span><h2>SolarEdge isn't connected</h2>
       <p class="small" style="margin:0">${state.data.connectUrl ? "Sign in with your SolarEdge account and approve access to turn this on." : "Add your SolarEdge app's client ID, client secret and site ID as repository secrets in GitHub, then run the workflow again."}</p>
-      </section>${connectBtn()}${sunCard()}${panelsLink()}`;
+      </section>${connectBtn()}${sunCard()}`;
 
     const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: TZNAME });
     // overnight the last numbers belong to yesterday; don't show them as today's
@@ -606,39 +606,10 @@
       </div>
       ${updated ? `<div class="foot">SolarEdge last reported ${esc(updated)}.</div>` : ""}
       ${inverterRows()}
-      ${benefitsCard()}
-      ${panelsLink()}`;
+      ${benefitsCard()}`;
   }
 
-  function panelsLink() {
-    const p = state.data.panels;
-    if (!p) return "";
-    const count = p.strings.reduce((a, s) => a + s.panels.length, 0);
-    return `<a class="list row" href="#panels"><span>All ${count} panels</span><span style="display:flex;align-items:center;gap:8px"><span class="val small">${esc(shortDay(p.date))}</span>${chev}</span></a>`;
-  }
 
-  function panelsScreen() {
-    const p = state.data.panels;
-    if (!p) return `<a class="back" href="#solar"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Solar</a><h1>Panels</h1><p class="small">No panel data.</p>`;
-    const all = p.strings.flatMap((s) => s.panels);
-    const best = all.reduce((a, b) => (b[1] > a[1] ? b : a)), low = all.reduce((a, b) => (b[1] < a[1] ? b : a));
-    const groups = p.strings.map((s) => {
-      const sum = s.panels.reduce((a, x) => a + x[1], 0);
-      const cells = s.panels.map(([id, wh]) => {
-        const ring = id === best[0] ? "outline:2px solid var(--solar)" : id === low[0] ? "outline:2px solid var(--chev)" : "";
-        return `<div class="panel" style="${ring}"><span class="id num">${esc(id)}</span><span class="wh num">${fmt(wh)}<small> Wh</small></span><span class="bar"><i style="width:${Math.round((wh / best[1]) * 100)}%"></i></span></div>`;
-      }).join("");
-      return `<div class="section" style="display:flex;justify-content:space-between"><span>${esc(s.name)}</span><span class="num">${fmt(sum / 1000, 2)} kWh · ${fmt(sum / s.panels.length)} Wh avg</span></div><div class="pgrid">${cells}</div>`;
-    }).join("");
-    return `<a class="back" href="#solar"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Solar</a>
-      <div><h1>Panels</h1><span class="label">${esc(dayName(p.date))} · ${all.length} panels</span></div>
-      ${groups}
-      <div class="list">
-        <div class="row"><span>Best</span><span class="val num">${esc(best[0])} · ${fmt(best[1])} Wh</span></div>
-        <div class="row"><span>Lowest</span><span class="val num">${esc(low[0])} · ${fmt(low[1])} Wh</span></div>
-      </div>
-      <div class="foot">${esc(p.note || "")}</div>`;
-  }
 
   function equipmentBlock() {
     const e = solar() && solar().equipment;
@@ -682,13 +653,13 @@
   }
 
   // ---------- routing ----------
-  const screens = { overview, days: daysScreen, solar: solarScreen, panels: panelsScreen, sources: sourcesScreen };
+  const screens = { overview, days: daysScreen, solar: solarScreen, sources: sourcesScreen };
 
   function render() {
     const route = (location.hash.slice(1) || "overview");
     const screen = screens[route] ? route : "overview";
     view.innerHTML = screens[screen]();
-    const tab = screen === "panels" ? "solar" : screen;
+    const tab = screen;
     document.querySelectorAll(".tabs a").forEach((a) => { if (a.dataset.tab === tab) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
     document.title = (screen[0].toUpperCase() + screen.slice(1)) + " · Home Solar";
     const strip = view.querySelector(".chips"), chip = strip && strip.querySelector('[aria-pressed="true"]');

@@ -72,7 +72,6 @@ The Sources screen will say the sign-in expired and show **Connect SolarEdge** a
 - **Builds reuse the last data.** Each build reads the previously published `data.json` and only fetches what changed.
 - **Public repo.** Anyone with the link can see the dashboard and the files in `data/`, including the meter number inside the Toronto Hydro export. The page is marked noindex, and no credential is exposed.
 - **Scheduled runs pause.** GitHub pauses schedules in a repo with no commits for 60 days. Uploading a hydro file each month keeps it running. You can refresh any time from Actions, Build and deploy, Run workflow.
-- **Panels screen.** It shows a snapshot from `data/panels.json`. Edit that file to update it.
 
 ## Preview on your computer
 
