@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="referrer" content="no-referrer">
 <title>Connect SolarEdge · Home Solar</title>
@@ -22,6 +22,7 @@
 </main>
 <script>
 (() => {
+  ["gesturestart", "gesturechange", "gestureend"].forEach((t) => document.addEventListener(t, (e) => e.preventDefault(), { passive: false }));
   const m = document.getElementById("m");
   const q = new URLSearchParams(location.search);
   // read the code as sent; URLSearchParams would turn a "+" into a space

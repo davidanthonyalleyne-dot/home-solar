@@ -40,7 +40,7 @@
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; touch-action: pan-x pan-y; }  /* no pinch or double-tap zoom */
 body {
   margin: 0;
   background: var(--bg);
