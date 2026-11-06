@@ -24,7 +24,9 @@
 (() => {
   const m = document.getElementById("m");
   const q = new URLSearchParams(location.search);
-  const code = q.get("code"), err = q.get("error_description") || q.get("error");
+  // read the code as sent; URLSearchParams would turn a "+" into a space
+  const rawCode = (location.search.match(/[?&]code=([^&#]*)/) || [])[1];
+  const code = rawCode ? decodeURIComponent(rawCode) : null, err = q.get("error_description") || q.get("error");
   const owner = location.hostname.split(".")[0];
   const repo = location.pathname.split("/").filter(Boolean)[0] || "home-solar";
   const run = `https://github.com/${owner}/${repo}/actions/workflows/connect.yml`;

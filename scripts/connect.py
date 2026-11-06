@@ -12,15 +12,24 @@ sys.path.insert(0, os.path.dirname(__file__))
 import build  # noqa: E402
 
 
+def redirect_uri():
+    owner, repo = os.environ.get("GITHUB_REPOSITORY", "/").split("/", 1)
+    return f"https://{owner.lower()}.github.io/{repo}/callback.html"
+
+
 def main():
-    raw = os.environ.get("CODE", "").strip()
+    raw = os.environ.get("CODE", "").strip().strip('"\'')
     if "code=" in raw:
-        raw = urllib.parse.parse_qs(urllib.parse.urlsplit(raw).query).get("code", [""])[0]
+        # take the code straight from the address without turning "+" into a space
+        part = raw.split("code=", 1)[1].split("&", 1)[0].split("#", 1)[0]
+        raw = urllib.parse.unquote(part)
+    # a "+" in the code may have been shown or pasted as a space
+    raw = raw.replace("\r", "").replace("\n", "").strip().replace(" ", "+")
     if not raw:
         sys.exit("::error::No code given. Paste the code from the callback page.")
     print(f"::add-mask::{raw}")
     try:
-        tok = build.token_request({"grant_type": "authorization_code", "code": raw})
+        tok = build.token_request({"grant_type": "authorization_code", "code": raw, "redirect_uri": redirect_uri()})
     except build.AuthError as e:
         sys.exit(f"::error::SolarEdge didn't accept the code ({e}). Codes work once and expire within minutes, so start again from the Connect button.")
     if not tok.get("refresh_token"):
