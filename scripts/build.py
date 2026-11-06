@@ -692,8 +692,6 @@ def main():
     hydro = read_hydro()
     prev = previous_data()
     solar, token_lost = read_solaredge(prev.get("solar") or {})
-    panels_file = ROOT / "data/panels.json"
-    panels = json.loads(panels_file.read_text()) if panels_file.exists() else None
 
     weather = read_weather(prev.get("weather"))
     if solar and solar.get("daily") and weather.get("daily"):
@@ -706,7 +704,6 @@ def main():
         "generated": dt.datetime.now(TZ).isoformat(timespec="minutes"),
         "hydro": {d: [round(v[0], 2), round(v[1], 2)] for d, v in sorted(hydro.items())},
         "solar": solar,
-        "panels": panels,
         "weather": weather,
         "connectUrl": authorize_url() if solar and solar.get("needsConnect") else None,
         "repo": os.environ.get("GITHUB_REPOSITORY"),
