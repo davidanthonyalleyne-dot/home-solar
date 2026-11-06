@@ -12,7 +12,7 @@
   --accent: #0A66D8;
   --grid: #0A66D8;
   --solar: #F08A00;
-  --export: #F7C27A;
+  --back: #1BAF7A;
   --select: #EEF3FB;
   --good: #248A3D;
   color-scheme: light;
@@ -32,7 +32,7 @@
     --accent: #409CFF;
     --grid: #409CFF;
     --solar: #FF9F0A;
-    --export: #8F5A12;
+    --back: #22B07D;
     --select: #1F2A3A;
     --good: #30D158;
     color-scheme: dark;
@@ -110,7 +110,12 @@ a.row { color: var(--text); text-decoration: none; }
 .icon svg { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 
 /* days chart */
-.chart { display: flex; align-items: stretch; gap: 2px; height: 250px; }
+.seg { display: flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--track); margin-bottom: -8px; }
+.seg button { flex: 1; min-height: 32px; border: 0; border-radius: 7px; background: transparent; font-size: 13px; font-weight: 500; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+@media (prefers-color-scheme: dark) { .seg button[aria-pressed="true"] { background: #636366; } }
+.chartwrap { position: relative; }
+.chart { display: flex; align-items: stretch; gap: 2px; }
 .chart button {
   flex: 1; min-width: 0; padding: 0; border: 0; border-radius: 4px; background: transparent; cursor: pointer;
   display: flex; flex-direction: column;
@@ -118,10 +123,10 @@ a.row { color: var(--text); text-decoration: none; }
 .chart button[aria-pressed="true"] { background: var(--select); }
 .chart .up { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
 .chart .dn { display: flex; flex-direction: column; justify-content: flex-start; align-items: center; border-top: 1px solid var(--sep); }
-.chart .up i, .chart .dn i { display: block; width: min(6px, 70%); }
-.chart .up i:first-child { border-radius: 3px 3px 0 0; }
-.chart .dn i { border-radius: 0 0 3px 3px; }
+.chart i { display: block; width: min(7px, 70%); flex-shrink: 0; }
 .chart .gap { opacity: .25; }
+.avg { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--muted); opacity: .7; pointer-events: none; }
+.legend i.dash { width: 12px; height: 0; border-top: 1.5px dashed var(--muted); border-radius: 0; }
 .axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); padding: 0 2px; }
 
 /* today curve */
