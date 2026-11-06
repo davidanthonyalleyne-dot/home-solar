@@ -2,6 +2,9 @@
   "use strict";
 
   const view = document.getElementById("view");
+
+  // Safari ignores user-scalable=no, so block its pinch gestures directly
+  ["gesturestart", "gesturechange", "gestureend"].forEach((t) => document.addEventListener(t, (e) => e.preventDefault(), { passive: false }));
   const state = { data: null, month: null, day: null, view: "home" };
 
   // ---------- helpers ----------
