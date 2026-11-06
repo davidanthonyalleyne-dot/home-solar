@@ -372,12 +372,77 @@ def read_solaredge(prev):
     daily[today.isoformat()] = today_kwh
     ym, y = today.strftime("%Y-%m"), str(today.year)
     solar["today"] = today_kwh
+    solar["todayDate"] = today.isoformat()
     solar["month"] = round(sum(v for k, v in daily.items() if k.startswith(ym)), 1)
     solar["year"] = round(sum(v for k, v in daily.items() if k.startswith(y)), 1)
     solar["lifetime"] = round(solar.get("lifetimeBase", 0) - solar.get("lifetimeBaseToday", 0) + today_kwh, 1)
     log(f"solaredge: {CALLS} API calls, today {today_kwh} kWh")
     return solar, False
 
+
+
+# ---------- weather (Open-Meteo, free, no key) ----------
+# Parkdale, rounded to about 1 km. Weather data by Open-Meteo.com, CC BY 4.0.
+LAT, LON = 43.64, -79.43
+WEATHER_START = "2026-01-01"
+DAILY_VARS = "temperature_2m_max,temperature_2m_min,weather_code,sunshine_duration"
+
+
+def _get_json(url, params):
+    req = urllib.request.Request(url + "?" + urllib.parse.urlencode(params), headers={"User-Agent": "home-solar"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        body = json.load(r)
+    if isinstance(body, dict) and body.get("error"):
+        raise RuntimeError(body.get("reason"))
+    return body
+
+
+def _daily_rows(body):
+    d = body.get("daily") or {}
+    out = {}
+    for i, day in enumerate(d.get("time") or []):
+        hi, lo = d["temperature_2m_max"][i], d["temperature_2m_min"][i]
+        if hi is None or lo is None:
+            continue
+        sun = d.get("sunshine_duration", [None] * (i + 1))[i]
+        out[day] = [round(hi, 1), round(lo, 1), d["weather_code"][i], None if sun is None else round(sun / 3600, 1)]
+    return out
+
+
+def read_weather(prev):
+    """Daily high, low, conditions and sunshine hours since Jan 1 2026, plus the
+    current conditions. The archive runs a few days behind, so the last two
+    weeks come from the forecast service, which also gives today and now."""
+    w = dict(prev or {})
+    daily = dict(w.get("daily") or {})
+    today = dt.datetime.now(TZ).date()
+    base = {"latitude": LAT, "longitude": LON, "timezone": "America/Toronto"}
+    if w.get("archiveDate") != today.isoformat():
+        start = (dt.date.fromisoformat(w["archivedThrough"]) + dt.timedelta(days=1)) if w.get("archivedThrough") else dt.date.fromisoformat(WEATHER_START)
+        end = today - dt.timedelta(days=2)
+        if start <= end:
+            try:
+                rows = _daily_rows(_get_json("https://archive-api.open-meteo.com/v1/archive",
+                                             {**base, "start_date": start.isoformat(), "end_date": end.isoformat(), "daily": DAILY_VARS}))
+                daily.update(rows)
+                if rows:
+                    w["archivedThrough"] = max(rows)
+                w["archiveDate"] = today.isoformat()
+            except Exception as e:
+                log(f"weather: archive request failed, keeping what we have: {e}")
+    try:
+        body = _get_json("https://api.open-meteo.com/v1/forecast", {**base, "past_days": 14, "forecast_days": 1,
+                                                                      "daily": DAILY_VARS, "current": "temperature_2m,weather_code,is_day"})
+        daily.update(_daily_rows(body))
+        c = body.get("current") or {}
+        if c.get("temperature_2m") is not None:
+            w["current"] = {"time": c.get("time"), "temp": round(c["temperature_2m"], 1), "code": c.get("weather_code"), "isDay": c.get("is_day")}
+    except Exception as e:
+        log(f"weather: forecast request failed, keeping what we have: {e}")
+    w["daily"] = {k: v for k, v in sorted(daily.items()) if k >= WEATHER_START}
+    w["lat"], w["lon"] = LAT, LON
+    log(f"weather: {len(w['daily'])} days")
+    return w
 
 # ---------- build ----------
 
@@ -393,6 +458,7 @@ def main():
         "hydro": {d: [round(v[0], 2), round(v[1], 2)] for d, v in sorted(hydro.items())},
         "solar": solar,
         "panels": panels,
+        "weather": read_weather(prev.get("weather")),
         "connectUrl": authorize_url() if solar and solar.get("needsConnect") else None,
         "repo": os.environ.get("GITHUB_REPOSITORY"),
     }
