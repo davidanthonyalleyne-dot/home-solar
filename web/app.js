@@ -406,9 +406,9 @@
     if (co2) { const kg = /lb/.test(unit) ? co2[1] * 0.4536 : /^t|ton/.test(unit) ? co2[1] * 1000 : co2[1]; parts.push(`<div class="tile"><span class="k">CO₂ avoided</span><span class="v num">${kg >= 1000 ? fmt(kg / 1000, 1) + " <small>tonnes</small>" : fmt(kg) + " <small>kg</small>"}</span></div>`); }
     if (trees) parts.push(`<div class="tile"><span class="k">Like planting</span><span class="v num">${fmt(trees[1])} <small>trees</small></span></div>`);
     if (!trees && bulbs) parts.push(`<div class="tile"><span class="k">Light bulbs for a day</span><span class="v num">${fmt(bulbs[1])}</span></div>`);
-    if (!trees && !bulbs && ev) parts.push(`<div class="tile"><span class="k">EV driving</span><span class="v num">${fmt(/km/i.test(ev[0]) ? ev[1] : ev[1] * 1.609)} <small>km</small></span></div>`);
+    if (!trees && !bulbs && ev) parts.push(`<div class="tile"><span class="k">Enough to drive an EV</span><span class="v num">${fmt(/km/i.test(ev[0]) ? ev[1] : ev[1] * 1.609)} <small>km</small></span></div>`);
     if (!parts.length) return "";
-    return `<div class="section">Since ${esc(solar().installed ? new Date(solar().installed + "T12:00").toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "install")}</div><div class="tiles">${parts.join("")}</div><div class="foot">SolarEdge's estimate of what your panels have saved.</div>`;
+    return `<div class="section">Since ${esc(solar().installed ? new Date(solar().installed + "T12:00").toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "install")}</div><div class="tiles">${parts.join("")}</div><div class="foot">SolarEdge's estimates. Its CO₂ figure uses a general grid average, and Ontario's grid is mostly nuclear and hydro, so the real saving here is smaller.</div>`;
   }
 
   function tomorrowRow() {
