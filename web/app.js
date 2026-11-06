@@ -647,7 +647,10 @@
       <div class="row"><span>Inverter</span><span class="val">${esc([i.manufacturer, i.model].filter(Boolean).join(" ") || i.name || "–")}</span></div>
       ${i.firmware ? `<div class="row"><span>Firmware</span><span class="val num">${esc(i.firmware)}</span></div>` : ""}
       ${i.communication ? `<div class="row"><span>Connection</span><span class="val">${esc(({ WIFI: "Wi-Fi", ETHERNET: "Ethernet", LAN: "Ethernet", CELLULAR: "Cellular", ZIGBEE: "ZigBee", RS485: "RS485" })[String(i.communication).toUpperCase()] || pretty(String(i.communication).toLowerCase()))}</span></div>` : ""}`).join("");
-    const opt = e.optimizers != null ? `<div class="row"><span>Optimizers</span><span class="val num">${e.optimizers}${e.optimizerModels && e.optimizerModels.length ? " · " + esc(e.optimizerModels.join(", ")) : ""}</span></div>` : "";
+    // the inverter's own count is what's actually wired in; SolarEdge's inventory can still list a replaced optimizer
+    const connected = (e.inverters || []).reduce((a, i) => a + (Number(i.optimizers) || 0), 0) || e.optimizers;
+    const models = [...new Set((e.optimizerModels || []).map((m) => m.split("-")[0]))];
+    const opt = connected != null ? `<div class="row"><span>Optimizers</span><span class="val num">${connected} connected${models.length ? " · " + esc(models.join(", ")) : ""}</span></div>` : "";
     return inv || opt ? `<div class="section">Equipment</div><div class="list">${inv}${opt}</div>` : "";
   }
 
