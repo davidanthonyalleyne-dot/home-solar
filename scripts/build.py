@@ -14,6 +14,7 @@ today's quarter-hour production on every daytime run, and the daily history,
 lifetime total and site details once a day.
 """
 import base64
+import hashlib
 import csv
 import datetime as dt
 import glob
@@ -23,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -287,10 +289,23 @@ def previous_data():
         return {}
     try:
         with urllib.request.urlopen(f"{base}/data.json?ts={int(time.time())}", timeout=20) as r:
-            return json.load(r)
+            body = json.load(r)
     except Exception as e:
         log(f"previous data.json not available ({e}), starting fresh")
         return {}
+    if isinstance(body, dict) and "ct" in body:
+        global PREV_SALT
+        if not _passphrase():
+            log("::warning::The published data is encrypted but SITE_PASSPHRASE isn't set; starting fresh")
+            return {}
+        try:
+            PREV_SALT = base64.b64decode(body["salt"])
+            return decrypt_data(body)
+        except Exception:
+            PREV_SALT = None
+            log("::warning::Couldn't decrypt the published data (was the passphrase changed?); reloading everything")
+            return {}
+    return body
 
 
 def sun_times(day):
@@ -559,8 +574,7 @@ def read_solaredge(prev):
     solar["month"] = round(sum(v for k, v in daily.items() if k.startswith(ym)), 1)
     solar["year"] = round(sum(v for k, v in daily.items() if k.startswith(y)), 1)
     solar["lifetime"] = round(solar.get("lifetimeBase", 0) - solar.get("lifetimeBaseToday", 0) + daily.get(today.isoformat(), 0), 1)
-    log(f"solaredge: {CALLS} API calls ({', '.join(k for k, v in need.items() if v)}), today {daily.get(today.isoformat(), 0)} kWh, "
-        f"{len(solar.get('alerts') or [])} open alerts")
+    log(f"solaredge: {CALLS} API calls ({', '.join(k for k, v in need.items() if v)})")
     return solar, False
 
 
@@ -704,6 +718,40 @@ def find_problems(solar, weather):
     return out
 
 
+
+# ---------- encryption ----------
+# With SITE_PASSPHRASE set, the published data.json is AES-256-GCM encrypted. The key
+# comes from the passphrase (PBKDF2-SHA256), so only the app, after you unlock it,
+# can read the numbers. The salt stays the same between builds so devices that have
+# saved the key (behind Face ID) keep working; a new IV is used every time.
+KDF_ITER = 600_000
+
+
+def _passphrase():
+    p = os.environ.get("SITE_PASSPHRASE", "")
+    return unicodedata.normalize("NFKC", p) if p.strip() else None
+
+
+def _key(passphrase, salt):
+    return hashlib.pbkdf2_hmac("sha256", passphrase.encode(), salt, KDF_ITER, 32)
+
+
+def encrypt_data(data, salt=None):
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    salt = salt or os.urandom(16)
+    iv = os.urandom(12)
+    ct = AESGCM(_key(_passphrase(), salt)).encrypt(iv, json.dumps(data, separators=(",", ":")).encode(), None)
+    b64 = lambda b: base64.b64encode(b).decode()
+    return {"v": 1, "kdf": "PBKDF2-SHA256", "iter": KDF_ITER, "salt": b64(salt), "iv": b64(iv), "ct": b64(ct)}
+
+
+def decrypt_data(box):
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    d = lambda k: base64.b64decode(box[k])
+    pt = AESGCM(_key(_passphrase(), d("salt"))).decrypt(d("iv"), d("ct"), None)
+    return json.loads(pt)
+
+
 # ---------- build ----------
 
 def main():
@@ -729,12 +777,19 @@ def main():
     if OUT.exists():
         shutil.rmtree(OUT)
     shutil.copytree(ROOT / "web", OUT)
-    (OUT / "data.json").write_text(json.dumps(data, separators=(",", ":")))
+    if _passphrase():
+        out = encrypt_data(data, PREV_SALT)
+        log("data.json encrypted")
+    else:
+        out = data
+        log("::warning::SITE_PASSPHRASE isn't set, so data.json is published unencrypted")
+    (OUT / "data.json").write_text(json.dumps(out, separators=(",", ":")))
     gh_output("token_lost", "true" if token_lost else "false")
     log(f"built _site/ with {len(hydro)} hydro days, solar {'connected' if solar and solar.get('connected') else 'not connected'}")
 
 
 SITE = ""
+PREV_SALT = None
 
 if __name__ == "__main__":
     main()

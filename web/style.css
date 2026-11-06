@@ -197,3 +197,18 @@ a.row { color: var(--text); text-decoration: none; }
 .bar { height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; display: block; }
 .bar i { display: block; height: 100%; background: var(--solar); border-radius: inherit; }
 .bar.thick { height: 8px; border-radius: 4px; }
+
+/* lock screen */
+body.locked .tabs { display: none; }
+.lock { min-height: 70vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; max-width: 360px; margin: 0 auto; width: 100%; }
+.lock-ic { width: 64px; height: 64px; border-radius: 18px; background: var(--solar); display: grid; place-items: center; }
+.lock-ic svg { width: 32px; height: 32px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.lock-form { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.lock-form input { height: 50px; border-radius: 12px; border: 0; background: var(--card); color: var(--text); font-size: 17px; padding: 0 16px; }
+.lock-form input:focus { outline: 2px solid var(--accent); }
+.btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 50px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; font-size: 17px; font-weight: 600; cursor: pointer; }
+.btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.btn.secondary { background: var(--card); color: var(--accent); }
+.btn:disabled { opacity: .6; }
+.err { color: var(--warn); min-height: 1.2em; margin: 0; text-align: center; }
+button.linkrow { width: 100%; border: 0; border-top: .5px solid var(--sep); background: transparent; color: var(--warn); font-size: 17px; text-align: left; cursor: pointer; }

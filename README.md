@@ -58,6 +58,10 @@ When it turns green it saves the sign-in as `SOLAREDGE_REFRESH_TOKEN` and rebuil
 
 Open the site in Safari, tap Share, then Add to Home Screen.
 
+## Lock the app
+
+Add a repository secret called `SITE_PASSPHRASE` (Settings, Secrets and variables, Actions). From the next build, everything the site publishes is encrypted (AES-256-GCM, key derived from the passphrase), so data.json is unreadable without it. The app asks for the passphrase once on each device, then offers Face ID through a passkey, or to stay unlocked on that device if it can't use Face ID for this. Use four or more random words, because anyone can download the encrypted file and try guesses offline. Changing the passphrase locks every device until it's entered again, and the next build reloads the full history.
+
 ## Adding Toronto Hydro data
 
 Download a month from MyTorontoHydro (the daily "Trending Report" export works; hourly works too). In GitHub open `data/hydro`, click Add file, then Upload files, and drop it in. The site rebuilds on its own within a couple of minutes. Overlapping files are fine because readings are matched by timestamp.
