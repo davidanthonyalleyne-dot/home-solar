@@ -137,6 +137,13 @@
         c < 0 && Number(ym.slice(5)) >= 7 ? "Shorter days and a lower sun." : c > 0 && Number(ym.slice(5)) <= 6 ? "Longer days and a higher sun." : `${fmt(cur.prod, 1)} kWh a day, against ${fmt(prev.prod, 1)}.`,
         compareBars("kWh a day", cur.prod, prev.prod, "var(--solar)"));
     }
+    // solar against the same month a year earlier
+    const lastYear = `${Number(ym.slice(0, 4)) - 1}${ym.slice(4)}`, ly = monthStats(lastYear);
+    if (cur.prod != null && ly.prod && ly.t.pDays >= 20) {
+      const c = change(cur.prod, ly.prod);
+      item("var(--solar)", sunIcon, `Solar ${c >= 0 ? "up" : "down"} ${Math.abs(c)}% on ${esc(monthName(lastYear))}`,
+        `${fmt(cur.prod, 1)} kWh a day, against ${fmt(ly.prod, 1)} a year earlier.${Math.abs(c) >= 15 ? " Mostly down to the weather, unless the system had problems." : ""}`);
+    }
     // share of the home covered
     if (cur.cover != null) {
       const p = prev && prev.cover != null ? prev.cover : null;
@@ -411,6 +418,22 @@
     return `<div class="section">Since ${esc(solar().installed ? new Date(solar().installed + "T12:00").toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "install")}</div><div class="tiles">${parts.join("")}</div><div class="foot">SolarEdge's estimates. Its CO₂ figure uses a general grid average, and Ontario's grid is mostly nuclear and hydro, so the real saving here is smaller.</div>`;
   }
 
+  function yearsBlock() {
+    const s = solar();
+    if (!s) return "";
+    const by = {};
+    for (const [d, v] of Object.entries(s.daily)) by[d.slice(0, 4)] = (by[d.slice(0, 4)] || 0) + (v || 0);
+    const years = Object.keys(by).sort().reverse();
+    if (years.length < 2) return "";
+    const first = Object.keys(s.daily).sort()[0], thisYear = torontoToday().slice(0, 4);
+    const max = Math.max(...years.map((y) => by[y]));
+    const rows = years.map((y) => {
+      const note = y === thisYear ? " so far" : y === first.slice(0, 4) && first.slice(5) > "01-15" ? ` from ${shortDay(first)}` : "";
+      return `<div class="row" style="gap:12px"><span style="width:110px;flex-shrink:0">${y}<span class="small">${note}</span></span><span class="bar thick" style="flex:1"><i style="width:${(by[y] / max) * 100}%"></i></span><span class="val num" style="min-width:84px">${fmt(by[y])} kWh</span></div>`;
+    }).join("");
+    return `<div class="section">By year</div><div class="list">${rows}</div>`;
+  }
+
   function tomorrowRow() {
     const t = state.data.weather && state.data.weather.tomorrow, k = state.data.weather && state.data.weather.factor;
     if (!t) return "";
@@ -605,6 +628,7 @@
         <div class="row"><span>Since ${esc(s.installed ? new Date(s.installed + "T12:00").toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "install")}</span><span class="val num">${fmt(s.lifetime)} kWh</span></div>
       </div>
       ${updated ? `<div class="foot">SolarEdge last reported ${esc(updated)}.</div>` : ""}
+      ${yearsBlock()}
       ${inverterRows()}
       ${benefitsCard()}`;
   }

@@ -246,7 +246,7 @@ def _day_of(t):
     return (t + dt.timedelta(hours=12)).date().isoformat()
 
 
-def fetch_daily(token, start, end):
+def fetch_daily(token, start, end, monthly=False):
     """Daily production (kWh) between two local dates. Falls back to month-sized
     requests if the API won't return the whole span in one call."""
     def one(a, b):
@@ -256,11 +256,13 @@ def fetch_daily(token, start, end):
             "to": _instant(min(dt.datetime.combine(b + dt.timedelta(days=1), dt.time(), TZ), dt.datetime.now(TZ)))})
         return {_day_of(t): round(v / 1000, 2) for t, v in _series(body) if t and v is not None}
     try:
+        if monthly and (end - start).days > 31:
+            raise RuntimeError("known to be longer than one request allows")
         return one(start, end)
     except RuntimeError as e:
         if (end - start).days <= 31:
             raise
-        log(f"solaredge: long daily span refused ({e}), fetching month by month")
+        log(f"solaredge: fetching daily history month by month ({e})")
         out, a = {}, start
         while a <= end:
             b = min(a + dt.timedelta(days=30), end)
@@ -422,7 +424,8 @@ def read_solaredge(prev):
     daylight = rise - dt.timedelta(minutes=30) <= now <= sset + dt.timedelta(minutes=45)
     fresh = not prev.get("daily")
     need = {
-        "history": fresh or "equipment" not in prev or (prev.get("historyDate") != today.isoformat() and now.hour >= NIGHT[1]),
+        "history": fresh or "equipment" not in prev or not prev.get("backfilled")
+                   or (prev.get("historyDate") != today.isoformat() and now.hour >= NIGHT[1]),
         "today": fresh or daylight or prev.get("todayDate") != today.isoformat()
                  or (now > sset + dt.timedelta(minutes=45) and prev.get("finalDate") != today.isoformat()),
         "power": daylight,
@@ -460,8 +463,14 @@ def read_solaredge(prev):
             daily = dict(solar.get("daily") or {})
             start = dt.date.fromisoformat(max(daily)) - dt.timedelta(days=3) if daily else today - dt.timedelta(days=364)
             daily.update(fetch_daily(access, start, today))
-            cutoff = (today - dt.timedelta(days=400)).isoformat()
-            solar["daily"] = {k: v for k, v in sorted(daily.items()) if k >= cutoff}
+            # once: everything back to the installation date, a month per call
+            if not solar.get("backfilled") and solar.get("installed") and daily:
+                first, oldest = dt.date.fromisoformat(solar["installed"]), dt.date.fromisoformat(min(daily))
+                if first < oldest:
+                    log(f"solaredge: loading daily history from {first} to {oldest}")
+                    daily.update(fetch_daily(access, first, oldest - dt.timedelta(days=1), monthly=True))
+                solar["backfilled"] = True
+            solar["daily"] = dict(sorted(daily.items()))
 
             since = dt.date.fromisoformat(solar["installed"]) if solar.get("installed") else today - dt.timedelta(days=3650)
             body = api_get(access, f"/sites/{SITE}/energy", {
@@ -558,7 +567,7 @@ def read_solaredge(prev):
 # ---------- weather (Open-Meteo, free, no key) ----------
 # Parkdale, rounded to about 1 km. Weather data by Open-Meteo.com, CC BY 4.0.
 LAT, LON = 43.64, -79.43
-WEATHER_START = "2026-01-01"
+WEATHER_START = "2023-07-01"  # the month the panels went in
 DAILY_VARS = "temperature_2m_max,temperature_2m_min,weather_code,sunshine_duration,shortwave_radiation_sum,snowfall_sum"
 WEATHER_FIELDS = 6  # high, low, code, sunshine hours, sunlight MJ/m², snowfall cm
 
@@ -593,9 +602,18 @@ def read_weather(prev):
     w = dict(prev or {})
     daily = dict(w.get("daily") or {})
     if any(len(v) < WEATHER_FIELDS for v in daily.values()):  # older format: fetch the history again
-        daily, w = {}, {k: v for k, v in w.items() if k not in ("archivedThrough", "archiveDate")}
+        daily, w = {}, {k: v for k, v in w.items() if k not in ("archivedThrough", "archiveDate", "backfilled")}
     today = dt.datetime.now(TZ).date()
     base = {"latitude": LAT, "longitude": LON, "timezone": "America/Toronto"}
+    if daily and min(daily) > WEATHER_START and not w.get("backfilled"):
+        try:
+            end = dt.date.fromisoformat(min(daily)) - dt.timedelta(days=1)
+            daily.update(_daily_rows(_get_json("https://archive-api.open-meteo.com/v1/archive",
+                                               {**base, "start_date": WEATHER_START, "end_date": end.isoformat(), "daily": DAILY_VARS})))
+            w["backfilled"] = True
+            log(f"weather: loaded history from {WEATHER_START}")
+        except Exception as e:
+            log(f"weather: history request failed, will retry: {e}")
     if w.get("archiveDate") != today.isoformat():
         start = (dt.date.fromisoformat(w["archivedThrough"]) + dt.timedelta(days=1)) if w.get("archivedThrough") else dt.date.fromisoformat(WEATHER_START)
         end = today - dt.timedelta(days=2)
