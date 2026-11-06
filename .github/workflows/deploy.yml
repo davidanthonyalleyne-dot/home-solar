@@ -32,7 +32,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install openpyxl
+      - run: pip install openpyxl cryptography
       - id: build
         run: python scripts/build.py
         env:
@@ -42,6 +42,7 @@ jobs:
           SOLAREDGE_CLIENT_SECRET: ${{ secrets.SOLAREDGE_CLIENT_SECRET }}
           SOLAREDGE_REFRESH_TOKEN: ${{ secrets.SOLAREDGE_REFRESH_TOKEN }}
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          SITE_PASSPHRASE: ${{ secrets.SITE_PASSPHRASE }}
       - name: Report problems as GitHub issues
         if: always() && steps.build.outcome == 'success'
         continue-on-error: true

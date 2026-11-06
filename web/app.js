@@ -698,6 +698,13 @@
       </div>
       <div class="foot">To add a month, download it from MyTorontoHydro and upload the file to the data/hydro folder in GitHub. The site rebuilds on its own.</div>
       <div class="foot" style="margin-top:0">Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a>. Sunrise and sunset are calculated for Parkdale.</div>
+      <div class="section">Security</div>
+      <div class="list">
+        <div class="row"><span>Data</span><span class="val">${state.encrypted ? "Encrypted" : "Not encrypted"}</span></div>
+        ${state.encrypted ? `<div class="row"><span>Unlock</span><span class="val">${esc(HomeSolarLock.status())}</span></div>
+        <button type="button" class="row linkrow" id="lockapp">Lock and forget this device</button>` : ""}
+      </div>
+      <div class="foot">${state.encrypted ? "Locking removes the saved unlock from this device. You'll need your passphrase to open the app again here." : "Add a SITE_PASSPHRASE secret in GitHub to encrypt everything the site publishes."}</div>
       <div class="foot" style="margin-top:0">Built ${esc(new Date(d.generated).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))}.</div>`;
   }
 
@@ -722,6 +729,7 @@
       if (m.tagName === "A" && location.hash !== m.getAttribute("href")) return;  // the hash change renders
       e.preventDefault(); render(); return;
     }
+    if (e.target.closest("#lockapp")) { HomeSolarLock.forget(); location.reload(); return; }
     const v = e.target.closest("[data-view]");
     if (v) { state.view = v.dataset.view; render(); return; }
     const d = e.target.closest("[data-day]");
@@ -733,6 +741,7 @@
   view.innerHTML = '<p class="loading">Loading…</p>';
   fetch("data.json", { cache: "no-store" })
     .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then((data) => { state.encrypted = HomeSolarLock.isEncrypted(data); return state.encrypted ? HomeSolarLock.unlock(view, data) : data; })
     .then((data) => { state.data = data; state.month = defaultMonth(); render(); refreshLive(); })
     .catch(() => { view.innerHTML = '<h1>Home Solar</h1><p class="small">Couldn\'t load data.json. If you opened index.html straight from your computer, run the build and serve the _site folder instead.</p>'; });
 })();
