@@ -170,6 +170,22 @@
       const ahead = days.filter((r) => r.imp != null && r.exp > r.imp).length;
       item("var(--solar)", sunIcon, `Best solar day was ${esc(shortDay(best.d))}`, `${fmt(best.prod, 1)} kWh. The dullest was ${esc(shortDay(low.d))} at ${fmt(low.prod, 1)}.${days.some((r) => r.imp != null) ? ` ${ahead ? (ahead === 1 ? "One day" : ahead + " days") + " sent back more than the house drew." : "No day sent back more than the house drew."}` : ""}`);
     }
+    // the month's weather
+    const wdays = days.map((r) => [r, weatherDay(r.d)]).filter(([, w]) => w);
+    if (wdays.length >= 5) {
+      const hi = wdays.reduce((a, [, w]) => a + w[0], 0) / wdays.length, lo = wdays.reduce((a, [, w]) => a + w[1], 0) / wdays.length;
+      const sunny = wdays.filter(([, w]) => w[3] != null && w[3] >= 6).length;
+      const withBoth = wdays.filter(([r, w]) => r.prod != null && r.prod > 0.5 && w[3] != null);
+      let link = "";
+      if (withBoth.length >= 6) {
+        const srt = [...withBoth].sort((a, b) => b[1][3] - a[1][3]), half = Math.floor(srt.length / 2);
+        const avgP = (xs) => xs.reduce((a, [r]) => a + r.prod, 0) / xs.length;
+        const top = avgP(srt.slice(0, half)), bot = avgP(srt.slice(-half));
+        if (bot > 0) link = ` The sunniest half of the days made ${fmt(top / bot, 1)} times as much solar as the dullest half.`;
+      }
+      const wc = wx(sunny >= wdays.length / 2 ? 1 : 3);
+      item(wxColor(wc.icon), wxIcon(wc.icon, 20), `Average high ${deg(hi)}, low ${deg(lo)}`, `${sunny} of ${wdays.length} days had 6 or more hours of sunshine.${link}`);
+    }
     return out.length ? `<div class="section">${esc(name)} highlights</div><div class="list hls">${out.join("")}</div>` : "";
   }
 
@@ -197,6 +213,105 @@
     return `<a class="list row" href="#sources" style="text-decoration:none">
       <span style="display:flex;align-items:center;gap:12px;min-width:0"><span class="icon" style="background:var(--solar)">${sunIcon}</span>
       <span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span>Solar production</span><span class="small">Connect SolarEdge to see what the panels made and what the house used directly.</span></span></span>${chev}</a>`;
+  }
+
+
+  // ---------- sun and weather ----------
+  const TZNAME = "America/Toronto";
+  const LAT = () => (state.data.weather && state.data.weather.lat) || 43.64;
+  const LON = () => (state.data.weather && state.data.weather.lon) || -79.43;
+
+  // sunrise and sunset for any date (NOAA sunrise equation, accurate to about a minute)
+  function sunTimes(d) {
+    const rad = Math.PI / 180, [y, m, dd] = d.split("-").map(Number);
+    const jd = Date.UTC(y, m - 1, dd, 12) / 86400000 + 2440587.5;
+    const n = Math.round(jd - 2451545 + 0.0008), js = n - LON() / 360;
+    const M = (357.5291 + 0.98560028 * js) % 360;
+    const C = 1.9148 * Math.sin(M * rad) + 0.02 * Math.sin(2 * M * rad) + 0.0003 * Math.sin(3 * M * rad);
+    const L = (M + C + 180 + 102.9372) % 360;
+    const jt = 2451545 + js + 0.0053 * Math.sin(M * rad) - 0.0069 * Math.sin(2 * L * rad);
+    const dec = Math.asin(Math.sin(L * rad) * Math.sin(23.4397 * rad));
+    const cosw = (Math.sin(-0.833 * rad) - Math.sin(LAT() * rad) * Math.sin(dec)) / (Math.cos(LAT() * rad) * Math.cos(dec));
+    const w = Math.acos(Math.max(-1, Math.min(1, cosw))) / rad;
+    const ms = (j) => new Date((j - 2440587.5) * 86400000);
+    return { rise: ms(jt - w / 360), set: ms(jt + w / 360), noon: ms(jt) };
+  }
+  const clock = (t) => t.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZNAME }).replace(" AM", " am").replace(" PM", " pm");
+  const hm = (ms) => { const m = Math.round(ms / 60000); return `${Math.floor(m / 60)} h ${m % 60} min`; };
+  const torontoToday = () => new Date().toLocaleDateString("en-CA", { timeZone: TZNAME });
+
+  const WX = [
+    [[0], "Clear", "sun"], [[1], "Mostly clear", "sun"], [[2], "Partly cloudy", "partly"], [[3], "Cloudy", "cloud"],
+    [[45, 48], "Fog", "fog"], [[51, 53, 55, 56, 57], "Drizzle", "rain"], [[61, 63, 65, 66, 67, 80, 81, 82], "Rain", "rain"],
+    [[71, 73, 75, 77, 85, 86], "Snow", "snow"], [[95, 96, 99], "Thunderstorms", "storm"],
+  ];
+  function wx(code, isDay = 1) {
+    const hit = WX.find(([codes]) => codes.includes(Number(code))) || [[], "—", "cloud"];
+    let label = hit[1], icon = hit[2];
+    if (!isDay && icon === "sun") { icon = "moon"; label = code === 0 ? "Clear" : "Mostly clear"; }
+    if (!isDay && icon === "partly") icon = "cloud";
+    return { label, icon };
+  }
+  const WXI = {
+    sun: '<circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+    partly: '<path d="M8 3v1.5M3.4 6.4l1 1M2 11h1.5M12.6 6.4l-1 1"/><path d="M5.6 12.6A3.5 3.5 0 1 1 11.8 9"/><path d="M8 20h9.5a3.5 3.5 0 0 0 0-7h-.4A5 5 0 0 0 8 14a3 3 0 0 0 0 6z"/>',
+    cloud: '<path d="M7 19h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 12.1 3.5 3.5 0 0 0 7 19z"/>',
+    rain: '<path d="M7 15h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 8.1 3.5 3.5 0 0 0 7 15z"/><path d="M8 18l-1 3M12 18l-1 3M16 18l-1 3"/>',
+    snow: '<path d="M7 14h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 7.1 3.5 3.5 0 0 0 7 14z"/><path d="M8 18h.01M12 20h.01M16 18h.01M10 22h.01M14 22h.01"/>',
+    fog: '<path d="M4 9h16M3 13h18M5 17h14"/>',
+    storm: '<path d="M7 14h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 7.1 3.5 3.5 0 0 0 7 14z"/><path d="M12 15l-2 4h3l-2 4"/>',
+  };
+  const wxIcon = (icon, size = 22, color = "currentColor") => `<svg class="wxi" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${WXI[icon] || WXI.cloud}</svg>`;
+  const wxColor = (icon) => icon === "sun" ? "var(--solar)" : icon === "moon" ? "var(--muted)" : icon === "partly" ? "var(--solar)" : "var(--grid)";
+  const deg = (t) => `${Math.round(t)}°`;
+  const weatherDay = (d) => (state.data.weather && state.data.weather.daily && state.data.weather.daily[d]) || null;
+
+  // current conditions straight from Open-Meteo when the app opens, falling back to the last build
+  let live = null, liveAt = 0;
+  function refreshLive() {
+    if (Date.now() - liveAt < 10 * 60000) return;
+    liveAt = Date.now();
+    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LAT()}&longitude=${LON()}&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min&timezone=${encodeURIComponent(TZNAME)}&forecast_days=1`)
+      .then((r) => r.json())
+      .then((b) => {
+        if (!b.current) return;
+        live = { temp: b.current.temperature_2m, code: b.current.weather_code, isDay: b.current.is_day, time: b.current.time,
+                 hi: b.daily && b.daily.temperature_2m_max[0], lo: b.daily && b.daily.temperature_2m_min[0] };
+        if (["solar", "days", "overview"].includes(location.hash.slice(1) || "overview")) render();
+      })
+      .catch(() => {});
+  }
+  function currentWeather() {
+    if (live) return live;
+    const c = state.data.weather && state.data.weather.current, t = weatherDay(torontoToday());
+    return c ? { ...c, hi: t && t[0], lo: t && t[1] } : null;
+  }
+
+  function sunCard() {
+    const d = torontoToday(), { rise, set } = sunTimes(d), now = new Date();
+    const before = now < rise, after = now > set;
+    const status = before ? `Before sunrise · rises at ${clock(rise)}` : after ? `After sunset · set at ${clock(set)}` : `Daylight · sets at ${clock(set)}`;
+    // position along the arc
+    const f = Math.max(0, Math.min(1, (now - rise) / (set - rise)));
+    const W = 300, Hh = 70, x = 20 + f * (W - 40), yArc = (t) => 80 - Math.sin(t * Math.PI) * Hh;
+    let path = ""; for (let i = 0; i <= 40; i++) { const t = i / 40; path += `${i ? "L" : "M"}${(20 + t * (W - 40)).toFixed(1)},${yArc(t).toFixed(1)}`; }
+    const up = !before && !after;
+    const w = currentWeather(), cond = w ? wx(w.code, w.isDay) : null;
+    const weather = w ? `<div class="wx">
+        <span style="color:${wxColor(cond.icon)}">${wxIcon(cond.icon, 40)}</span>
+        <div style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0"><span class="num" style="font-size:34px;font-weight:600;line-height:1">${deg(w.temp)}</span><span class="small">${esc(cond.label)}</span></div>
+        ${w.hi != null ? `<div class="num" style="text-align:right;font-size:15px"><div>H ${deg(w.hi)}</div><div class="small">L ${deg(w.lo)}</div></div>` : ""}
+      </div>` : "";
+    return `<section class="card" style="gap:10px">${weather}
+      <svg viewBox="0 0 ${W} 96" class="sunarc" role="img" aria-label="${esc(status)}">
+        <line x1="0" y1="80" x2="${W}" y2="80" stroke="var(--sep)"/>
+        <path d="${path}" fill="none" stroke="var(--sep)" stroke-width="2" stroke-dasharray="3 4"/>
+        ${up ? `<circle cx="${x.toFixed(1)}" cy="${yArc(f).toFixed(1)}" r="8" fill="var(--solar)"/>` : `<circle cx="${before ? 20 : W - 20}" cy="80" r="6" fill="var(--muted)"/>`}
+      </svg>
+      <div class="axis" style="font-size:13px"><span>↑ ${clock(rise)}</span><span>${hm(set - rise)} of daylight</span><span>↓ ${clock(set)}</span></div>
+      <span class="small" style="font-weight:600;color:var(--text)">${esc(status)}</span>
+    </section>`;
   }
 
   // ---------- screens ----------
@@ -313,6 +428,14 @@
     if (r.self != null) rows += `<div class="row"><span>Solar used in the house</span><span class="val num">${kwh(r.self)} kWh</span></div>`;
     if (r.imp != null) rows += `<div class="row"><span>From grid</span><span class="val num">${kwh(r.imp)} kWh</span></div><div class="row"><span>Sent back</span><span class="val num">${kwh(r.exp)} kWh</span></div><div class="row"><span>Net from grid</span><span class="val ${r.home == null ? "strong" : ""} num">${signed(r.imp - r.exp)} kWh</span></div>`;
     if (!rows) rows = `<div class="row"><span class="val" style="text-align:left">No data for this day</span></div>`;
+    const wd = weatherDay(r.d), sun = sunTimes(r.d);
+    let wrows = "";
+    if (wd) {
+      const c = wx(wd[2]);
+      wrows += `<div class="row"><span style="display:flex;align-items:center;gap:8px"><span style="color:${wxColor(c.icon)}">${wxIcon(c.icon, 20)}</span>${esc(c.label)}</span><span class="val num">H ${deg(wd[0])} · L ${deg(wd[1])}</span></div>`;
+      if (wd[3] != null) wrows += `<div class="row"><span>Sunshine</span><span class="val num">${fmt(wd[3], 1)} h</span></div>`;
+    }
+    wrows += `<div class="row"><span>Sunrise · sunset</span><span class="val num">${clock(sun.rise)} · ${clock(sun.set)}</span></div><div class="row"><span>Daylight</span><span class="val num">${hm(sun.set - sun.rise)}</span></div>`;
 
     return `${monthHeader("Days")}
       ${seg}
@@ -327,7 +450,8 @@
         <div class="axis"><span>1</span><span>${Math.round(n / 4)}</span><span>${Math.round(n / 2)}</span><span>${Math.round((3 * n) / 4)}</span><span>${n}</span></div>
       </section>
       <div class="section">${esc(dayName(r.d))}</div>
-      <div class="list">${rows}</div>`;
+      <div class="list">${rows}</div>
+      <div class="list">${wrows}</div>`;
   }
 
   function solarScreen() {
@@ -335,10 +459,13 @@
     if (!s) return `<h1>Solar</h1>
       <section class="card empty"><span class="big">${sunIcon}</span><h2>SolarEdge isn't connected</h2>
       <p class="small" style="margin:0">${state.data.connectUrl ? "Sign in with your SolarEdge account and approve access to turn this on." : "Add your SolarEdge app's client ID, client secret and site ID as repository secrets in GitHub, then run the workflow again."}</p>
-      </section>${connectBtn()}${panelsLink()}`;
+      </section>${connectBtn()}${sunCard()}${panelsLink()}`;
 
-    const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-    const pts = (s.todayCurve || []).map(([t, kw]) => { const [h, m] = t.split(":").map(Number); return [h + m / 60, kw]; });
+    const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: TZNAME });
+    // overnight the last numbers belong to yesterday; don't show them as today's
+    const fresh = !s.todayDate || s.todayDate === torontoToday();
+    const todayKwh = fresh ? s.today : 0, nowKw = fresh ? s.nowKw : 0;
+    const pts = (fresh ? s.todayCurve || [] : []).map(([t, kw]) => { const [h, m] = t.split(":").map(Number); return [h + m / 60, kw]; });
     const peak = Math.max(...pts.map((p) => p[1]), 0.1) * 1.15;
     let curve = "";
     if (pts.some((p) => p[1] > 0)) {
@@ -350,17 +477,19 @@
         <polyline points="${line.join(" ")}" fill="none" stroke="var(--solar)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
       </svg><div class="axis"><span>6 am</span><span>Noon</span><span>6 pm</span></div>`;
     }
-    const nowNote = s.nowKw > 0 ? "Producing now" : (new Date().getHours() >= 12 ? "After sunset" : "Before sunrise");
+    const st = sunTimes(torontoToday()), nowD = new Date();
+    const nowNote = nowKw > 0 ? "Producing now" : nowD < st.rise ? `Sunrise ${clock(st.rise)}` : nowD > st.set ? `Sunset was ${clock(st.set)}` : "Not producing";
     const updated = s.updated ? new Date(s.updated).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : null;
 
     const stale = needsConnect() ? `<section class="card" style="gap:6px"><span style="font-weight:600;font-size:15px">SolarEdge needs you to sign in again</span><span class="small">These are the last numbers it sent. Reconnect to start updating again.</span></section>${connectBtn()}` : "";
     return `<div><div class="eyebrow">${esc(today)}</div><h1>Solar</h1></div>${stale}
       <section class="card">
         <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px">
-          <div style="display:flex;flex-direction:column;gap:6px"><span class="label">Produced today</span><div class="hero num"><b>${fmt(s.today, 1)}</b><span>kWh</span></div></div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding-bottom:4px"><span class="small">Right now</span><span class="num" style="font-size:20px;font-weight:600">${fmt(s.nowKw, s.nowKw ? 2 : 0)} kW</span><span class="small">${s.nowKw > 0 ? "of " + fmt(s.peakKw, 2) + " kW peak" : nowNote}</span></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><span class="label">Produced today</span><div class="hero num"><b>${fmt(todayKwh, 1)}</b><span>kWh</span></div></div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding-bottom:4px"><span class="small">Right now</span><span class="num" style="font-size:20px;font-weight:600">${fmt(nowKw, nowKw ? 2 : 0)} kW</span><span class="small">${nowKw > 0 ? "of " + fmt(s.peakKw, 2) + " kW peak" : nowNote}</span></div>
         </div>${curve}
       </section>
+      ${sunCard()}
       <div class="list">
         <div class="row"><span>This month</span><span class="val num">${kwh(s.month)} kWh</span></div>
         <div class="row"><span>This year</span><span class="val num">${fmt(s.year)} kWh</span></div>
@@ -422,6 +551,7 @@
         ${h.length ? `<div class="row"><span>Data</span><span class="val num">${esc(shortDay(h[0]))} to ${esc(shortDay(h.at(-1)))}, ${parseDay(h.at(-1)).getFullYear()}</span></div><div class="row"><span>Days</span><span class="val num">${h.length}</span></div>` : `<div class="row"><span>Data</span><span class="val">None yet</span></div>`}
       </div>
       <div class="foot">To add a month, download it from MyTorontoHydro and upload the file to the data/hydro folder in GitHub. The site rebuilds on its own.</div>
+      <div class="foot" style="margin-top:0">Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a>. Sunrise and sunset are calculated for Parkdale.</div>
       <div class="foot" style="margin-top:0">Built ${esc(new Date(d.generated).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))}.</div>`;
   }
 
@@ -448,10 +578,11 @@
     if (d) { state.day = d.dataset.day; render(); }
   });
   window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && state.data) { refreshLive(); render(); } });
 
   view.innerHTML = '<p class="loading">Loading…</p>';
   fetch("data.json", { cache: "no-store" })
     .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
-    .then((data) => { state.data = data; state.month = defaultMonth(); render(); })
+    .then((data) => { state.data = data; state.month = defaultMonth(); render(); refreshLive(); })
     .catch(() => { view.innerHTML = '<h1>Home Solar</h1><p class="small">Couldn\'t load data.json. If you opened index.html straight from your computer, run the build and serve the _site folder instead.</p>'; });
 })();
