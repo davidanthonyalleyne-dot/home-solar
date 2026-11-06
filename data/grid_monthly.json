@@ -1,0 +1,8 @@
+{
+  "note": "kWh drawn from the grid per month, read off the 'Compare your daily usage' chart on the bills. Used only for months with no Toronto Hydro export. Left out: August 2023 (likely a part month when the net meter went in) and April 2024 (the bills disagree: 1,559 or 1,589).",
+  "months": {
+    "2023-09": 1022, "2023-10": 1614, "2023-11": 2604, "2023-12": 2884,
+    "2024-01": 4108, "2024-02": 2775, "2024-03": 2187, "2024-05": 890, "2024-06": 928,
+    "2024-07": 1227, "2024-08": 1215, "2024-09": 1477, "2024-10": 1213, "2024-11": 2128, "2024-12": 3677
+  }
+}

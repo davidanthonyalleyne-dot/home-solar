@@ -777,6 +777,15 @@ def decrypt_data(box):
     return json.loads(pt)
 
 
+def _json_file(path, key):
+    f = ROOT / path
+    try:
+        return json.loads(f.read_text()).get(key) if f.exists() else None
+    except ValueError as e:
+        log(f"::warning::{path} isn't valid JSON: {e}")
+        return None
+
+
 # ---------- build ----------
 
 def main():
@@ -796,6 +805,8 @@ def main():
         "hydro": {d: [round(v[0], 2), round(v[1], 2)] for d, v in sorted(hydro.items())},
         "solar": solar,
         "weather": weather,
+        "bills": _json_file("data/bills.json", "bills"),
+        "gridMonthly": _json_file("data/grid_monthly.json", "months"),
         "connectUrl": authorize_url() if solar and solar.get("needsConnect") else None,
         "repo": os.environ.get("GITHUB_REPOSITORY"),
     }
