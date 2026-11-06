@@ -90,26 +90,29 @@ def read_hydro():
     readings = {}
     files = sorted(glob.glob(str(ROOT / "data/hydro/*.xlsx")) + glob.glob(str(ROOT / "data/hydro/*.csv")))
     for f in files:
-        imp_col = exp_col = None
+        imp_cols = exp_cols = None
         n = 0
         for row in _rows(Path(f)):
             cells = list(row or [])
-            if imp_col is None:
+            if imp_cols is None:
                 labels = [str(c or "").lower() for c in cells]
                 if any("delivered" in c for c in labels) and any("received" in c for c in labels):
-                    imp_col = next(i for i, c in enumerate(labels) if "delivered" in c)
-                    exp_col = next(i for i, c in enumerate(labels) if "received" in c)
+                    # the export can repeat each column when the meter's channel changes
+                    # part way through (e.g. from October 2026), with each row filled in only one of them
+                    imp_cols = [i for i, c in enumerate(labels) if "delivered" in c]
+                    exp_cols = [i for i, c in enumerate(labels) if "received" in c]
                 continue
             if not cells:
                 continue
             t = _parse_time(cells[0])
-            imp = _num(cells[imp_col]) if imp_col < len(cells) else None
-            exp = _num(cells[exp_col]) if exp_col < len(cells) else None
-            if t is None or imp is None or exp is None:
+            imps = [v for v in (_num(cells[i]) for i in imp_cols if i < len(cells)) if v is not None]
+            exps = [v for v in (_num(cells[i]) for i in exp_cols if i < len(cells)) if v is not None]
+            if t is None or not imps or not exps:
                 continue
+            imp, exp = sum(imps), sum(exps)
             readings[t] = (imp, exp)  # keyed by timestamp, so overlapping files don't double count
             n += 1
-        log(f"hydro: {Path(f).name}: {n} readings" if imp_col is not None else f"hydro: {Path(f).name}: no Delivered/Received columns found, skipped")
+        log(f"hydro: {Path(f).name}: {n} readings" if imp_cols is not None else f"hydro: {Path(f).name}: no Delivered/Received columns found, skipped")
     daily = defaultdict(lambda: [0.0, 0.0])
     for t, (imp, exp) in readings.items():
         d = t.date().isoformat()
