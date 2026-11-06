@@ -69,6 +69,7 @@ The Sources screen will say the sign-in expired and show **Connect SolarEdge** a
 ## Good to know
 
 - **API credits.** SolarEdge's free tier allows about 2,000 calls a month and 10 a minute. Each daytime build makes one call for today's production. Once a day it makes three more for the daily history, lifetime total and site details. Scheduled builds skip SolarEdge from 10 pm to 5 am. That comes to roughly 600 calls a month. The very first build can use up to a dozen extra while it loads a year of history.
+- **History.** Daily production goes back to the first day SolarEdge recorded (August 28, 2023), and weather to July 2023. It was loaded once, a month per call, and only new days are fetched after that.
 - **Builds reuse the last data.** Each build reads the previously published `data.json` and only fetches what changed.
 - **Public repo.** Anyone with the link can see the dashboard and the files in `data/`, including the meter number inside the Toronto Hydro export. The page is marked noindex, and no credential is exposed.
 - **Scheduled runs pause.** GitHub pauses schedules in a repo with no commits for 60 days. Uploading a hydro file each month keeps it running. You can refresh any time from Actions, Build and deploy, Run workflow.
