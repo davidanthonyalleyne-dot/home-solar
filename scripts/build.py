@@ -422,7 +422,7 @@ def read_solaredge(prev):
     daylight = rise - dt.timedelta(minutes=30) <= now <= sset + dt.timedelta(minutes=45)
     fresh = not prev.get("daily")
     need = {
-        "history": fresh or (prev.get("historyDate") != today.isoformat() and now.hour >= NIGHT[1]),
+        "history": fresh or "equipment" not in prev or (prev.get("historyDate") != today.isoformat() and now.hour >= NIGHT[1]),
         "today": fresh or daylight or prev.get("todayDate") != today.isoformat()
                  or (now > sset + dt.timedelta(minutes=45) and prev.get("finalDate") != today.isoformat()),
         "power": daylight,
@@ -478,6 +478,7 @@ def read_solaredge(prev):
                 except AuthError:
                     raise
                 except Exception as e:  # optional extras: never fail the build over them
+                    solar.setdefault(key, None)  # so a missing feature isn't retried every run
                     log(f"solaredge: {key} unavailable: {e}")
             solar["historyDate"] = today.isoformat()
 

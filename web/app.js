@@ -365,14 +365,19 @@
     const inv = solar() && solar().inverter;
     if (!inv || !inv.metrics) return "";
     const m = inv.metrics, names = Object.keys(m);
-    const pick = (re) => names.find((n) => re.test(n));
-    const order = [pick(/temp/i), pick(/mode|status|state/i), pick(/^ac.*power|^power|activepower/i), pick(/dc.*power/i), pick(/^ac.*volt|^volt/i), pick(/dc.*volt/i), pick(/freq/i)];
-    const shown = [...new Set(order.filter(Boolean)), ...names.filter((n) => !order.includes(n))].slice(0, 8);
-    const unitOf = (x) => { const u = String(x.unit || "").toUpperCase(); return u === "C" || u === "CELSIUS" ? "°C" : u === "W" ? " W" : u === "V" ? " V" : u === "HZ" ? " Hz" : u === "A" ? " A" : x.unit ? " " + x.unit : ""; };
+    // skip readings that are all zero (e.g. consumption on a site without a consumption meter)
+    const live = names.filter((n) => !(typeof m[n].max === "number" && m[n].max === 0 && m[n].min === 0));
+    const pick = (re) => live.find((n) => re.test(n));
+    const order = [pick(/^power$|^ac.*power|activepower/i), pick(/mode|status|state/i), pick(/temp/i), pick(/^voltage$|^ac.*volt/i), pick(/^current$|^ac.*curr/i), pick(/freq/i), pick(/dc.*power/i), pick(/dc.*volt/i), pick(/^energy$/i)];
+    const shown = [...new Set(order.filter(Boolean)), ...live.filter((n) => !order.includes(n))].slice(0, 8);
+    const LABELS = { power: "Output", energy: "Energy in the last hour", voltage: "Grid voltage", current: "Current", frequency: "Grid frequency", temperature: "Temperature" };
+    const pretty = (n) => LABELS[n] || n.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase()).replace(/\bAc\b/, "AC").replace(/\bDc\b/, "DC");
+    const UNITS = { C: "°C", CELSIUS: "°C", W: " W", WATT: " W", V: " V", VOLT: " V", HZ: " Hz", HERTZ: " Hz", A: " A", AMPERE: " A", WH: " Wh", KWH: " kWh" };
+    const unitOf = (x) => { const u = String(x.unit || "").toUpperCase(); return UNITS[u] ?? (x.unit ? " " + x.unit.toLowerCase() : ""); };
     const MODES = { MPPT: "Producing", SLEEPING: "Sleeping", NIGHT: "Night", NIGHT_MODE: "Night", THROTTLED: "Limited", FAULT: "Fault", STARTING: "Starting up", OFF: "Off", SHUTTING_DOWN: "Shutting down", STANDBY: "Standby", LOCKED: "Locked" };
     const val = (x) => typeof x.latest === "number" ? fmt(x.latest, Math.abs(x.latest) < 100 ? 1 : 0) + unitOf(x) : esc(MODES[String(x.latest).toUpperCase()] || String(x.latest ?? "–").replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase()));
     const rows = shown.map((n) => {
-      const x = m[n], extra = /temp/i.test(n) && typeof x.max === "number" ? ` <span class="small">· high ${fmt(x.max, 0)}${unitOf(x)}</span>` : "";
+      const x = m[n], extra = /temp|^power$/i.test(n) && typeof x.max === "number" && x.max !== x.latest ? ` <span class="small">· high ${fmt(x.max, 0)}${unitOf(x)}</span>` : "";
       return `<div class="row"><span>${esc(pretty(n))}</span><span class="val num">${val(x)}${extra}</span></div>`;
     }).join("");
     return `<div class="section">Inverter</div><div class="list">${rows}</div><div class="foot">Hourly readings from SolarEdge, last at ${esc(timeOf(inv.at))}.</div>`;
@@ -574,7 +579,7 @@
       const line = pts.filter((p) => p[0] >= 5 && p[0] <= 21).map((p) => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`);
       curve = `<svg class="curve" viewBox="0 0 300 124" preserveAspectRatio="none" role="img" aria-label="Solar power through the day">
         <line x1="0" y1="110" x2="300" y2="110" stroke="var(--sep)"/>
-        <polygon points="0,110 ${line.join(" ")} 300,110" fill="var(--solar)" fill-opacity=".14"/>
+        <polygon points="${line[0].split(",")[0]},110 ${line.join(" ")} ${line.at(-1).split(",")[0]},110" fill="var(--solar)" fill-opacity=".14"/>
         <polyline points="${line.join(" ")}" fill="none" stroke="var(--solar)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
       </svg><div class="axis"><span>6 am</span><span>Noon</span><span>6 pm</span></div>`;
     }
