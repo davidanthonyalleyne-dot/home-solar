@@ -1,0 +1,52 @@
+name: Build and deploy
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # hourly; the build skips SolarEdge overnight to save API credits
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# never cancel a run part way: it may have just rotated the SolarEdge token
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: pages
+        uses: actions/configure-pages@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install openpyxl
+      - id: build
+        run: python scripts/build.py
+        env:
+          PAGES_URL: ${{ steps.pages.outputs.base_url }}
+          SOLAREDGE_SITE_ID: ${{ secrets.SOLAREDGE_SITE_ID }}
+          SOLAREDGE_CLIENT_ID: ${{ secrets.SOLAREDGE_CLIENT_ID }}
+          SOLAREDGE_CLIENT_SECRET: ${{ secrets.SOLAREDGE_CLIENT_SECRET }}
+          SOLAREDGE_REFRESH_TOKEN: ${{ secrets.SOLAREDGE_REFRESH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
+      - if: steps.build.outputs.token_lost == 'true'
+        run: |
+          echo "::error::The SolarEdge refresh token couldn't be saved. Run the Connect SolarEdge workflow again."
+          exit 1
