@@ -56,7 +56,9 @@
       const h = hydro()[d];
       // inside SolarEdge's history a missing day means the system made nothing (e.g. an outage)
       let p = solar() ? solar().daily[d] : undefined;
-      if (p == null && solar() && h && d >= solarRange()[0] && d <= solarRange()[1]) p = 0;
+      // ...unless the meter shows power going out to the grid: then the panels were working and
+      // only SolarEdge's monitoring was down, so the day's production is unknown rather than zero
+      if (p == null && solar() && h && h[1] < 0.05 && d >= solarRange()[0] && d <= solarRange()[1]) p = 0;
       const r = { d, imp: h ? h[0] : null, exp: h ? h[1] : null, prod: p ?? null };
       if (r.prod != null && r.exp != null) {
         r.self = Math.max(0, r.prod - r.exp);

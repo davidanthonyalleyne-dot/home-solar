@@ -88,15 +88,31 @@ def _rows(path):
 
 
 def read_hydro():
-    """Returns {date: [imported kWh, exported kWh]} from every file in data/hydro."""
-    readings = {}
+    """Returns {date: [imported kWh, exported kWh]} from every file in data/hydro.
+
+    Toronto Hydro exports come as daily or as hourly/15-minute readings. Times are
+    Eastern Standard Time all year (no daylight saving) and mark the end of each
+    interval, so interval readings are moved to the start of their interval and to
+    Toronto local time before being added up by day. Where a day has both interval
+    and daily readings, the interval ones win; overlapping files never double count.
+    """
+    EST = dt.timezone(dt.timedelta(hours=-5))
+    by_day, by_interval = {}, {}
     files = sorted(glob.glob(str(ROOT / "data/hydro/*.xlsx")) + glob.glob(str(ROOT / "data/hydro/*.csv")))
     for f in files:
         imp_cols = exp_cols = None
+        step = None  # minutes per reading; None means one reading per day
         n = 0
         for row in _rows(Path(f)):
             cells = list(row or [])
             if imp_cols is None:
+                first = str(cells[0] if cells else "").lower()
+                if first.startswith("trend interval") and len(cells) > 1:
+                    v = str(cells[1]).lower().split()
+                    if len(v) >= 2 and v[0].isdigit() and v[1].startswith("min"):
+                        step = int(v[0])
+                    elif len(v) >= 2 and v[0].isdigit() and v[1].startswith("hour"):
+                        step = int(v[0]) * 60
                 labels = [str(c or "").lower() for c in cells]
                 if any("delivered" in c for c in labels) and any("received" in c for c in labels):
                     # the export can repeat each column when the meter's channel changes
@@ -111,16 +127,25 @@ def read_hydro():
             exps = [v for v in (_num(cells[i]) for i in exp_cols if i < len(cells)) if v is not None]
             if t is None or not imps or not exps:
                 continue
-            imp, exp = sum(imps), sum(exps)
-            readings[t] = (imp, exp)  # keyed by timestamp, so overlapping files don't double count
+            if step is None and (t.hour or t.minute):
+                step = 60  # times within the day without a header saying so: treat as hourly
+            if step:
+                start = (t.replace(tzinfo=EST) - dt.timedelta(minutes=step)).astimezone(TZ)
+                by_interval[start] = (sum(imps), sum(exps))
+            else:
+                by_day[t.date().isoformat()] = (sum(imps), sum(exps))
             n += 1
-        log(f"hydro: {Path(f).name}: {n} readings" if imp_cols is not None else f"hydro: {Path(f).name}: no Delivered/Received columns found, skipped")
-    daily = defaultdict(lambda: [0.0, 0.0])
-    for t, (imp, exp) in readings.items():
-        d = t.date().isoformat()
-        daily[d][0] += imp
-        daily[d][1] += exp
-    return dict(daily)
+        kind = f"{step}-minute" if step else "daily"
+        log(f"hydro: {Path(f).name}: {n} {kind} readings" if imp_cols is not None else f"hydro: {Path(f).name}: no Delivered/Received columns found, skipped")
+    from_intervals = defaultdict(lambda: [0.0, 0.0, 0])
+    for t, (imp, exp) in by_interval.items():
+        x = from_intervals[t.date().isoformat()]
+        x[0] += imp; x[1] += exp; x[2] += 1
+    daily = {d: [v[0], v[1]] for d, v in by_day.items()}
+    for d, (imp, exp, count) in from_intervals.items():
+        if d not in daily or count >= 20:  # a nearly complete day of intervals beats a daily total
+            daily[d] = [imp, exp]
+    return dict(sorted(daily.items()))
 
 
 # ---------- SolarEdge V2 ----------
