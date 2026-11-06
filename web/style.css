@@ -190,3 +190,8 @@ a.row { color: var(--text); text-decoration: none; }
 .tabs svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 .loading { color: var(--muted); text-align: center; padding-top: 30vh; }
+
+/* small bars */
+.bar { height: 4px; border-radius: 2px; background: var(--track); overflow: hidden; display: block; }
+.bar i { display: block; height: 100%; background: var(--solar); border-radius: inherit; }
+.bar.thick { height: 8px; border-radius: 4px; }
