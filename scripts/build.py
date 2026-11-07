@@ -826,6 +826,14 @@ def main():
     if OUT.exists():
         shutil.rmtree(OUT)
     shutil.copytree(ROOT / "web", OUT)
+    # version the scripts and styles by their content, so phones pick up new code right away
+    # instead of serving a cached copy for up to ten minutes
+    import hashlib
+    ver = hashlib.sha1(b"".join((OUT / f).read_bytes() for f in ("app.js", "lock.js", "style.css"))).hexdigest()[:10]
+    index = (OUT / "index.html").read_text()
+    for f in ("app.js", "lock.js", "style.css"):
+        index = index.replace(f'"{f}"', f'"{f}?v={ver}"')
+    (OUT / "index.html").write_text(index)
     if _passphrase():
         out = encrypt_data(data, PREV_SALT)
         log("data.json encrypted")
