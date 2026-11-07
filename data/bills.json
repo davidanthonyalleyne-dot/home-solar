@@ -1,47 +1,621 @@
 {
-  "note": "Toronto Hydro bills, typed from the PDFs. Only what the app needs: no account, premises or meter numbers, names or address. 'to' is the meter read date that ends the period; the bill is shown under that month. Amounts in dollars, energy in kWh, rates in $/kWh. 'previous' is any unpaid balance carried in from the last bill.",
-  "bills": [
-    {"statement": "2024-11-06", "from": "2024-09-30", "to": "2024-10-31", "season": "summer",
-     "used": 1213.276, "generated": 222.398,
-     "buy": {"on": [103.386, 0.182], "mid": [296.966, 0.122], "off": [812.924, 0.087]},
-     "credit": {"on": [153.698, 0.182], "mid": [7.041, 0.122], "off": [61.659, 0.087]},
-     "delivery": 73.77, "regulatory": 6.32, "electricity": 171.67, "other": 0.18, "hst": 27.65, "rebate": 33.13,
-     "previous": 186.95, "due": 353.32},
-    {"statement": "2024-12-05", "from": "2024-10-31", "to": "2024-11-30", "season": "winter",
-     "used": 2127.943, "generated": 36.780,
-     "buy": {"on": [474.829, 0.158], "mid": [329.677, 0.122], "off": [1323.437, 0.076]},
-     "credit": {"on": [3.079, 0.158], "mid": [28.489, 0.122], "off": [5.212, 0.076]},
-     "delivery": 103.04, "regulatory": 12.97, "electricity": 327.46, "other": 0.73, "hst": 43.28, "rebate": 42.89,
-     "previous": -0.68, "due": 327.90},
-    {"statement": "2025-08-07", "from": "2025-06-30", "to": "2025-07-31", "season": "summer",
-     "used": 1593.904, "generated": 342.666,
-     "buy": {"on": [98.892, 0.158], "mid": [309.654, 0.122], "off": [1185.358, 0.076]},
-     "credit": {"on": [216.125, 0.158], "mid": [18.796, 0.122], "off": [107.745, 0.076]},
-     "delivery": 85.06, "regulatory": 8.05, "electricity": 191.97, "other": 0, "hst": 32.18, "rebate": 25.14,
-     "previous": 0, "due": 199.01},
-    {"statement": "2025-09-05", "from": "2025-07-31", "to": "2025-08-31", "season": "summer",
-     "used": 1362.459, "generated": 341.053,
-     "buy": {"on": [118.338, 0.158], "mid": [272.077, 0.122], "off": [972.044, 0.076]},
-     "credit": {"on": [205.027, 0.158], "mid": [20.250, 0.122], "off": [115.776, 0.076]},
-     "delivery": 78.40, "regulatory": 6.62, "electricity": 167.13, "other": 0, "hst": 28.82, "rebate": 21.89,
-     "previous": 199.01, "due": 373.07},
-    {"statement": "2025-10-06", "from": "2025-08-31", "to": "2025-09-30", "season": "summer",
-     "used": 1186.251, "generated": 292.045,
-     "buy": {"on": [97.264, 0.158], "mid": [302.330, 0.122], "off": [786.657, 0.076]},
-     "credit": {"on": [215.613, 0.158], "mid": [12.018, 0.122], "off": [64.414, 0.076]},
-     "delivery": 73.02, "regulatory": 5.82, "electricity": 150.44, "other": 0, "hst": 26.03, "rebate": 19.71,
-     "previous": 0, "due": 156.76},
-    {"statement": "2025-11-06", "from": "2025-09-30", "to": "2025-10-31", "season": "summer",
-     "used": 1585.026, "generated": 176.934,
-     "buy": {"on": [193.529, 0.158], "mid": [384.854, 0.122], "off": [1006.643, 0.076]},
-     "credit": {"on": [114.327, 0.158], "mid": [4.783, 0.122], "off": [57.824, 0.076]},
-     "delivery": 89.46, "regulatory": 8.99, "electricity": 229.45, "other": 0, "hst": 33.57, "rebate": 30.06,
-     "previous": 0, "due": 232.96},
-    {"statement": "2025-12-05", "from": "2025-10-31", "to": "2025-11-30", "season": "winter",
-     "used": 2840.591, "generated": 15.210,
-     "buy": {"on": [488.847, 0.203], "mid": [518.333, 0.157], "off": [1833.411, 0.098]},
-     "credit": {"on": [1.574, 0.203], "mid": [9.355, 0.157], "off": [4.281, 0.098]},
-     "delivery": 131.84, "regulatory": 17.70, "electricity": 507.62, "other": 0, "hst": 66.34, "rebate": 119.29,
-     "previous": -0.04, "due": 454.63}
-  ]
+ "note": "Toronto Hydro bills, typed from the PDFs. Only what the app needs: no account, premises or meter numbers, names or address. 'to' is the meter read date that ends the period; the bill is shown under that month. Amounts in dollars, energy in kWh, rates in $/kWh. 'previous' is any unpaid balance carried in from the last bill.",
+ "bills": [
+  {
+   "statement": "2024-11-06",
+   "from": "2024-09-30",
+   "to": "2024-10-31",
+   "season": "summer",
+   "used": 1213.276,
+   "generated": 222.398,
+   "buy": {
+    "on": [
+     103.386,
+     0.182
+    ],
+    "mid": [
+     296.966,
+     0.122
+    ],
+    "off": [
+     812.924,
+     0.087
+    ]
+   },
+   "credit": {
+    "on": [
+     153.698,
+     0.182
+    ],
+    "mid": [
+     7.041,
+     0.122
+    ],
+    "off": [
+     61.659,
+     0.087
+    ]
+   },
+   "delivery": 73.77,
+   "regulatory": 6.32,
+   "electricity": 171.67,
+   "other": 0.18,
+   "hst": 27.65,
+   "rebate": 33.13,
+   "previous": 186.95,
+   "due": 353.32
+  },
+  {
+   "statement": "2024-12-05",
+   "from": "2024-10-31",
+   "to": "2024-11-30",
+   "season": "winter",
+   "used": 2127.943,
+   "generated": 36.78,
+   "buy": {
+    "on": [
+     474.829,
+     0.158
+    ],
+    "mid": [
+     329.677,
+     0.122
+    ],
+    "off": [
+     1323.437,
+     0.076
+    ]
+   },
+   "credit": {
+    "on": [
+     3.079,
+     0.158
+    ],
+    "mid": [
+     28.489,
+     0.122
+    ],
+    "off": [
+     5.212,
+     0.076
+    ]
+   },
+   "delivery": 103.04,
+   "regulatory": 12.97,
+   "electricity": 327.46,
+   "other": 0.73,
+   "hst": 43.28,
+   "rebate": 42.89,
+   "previous": -0.68,
+   "due": 327.9
+  },
+  {
+   "statement": "2025-01-07",
+   "from": "2024-11-30",
+   "to": "2024-12-31",
+   "season": "winter",
+   "used": 3677.353,
+   "generated": 1.391,
+   "buy": {
+    "on": [
+     734.669,
+     0.158
+    ],
+    "mid": [
+     596.399,
+     0.122
+    ],
+    "off": [
+     2346.285,
+     0.076
+    ]
+   },
+   "credit": {
+    "on": [
+     0,
+     0.158
+    ],
+    "mid": [
+     0.686,
+     0.122
+    ],
+    "off": [
+     0.705,
+     0.076
+    ]
+   },
+   "delivery": 149.51,
+   "regulatory": 22.58,
+   "electricity": 539.12,
+   "other": 0.8,
+   "hst": 70.11,
+   "rebate": 70.63,
+   "previous": 327.9,
+   "due": 867.3
+  },
+  {
+   "statement": "2025-02-06",
+   "from": "2024-12-31",
+   "to": "2025-01-31",
+   "season": "winter",
+   "used": 5028.063,
+   "generated": 0.206,
+   "buy": {
+    "on": [
+     1201.035,
+     0.158
+    ],
+    "mid": [
+     995.261,
+     0.122
+    ],
+    "off": [
+     2831.767,
+     0.076
+    ]
+   },
+   "credit": {
+    "on": [
+     0,
+     0.158
+    ],
+    "mid": [
+     0.206,
+     0.122
+    ],
+    "off": [
+     0,
+     0.076
+    ]
+   },
+   "delivery": 197.21,
+   "regulatory": 31.32,
+   "electricity": 754.89,
+   "other": 1.28,
+   "hst": 98.14,
+   "rebate": 98.89,
+   "previous": -0.7,
+   "due": 754.72
+  },
+  {
+   "statement": "2025-03-06",
+   "from": "2025-01-31",
+   "to": "2025-02-28",
+   "season": "winter",
+   "used": 4451.751,
+   "generated": 0.067,
+   "buy": {
+    "on": [
+     941.732,
+     0.158
+    ],
+    "mid": [
+     830.635,
+     0.122
+    ],
+    "off": [
+     2679.384,
+     0.076
+    ]
+   },
+   "credit": {
+    "on": [
+     0,
+     0.158
+    ],
+    "mid": [
+     0.067,
+     0.122
+    ],
+    "off": [
+     0,
+     0.076
+    ]
+   },
+   "delivery": 175.08,
+   "regulatory": 27.73,
+   "electricity": 656.56,
+   "other": 0,
+   "hst": 85.35,
+   "rebate": 86.01,
+   "previous": 754.72,
+   "due": 1410.62
+  },
+  {
+   "statement": "2025-04-07",
+   "from": "2025-02-28",
+   "to": "2025-03-31",
+   "season": "winter",
+   "used": 2925.071,
+   "generated": 77.098,
+   "buy": {
+    "on": [
+     637.503,
+     0.158
+    ],
+    "mid": [
+     308.052,
+     0.122
+    ],
+    "off": [
+     1979.516,
+     0.076
+    ]
+   },
+   "credit": {
+    "on": [
+     4.978,
+     0.158
+    ],
+    "mid": [
+     61.709,
+     0.122
+    ],
+    "off": [
+     10.411,
+     0.076
+    ]
+   },
+   "delivery": 131.91,
+   "regulatory": 17.86,
+   "electricity": 429.41,
+   "other": 0,
+   "hst": 57.33,
+   "rebate": 56.25,
+   "previous": 0,
+   "due": 430.49
+  },
+  {
+   "statement": "2025-05-06",
+   "from": "2025-03-31",
+   "to": "2025-04-30",
+   "season": "winter",
+   "used": 2014.078,
+   "generated": 208.28,
+   "buy": {
+    "on": [
+     498.626,
+     0.158
+    ],
+    "mid": [
+     200.555,
+     0.122
+    ],
+    "off": [
+     1314.897,
+     0.076
+    ]
+   },
+   "credit": {
+    "on": [
+     14.027,
+     0.158
+    ],
+    "mid": [
+     135.917,
+     0.122
+    ],
+    "off": [
+     58.336,
+     0.076
+    ]
+   },
+   "delivery": 100.03,
+   "regulatory": 11.44,
+   "electricity": 291.42,
+   "other": 0,
+   "hst": 41.77,
+   "rebate": 38.18,
+   "previous": 430.49,
+   "due": 725.5
+  },
+  {
+   "statement": "2025-06-11",
+   "from": "2025-04-30",
+   "to": "2025-05-31",
+   "season": "summer",
+   "used": 1381.413,
+   "generated": 327.486,
+   "buy": {
+    "on": [
+     95.164,
+     0.158
+    ],
+    "mid": [
+     339.976,
+     0.122
+    ],
+    "off": [
+     946.273,
+     0.076
+    ]
+   },
+   "credit": {
+    "on": [
+     217.026,
+     0.158
+    ],
+    "mid": [
+     25.867,
+     0.122
+    ],
+    "off": [
+     84.593,
+     0.076
+    ]
+   },
+   "delivery": 79.33,
+   "regulatory": 6.83,
+   "electricity": 170.72,
+   "other": 0,
+   "hst": 29.26,
+   "rebate": 22.36,
+   "previous": 0,
+   "due": 177.62
+  },
+  {
+   "statement": "2025-07-07",
+   "from": "2025-05-31",
+   "to": "2025-06-30",
+   "season": "summer",
+   "used": 1116.352,
+   "generated": 399.244,
+   "buy": {
+    "on": [
+     77.276,
+     0.158
+    ],
+    "mid": [
+     243.312,
+     0.122
+    ],
+    "off": [
+     795.764,
+     0.076
+    ]
+   },
+   "credit": {
+    "on": [
+     238.903,
+     0.158
+    ],
+    "mid": [
+     38.468,
+     0.122
+    ],
+    "off": [
+     121.873,
+     0.076
+    ]
+   },
+   "delivery": 68.07,
+   "regulatory": 4.75,
+   "electricity": 123.49,
+   "other": 0,
+   "hst": 24.44,
+   "rebate": 16.17,
+   "previous": 177.62,
+   "due": 309.38
+  },
+  {
+   "statement": "2025-08-07",
+   "from": "2025-06-30",
+   "to": "2025-07-31",
+   "season": "summer",
+   "used": 1593.904,
+   "generated": 342.666,
+   "buy": {
+    "on": [
+     98.892,
+     0.158
+    ],
+    "mid": [
+     309.654,
+     0.122
+    ],
+    "off": [
+     1185.358,
+     0.076
+    ]
+   },
+   "credit": {
+    "on": [
+     216.125,
+     0.158
+    ],
+    "mid": [
+     18.796,
+     0.122
+    ],
+    "off": [
+     107.745,
+     0.076
+    ]
+   },
+   "delivery": 85.06,
+   "regulatory": 8.05,
+   "electricity": 191.97,
+   "other": 0,
+   "hst": 32.18,
+   "rebate": 25.14,
+   "previous": 0,
+   "due": 199.01
+  },
+  {
+   "statement": "2025-09-05",
+   "from": "2025-07-31",
+   "to": "2025-08-31",
+   "season": "summer",
+   "used": 1362.459,
+   "generated": 341.053,
+   "buy": {
+    "on": [
+     118.338,
+     0.158
+    ],
+    "mid": [
+     272.077,
+     0.122
+    ],
+    "off": [
+     972.044,
+     0.076
+    ]
+   },
+   "credit": {
+    "on": [
+     205.027,
+     0.158
+    ],
+    "mid": [
+     20.25,
+     0.122
+    ],
+    "off": [
+     115.776,
+     0.076
+    ]
+   },
+   "delivery": 78.4,
+   "regulatory": 6.62,
+   "electricity": 167.13,
+   "other": 0,
+   "hst": 28.82,
+   "rebate": 21.89,
+   "previous": 199.01,
+   "due": 373.07
+  },
+  {
+   "statement": "2025-10-06",
+   "from": "2025-08-31",
+   "to": "2025-09-30",
+   "season": "summer",
+   "used": 1186.251,
+   "generated": 292.045,
+   "buy": {
+    "on": [
+     97.264,
+     0.158
+    ],
+    "mid": [
+     302.33,
+     0.122
+    ],
+    "off": [
+     786.657,
+     0.076
+    ]
+   },
+   "credit": {
+    "on": [
+     215.613,
+     0.158
+    ],
+    "mid": [
+     12.018,
+     0.122
+    ],
+    "off": [
+     64.414,
+     0.076
+    ]
+   },
+   "delivery": 73.02,
+   "regulatory": 5.82,
+   "electricity": 150.44,
+   "other": 0,
+   "hst": 26.03,
+   "rebate": 19.71,
+   "previous": 0,
+   "due": 156.76
+  },
+  {
+   "statement": "2025-11-06",
+   "from": "2025-09-30",
+   "to": "2025-10-31",
+   "season": "summer",
+   "used": 1585.026,
+   "generated": 176.934,
+   "buy": {
+    "on": [
+     193.529,
+     0.158
+    ],
+    "mid": [
+     384.854,
+     0.122
+    ],
+    "off": [
+     1006.643,
+     0.076
+    ]
+   },
+   "credit": {
+    "on": [
+     114.327,
+     0.158
+    ],
+    "mid": [
+     4.783,
+     0.122
+    ],
+    "off": [
+     57.824,
+     0.076
+    ]
+   },
+   "delivery": 89.46,
+   "regulatory": 8.99,
+   "electricity": 229.45,
+   "other": 0,
+   "hst": 33.57,
+   "rebate": 30.06,
+   "previous": 0,
+   "due": 232.96
+  },
+  {
+   "statement": "2025-12-05",
+   "from": "2025-10-31",
+   "to": "2025-11-30",
+   "season": "winter",
+   "used": 2840.591,
+   "generated": 15.21,
+   "buy": {
+    "on": [
+     488.847,
+     0.203
+    ],
+    "mid": [
+     518.333,
+     0.157
+    ],
+    "off": [
+     1833.411,
+     0.098
+    ]
+   },
+   "credit": {
+    "on": [
+     1.574,
+     0.203
+    ],
+    "mid": [
+     9.355,
+     0.157
+    ],
+    "off": [
+     4.281,
+     0.098
+    ]
+   },
+   "delivery": 131.84,
+   "regulatory": 17.7,
+   "electricity": 507.62,
+   "other": 0,
+   "hst": 66.34,
+   "rebate": 119.29,
+   "previous": -0.04,
+   "due": 454.63
+  }
+ ]
 }
