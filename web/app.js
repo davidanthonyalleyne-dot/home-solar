@@ -341,7 +341,8 @@
     let bar = "", line = "";
     if (m.grid != null && m.saved != null && m.without > 0) {
       bar = `<div class="split" role="img" aria-label="Grid ${dollars(m.grid)}, solar ${dollars(m.saved)}"><i style="flex:${m.grid};background:var(--grid)"></i><i style="flex:${Math.max(0, m.saved)};background:var(--sun)"></i></div>`;
-      line = `<p class="lead">Without solar, ${esc(name)} would have cost <b class="num">${dollars(m.without)}</b>.</p>`;
+      line = `<p class="lead">Without solar, ${esc(name)} would have cost <b class="num">${dollars(m.without)}</b>.</p>`
+        + (m.credits >= 1 && m.exp != null ? `<p class="sub">That includes <b class="sun">${dollars(m.credits)}</b> in net metering credits for ${fmt(m.exp)} kWh sent back${m.selfValue >= 1 ? `, and ${dollars(m.selfValue)} of power the house took straight from the panels` : ""}.</p>` : "");
     } else if (m.grid == null) {
       line = `<p class="sub">${sofar ? "The grid cost shows once the month is over and the meter data is in." : "No meter data or bill for this month, so the grid cost isn't known."}</p>`;
     }
@@ -478,14 +479,16 @@
     const tou = ["on", "mid", "off"].filter((k) => b.buy[k]).map((k) => [`<span class="indent">${{ on: "On-peak", mid: "Mid-peak", off: "Off-peak" }[k]} <span class="sub">${fmt(b.buy[k][0])} kWh at ${fmt(b.buy[k][1] * 100, 1)}¢</span></span>`, money(b.buy[k][0] * b.buy[k][1]), "minor"]);
     const r = [
       [`Electricity bought <span class="sub">${fmt(p.kwh)} kWh</span>`, money(p.buy)], ...tou,
-      p.credit > 0 ? [`Solar credits <span class="sub">${fmt(b.generated)} kWh sent back</span>`, money(-p.credit), "sun"] : null,
+      p.credit > 0 ? [`Energy credit <span class="sub">${fmt(b.generated)} kWh sent back</span>`, money(-p.credit), "sun"] : null,
       ["Delivery", money(b.delivery)], ["Regulatory", money(b.regulatory)],
       b.other ? ["Late payment charge", money(b.other)] : null,
       ["HST", money(b.hst)], b.rebate ? ["Ontario Electricity Rebate", money(-b.rebate)] : null,
       [`<b>${esc(name)} charges</b>`, `<b>${money(p.current)}</b>`, "total"],
     ];
+    const mm = M()[ym] || {}, dc = mm.deliveryCredit || 0;
+    const creditNote = p.credit > 0.5 ? `<p class="sub">Net metering also takes about <b class="sun">${money(dc)}</b> off the delivery and regulatory lines, because those are charged on what you bought minus what you sent back. Toronto Hydro folds that into the lines rather than printing it. HST is charged as if neither credit applied, while the rebate is worked out after both.</p>` : "";
     const carried = Math.abs(b.previous || 0) >= 0.5 ? (b.previous > 0 ? `The amount due was ${money(b.due)}, including ${money(b.previous)} carried over unpaid from the bill before.` : `The amount due was ${money(b.due)} after a ${money(-b.previous)} credit from the bill before.`) : "";
-    return `<p class="sub">${shortDay(b.from)} to ${shortDay(b.to)} · ${fmt(p.current / p.kwh * 100, 1)}¢ per kWh all in · ${b.season} prices</p>${rows(r)}${carried ? `<p class="sub">${carried}</p>` : ""}`;
+    return `<p class="sub">${shortDay(b.from)} to ${shortDay(b.to)} · ${fmt(p.current / p.kwh * 100, 1)}¢ per kWh all in · ${b.season} prices</p>${rows(r)}${creditNote}${carried ? `<p class="sub">${carried}</p>` : ""}`;
   }
 
   // ======================================================================
@@ -564,8 +567,12 @@
   function methodSheet() {
     const md = (state.data.money && state.data.money.model) || {}, bt = (state.data.money && state.data.money.backtest) || [];
     const r = bt.map((b) => [esc(monthName(b.month, "short")), `${money(b.estimate)} <span class="sub">bill ${money(b.bill)} · ${b.off >= 0 ? "+" : "−"}${fmt(Math.abs(b.off) * 100, 1)}%</span>`]);
-    return `<p>Months with a Toronto Hydro bill use what the bill charged. For the other months, the app prices each hour your meter recorded at Ontario's time-of-use rates, then adds delivery (${money(md.fixedDelivery || 0)} a month plus ${fmt((md.deliveryPerKwh || 0) * 100, 1)}¢ per kWh), regulatory charges, HST and the Ontario Electricity Rebate the way your bills apply them.</p>
-      <p>Solar's saving is the credit for power sent back plus the power the house used straight from the panels, valued at what buying it would have cost.</p>
+    const yr = Object.entries(md.byYear || {}).at(-1), rt = yr ? yr[1] : { fixed: 0, perKwh: 0, reg: 0 };
+    const carriedNow = Object.values(M()).some((x) => x.carried);
+    return `<p>Months with a Toronto Hydro bill use what the bill charged. For the other months, the app prices each hour your meter recorded at Ontario's time-of-use rates and applies the net metering rules the way your bills do:</p>
+      <p>Each kWh sent back earns a credit at the price of the hour it went out. Delivery (in ${yr ? yr[0] : "the latest year"}, ${money(rt.fixed)} a month plus ${fmt(rt.perKwh * 100, 2)}¢ per kWh) and regulatory charges (${fmt(rt.reg * 100, 2)}¢ per kWh) are charged on what you bought minus what you sent back, so sending power out cuts them too. HST is 13% of the charges as if no credit applied. The Ontario Electricity Rebate is taken off the electricity total after all credits.</p>
+      <p>If credits ever came to more than a month's electricity charges, the extra would carry forward and be written off after 12 months. ${carriedNow ? "That has happened in some months, and the app carries it." : "That hasn't happened yet. Even your sunniest month still bought more than it sent back, so every credit has been used on the bill it was earned on."}</p>
+      <p>Solar's saving is what the month would have cost with no panels, minus what it did cost. Power the house used straight from the panels is priced at the hours the sun was out, when time-of-use rates are higher.</p>
       ${r.length ? `<div class="label" style="margin-top:8px">Estimates checked against your bills</div>${rows(r)}` : ""}`;
   }
 

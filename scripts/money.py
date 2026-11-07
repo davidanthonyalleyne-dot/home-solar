@@ -1,19 +1,23 @@
 """What the grid costs and what solar saves, month by month.
 
 Where a Toronto Hydro bill covers the month, the grid cost is the bill's own
-charges. Otherwise it is estimated from your meter data with the same pieces a
-bill has, learned from your bills:
+charges. Otherwise it is estimated from your meter data with Ontario's net
+metering rules (O. Reg. 541/05), which your bills follow to the cent:
 
-  energy      kWh bought at Ontario's time-of-use prices, less kWh sent back
-              at the same prices (net metering credits only the energy line)
-  delivery    a fixed monthly part plus a per-kWh part (fitted to your bills)
-  regulatory  per kWh bought
-  then HST is added and the Ontario Electricity Rebate taken off
+  energy      kWh bought at time-of-use prices, less a credit for each kWh sent
+              back at the price of the period it was sent in
+  delivery    a fixed monthly part, plus a per-kWh part charged on NET kWh
+              (bought minus sent back), so exports earn a delivery credit too
+  regulatory  per NET kWh, the same way
+  HST         13% of the charges before the delivery credit and energy credit
+  rebate      the Ontario Electricity Rebate, a share of the electricity line
+              after all credits
+  carry-over  if credits ever exceed a month's electricity charges, the excess
+              carries forward and is written off after 12 months
 
-Solar savings are the credits for what you sent back, plus everything the house
-used straight from the panels. A kWh you never had to buy saves its energy
-price and the per-kWh delivery and regulatory charges, with tax and rebate
-applied the same way as on the bill.
+Solar savings are what the same month would have cost with no panels (every kWh
+the house used bought from the grid) minus what it did cost, both worked out
+with the same rules so modelling error doesn't leak into the saving.
 """
 import datetime as dt
 from collections import defaultdict
@@ -27,7 +31,7 @@ TOU_PRICES = [
 ]
 # Ontario Electricity Rebate as a share of pre-tax charges, by period (checked against the bills)
 OER = [("2022-11-01", 0.117), ("2023-11-01", 0.193), ("2024-11-01", 0.131), ("2025-11-01", 0.235)]
-HST_DEFAULT = 0.16  # as charged on these bills (HST is worked out before net metering credits)
+HST = 0.13
 
 
 def _period(table, day):
@@ -96,34 +100,65 @@ def tou_period(t):
     return "mid" if 11 <= h < 17 else "on"
 
 
-def _fit_delivery(bills):
-    """delivery = fixed + per_kwh * kWh bought, least squares over the bills."""
-    pts = [(b["used"], b["delivery"]) for b in bills]
-    if len(pts) < 3:
-        return 31.0, 0.035
+def _line(pts):
     n = len(pts)
     mx = sum(x for x, _ in pts) / n
     my = sum(y for _, y in pts) / n
     sxx = sum((x - mx) ** 2 for x, _ in pts)
-    slope = sum((x - mx) * (y - my) for x, y in pts) / sxx if sxx else 0.035
+    slope = sum((x - mx) * (y - my) for x, y in pts) / sxx if sxx else 0
     return my - slope * mx, slope
+
+
+def _fit_rates(bills):
+    """Per calendar year (Toronto Hydro's rates change in January): delivery = fixed +
+    per_kwh * net kWh, and regulatory per net kWh. Years with too few bills borrow
+    the nearest year that has them."""
+    by = defaultdict(list)
+    for b in bills:
+        by[b["to"][:4]].append(b)
+    out = {}
+    for y, bs in by.items():
+        if len(bs) < 3:
+            continue
+        net = [(b["used"] - b["generated"], b) for b in bs]
+        fixed, per = _line([(x, b["delivery"]) for x, b in net])
+        reg = sum(b["regulatory"] for _, b in net) / sum(x for x, _ in net)
+        out[y] = {"fixed": fixed, "perKwh": per, "reg": reg}
+    if not out:
+        out["0"] = {"fixed": 37.0, "perKwh": 0.03, "reg": 0.006}
+    def rates(ym):
+        y = ym[:4]
+        if y in out:
+            return out[y]
+        return out[min(out, key=lambda k: abs(int(k) - int(y)))]
+    return out, rates
+
+
+def _months_between(a, b):
+    return (int(b[:4]) - int(a[:4])) * 12 + int(b[5:7]) - int(a[5:7])
+
+
+def month_cost(imp, exp, buy_rate, credit_rate, r, o, bank=0.0):
+    """One month's bill under the net metering rules. Returns (total, electricity line,
+    credit carried forward)."""
+    buy = imp * buy_rate
+    credit = exp * credit_rate
+    net = imp - exp
+    delivery = r["fixed"] + r["perKwh"] * net
+    regulatory = r["reg"] * net
+    hst = HST * (buy + delivery + r["perKwh"] * exp + regulatory)
+    elec = buy - credit + delivery + regulatory - bank
+    carry = 0.0
+    if elec < 0:  # more credit than charges: carry the excess forward
+        carry, elec = -elec, 0.0
+    return elec + hst - o * elec, elec, carry
 
 
 def build_money(hydro, solar_daily, intervals, bills, grid_monthly, today):
     bills = bills or []
     grid_monthly = grid_monthly or {}
     solar_daily = solar_daily or {}
-    fixed, d_kwh = _fit_delivery(bills)
-    reg_kwh = (sum(b["regulatory"] for b in bills) / sum(b["used"] for b in bills)) if bills else 0.006
-    # effective HST share differs by season on these bills (it's worked out before solar credits)
-    def _median(xs, default):
-        xs = sorted(xs)
-        return xs[len(xs) // 2] if xs else default
-    hst_by = {season: _median([b["hst"] / (b["electricity"] + b.get("other", 0)) for b in bills if b.get("season") == season], None)
-              for season in ("summer", "winter")}
-    hst_all = _median([b["hst"] / (b["electricity"] + b.get("other", 0)) for b in bills], HST_DEFAULT)
-    hst_for = lambda ym: hst_by["summer" if 5 <= int(ym[5:]) <= 10 else "winter"] or hst_all
-    hst = hst_all
+    fitted, rates = _fit_rates(bills)
     by_month_bill = {b["to"][:7]: b for b in bills}
 
     # time-of-use split of bought and sent-back kWh, from hourly readings
@@ -171,6 +206,7 @@ def build_money(hydro, solar_daily, intervals, bills, grid_monthly, today):
             ratio[ym[5:]].append(min(1, b["generated"] / m["prod"]))
 
     out = {}
+    bank, bank_from = 0.0, None
     today_ym = today.strftime("%Y-%m")
     for ym in sorted(set(months) | set(by_month_bill) | set(grid_monthly)):
         m = months[ym]
@@ -198,50 +234,71 @@ def build_money(hydro, solar_daily, intervals, bills, grid_monthly, today):
         prod = m["prod"] if m["pDays"] else None
         self_used = max(0.0, prod - exp) if prod is not None and exp is not None else None
 
-        # price of a kWh bought this month, and what a kWh sent back earns
+        # price of a kWh bought this month, what a kWh sent back earns, and what a kWh the
+        # panels supplied straight to the house would have cost (bought in sunlit hours)
+        r = rates(ym)
+        mi, me = mix(ym, "imp"), mix(ym, "exp")
+        sun_rate = sum(pr[p] * me[p] for p in pr)
         if b:
             kb = sum(k for k, _ in b["buy"].values())
-            buy_rate = sum(k * r for k, r in b["buy"].values()) / kb if kb else 0
+            buy_rate = sum(k * x for k, x in b["buy"].values()) / kb if kb else 0
             kc = sum(k for k, _ in b["credit"].values())
-            credit_rate = sum(k * r for k, r in b["credit"].values()) / kc if kc else buy_rate
-            tax = (b["electricity"] + b.get("other", 0) + b["hst"] - b["rebate"]) / (b["electricity"] + b.get("other", 0))
+            credit_rate = sum(k * x for k, x in b["credit"].values()) / kc if kc > 5 else sun_rate
+            if kc > 5:
+                sun_rate = credit_rate
         else:
-            mi, me = mix(ym, "imp"), mix(ym, "exp")
             buy_rate = sum(pr[p] * mi[p] for p in pr)
-            credit_rate = sum(pr[p] * me[p] for p in pr)
-            tax = 1 + hst_for(ym) - o
-        avoided = buy_rate + d_kwh + reg_kwh  # pre-tax value of a kWh the house didn't have to buy
+            credit_rate = sun_rate
+
+        # credit carried in from earlier months, written off after 12 months
+        if bank and _months_between(bank_from, ym) > 12:
+            bank, bank_from = 0.0, None
 
         # grid cost
+        with_cost = None
+        if imp is not None and exp is not None:
+            with_cost, _, carry = month_cost(imp, exp, buy_rate, credit_rate, r, o, bank)
+            bank, bank_from = (carry, bank_from or ym) if carry else (0.0, None)
         if b:
             grid = round(b["due"] - b.get("previous", 0), 2)
             source = "bill"
-        elif imp is not None and exp is not None and complete:
-            pre = fixed + imp * (buy_rate + d_kwh + reg_kwh) - exp * credit_rate
-            grid = round(pre * tax, 2)
-            source = "estimate"
+        elif with_cost is not None and complete:
+            grid, source = round(with_cost, 2), "estimate"
         else:
             grid, source = None, None
 
-        credits = round(exp * credit_rate * tax, 2) if exp is not None else None
-        self_value = round(self_used * avoided * tax, 2) if self_used is not None else None
-        saved = round((credits or 0) + (self_value or 0), 2) if credits is not None or self_value is not None else None
-        if saved is None and prod is not None and m["pDays"] >= 1:
-            # no meter data at all: value production as if all used in the house (upper bound avoided)
-            r = ratio.get(ym[5:])
-            share = sum(r) / len(r) if r else 0.3
-            e2 = prod * share
-            credits = round(e2 * credit_rate * tax, 2)
-            self_value = round((prod - e2) * avoided * tax, 2)
-            saved = round(credits + self_value, 2)
+        # what solar saved: the same month with no panels, minus the month as it was
+        credits = self_value = saved = None
+        if with_cost is not None and self_used is not None:
+            eff = (imp * buy_rate + self_used * sun_rate) / (imp + self_used) if imp + self_used else buy_rate
+            without_cost = month_cost(imp + self_used, 0, eff, 0, r, o)[0]
+            no_export = month_cost(imp, 0, buy_rate, 0, r, o)[0]
+            credits = round(no_export - with_cost, 2)
+            saved = round(without_cost - with_cost, 2)
+            self_value = round(saved - credits, 2)
+        elif with_cost is not None and exp is not None and prod is None:
+            credits = saved = round(month_cost(imp, 0, buy_rate, 0, r, o)[0] - with_cost, 2)
+        elif prod is not None and m["pDays"] >= 1:
+            # no meter data at all: split production by the usual share sent back that month
+            rr = ratio.get(ym[5:])
+            e2 = prod * (sum(rr) / len(rr) if rr else 0.3)
+            base = imp if imp is not None else 1000.0
+            w = month_cost(base, e2, buy_rate, credit_rate, r, o)[0]
+            credits = round(month_cost(base, 0, buy_rate, 0, r, o)[0] - w, 2)
+            eff = (base * buy_rate + (prod - e2) * sun_rate) / (base + prod - e2)
+            saved = round(month_cost(base + prod - e2, 0, eff, 0, r, o)[0] - w, 2)
+            self_value = round(saved - credits, 2)
             est.append("sent back")
+        avoided = (buy_rate + r["perKwh"] + r["reg"]) * (1 + HST - o)
+        line_credit = round(exp * (r["perKwh"] + r["reg"]), 2) if exp is not None else None
 
         out[ym] = {
             "grid": grid, "gridSource": source, "saved": saved, "credits": credits, "selfValue": self_value,
             "without": round(grid + saved, 2) if grid is not None and saved is not None else None,
             "imp": None if imp is None else round(imp, 1), "exp": None if exp is None else round(exp, 1),
             "selfUsed": None if self_used is None else round(self_used, 1), "prod": None if prod is None else round(prod, 1),
-            "buyRate": round(buy_rate, 4), "avoidedRate": round(avoided * tax, 4), "creditRate": round(credit_rate * tax, 4),
+            "buyRate": round(buy_rate, 4), "avoidedRate": round(avoided, 4), "creditRate": round(credit_rate, 4),
+            "deliveryCredit": line_credit, "carried": round(bank, 2) if bank else 0,
             "complete": complete, "estimated": est,
         }
 
@@ -253,14 +310,12 @@ def build_money(hydro, solar_daily, intervals, bills, grid_monthly, today):
             continue
         mi, me = mix(ym, "imp"), mix(ym, "exp")
         pr, o = prices(f"{ym}-01"), oer(f"{ym}-01")
-        br = sum(pr[p] * mi[p] for p in pr)
-        cr = sum(pr[p] * me[p] for p in pr)
-        est = (fixed + m["imp"] * (br + d_kwh + reg_kwh) - m["exp"] * cr) * (1 + hst_for(ym) - o)
+        est = month_cost(m["imp"], m["exp"], sum(pr[p] * mi[p] for p in pr), sum(pr[p] * me[p] for p in pr), rates(ym), o)[0]
         actual = b["due"] - b.get("previous", 0)
         backtest.append({"month": ym, "estimate": round(est, 2), "bill": round(actual, 2), "off": round(est / actual - 1, 3)})
 
     return {
         "months": out,
-        "model": {"fixedDelivery": round(fixed, 2), "deliveryPerKwh": round(d_kwh, 4), "regulatoryPerKwh": round(reg_kwh, 4), "hstSummer": hst_by["summer"] and round(hst_by["summer"], 3), "hstWinter": hst_by["winter"] and round(hst_by["winter"], 3)},
+        "model": {"hst": HST, "byYear": {y: {k: round(v, 4) for k, v in x.items()} for y, x in sorted(fitted.items())}},
         "backtest": backtest,
     }
