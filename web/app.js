@@ -127,6 +127,25 @@
   ];
   const wx = (code) => (WX.find(([codes]) => codes.includes(Number(code))) || [[], "—"])[1];
   const deg = (t) => `${Math.round(t)}°`;
+  // weather glyphs drawn like the tab icons: thin rounded strokes, orange only for the sun itself
+  const WXI = {
+    sun: '<circle cx="12" cy="12" r="4" class="s"/><path class="s" d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>',
+    moon: '<path d="M19 14.5A7.5 7.5 0 1 1 9.5 5a6 6 0 0 0 9.5 9.5z"/>',
+    partly: '<path class="s" d="M8.5 3.5v1.5M3.5 8.5H5M5 5l1 1M12 5l-1 1"/><path class="s" d="M5.6 11.4A3.5 3.5 0 1 1 11.6 8"/><path d="M8.5 20h9a3.5 3.5 0 0 0 0-7h-.3a5 5 0 0 0-9.4 1.2A2.9 2.9 0 0 0 8.5 20z"/>',
+    cloud: '<path d="M7 19h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 12.1 3.5 3.5 0 0 0 7 19z"/>',
+    rain: '<path d="M7 15h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 8.1 3.5 3.5 0 0 0 7 15z"/><path d="M8.5 18l-1 2.5M12.5 18l-1 2.5M16.5 18l-1 2.5"/>',
+    drizzle: '<path d="M7 15h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 8.1 3.5 3.5 0 0 0 7 15z"/><path d="M8.5 18.5v.5M12.5 18.5v.5M16.5 18.5v.5M10.5 21v.5M14.5 21v.5"/>',
+    snow: '<path d="M7 14h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 7.1 3.5 3.5 0 0 0 7 14z"/><path d="M8.5 18h.01M12.5 18h.01M16.5 18h.01M10.5 21h.01M14.5 21h.01"/>',
+    fog: '<path d="M4 9h16M3 13h18M6 17h12"/>',
+    storm: '<path d="M7 14h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 7.1 3.5 3.5 0 0 0 7 14z"/><path d="M12.5 15l-2 3.5h3l-2 3.5"/>',
+  };
+  function wxKind(code, isDay) {
+    const c = Number(code);
+    const k = c <= 1 ? "sun" : c === 2 ? "partly" : c === 3 ? "cloud" : [45, 48].includes(c) ? "fog" : [51, 53, 55, 56, 57].includes(c) ? "drizzle"
+      : [71, 73, 75, 77, 85, 86].includes(c) ? "snow" : [95, 96, 99].includes(c) ? "storm" : [61, 63, 65, 66, 67, 80, 81, 82].includes(c) ? "rain" : "cloud";
+    return !isDay && k === "sun" ? "moon" : !isDay && k === "partly" ? "cloud" : k;
+  }
+  const wxIcon = (code, isDay) => `<svg class="wxi" viewBox="0 0 24 24" aria-hidden="true">${WXI[wxKind(code, isDay)]}</svg>`;
   const weatherDay = (d) => (state.data.weather && state.data.weather.daily && state.data.weather.daily[d]) || null;
 
   // current conditions straight from Open-Meteo when the app opens, falling back to the last build
@@ -205,7 +224,10 @@
     el.classList.remove("open");
     setTimeout(() => el.remove(), 260);
   }
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
+  const closePops = () => document.querySelectorAll(".popover:not([hidden])").forEach((p) => { p.hidden = true; p.previousElementSibling.setAttribute("aria-expanded", "false"); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeSheet(); closePops(); } });
+  document.addEventListener("click", (e) => { if (!e.target.closest(".statuswrap")) closePops(); });
+  window.addEventListener("scroll", closePops, { passive: true });
 
   const rows = (pairs) => `<div class="rows">${pairs.filter(Boolean).map(([k, v, cls]) => `<div class="r${cls ? " " + cls : ""}"><span>${k}</span><span class="v num">${v}</span></div>`).join("")}</div>`;
 
@@ -281,8 +303,13 @@
 
   function nowScreen() {
     const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: TZNAME });
+    const sx = solar(), al = alerts();
+    const stLabel = !sx ? "" : al.length ? `${al.length === 1 ? "1 alert" : al.length + " alerts"} from SolarEdge` : sx.alertsChecked ? "System normal" : "Alerts not checked yet";
+    const stNote = !sx ? "" : al.length ? "Details are at the top of this screen." : sx.alertsChecked ? `SolarEdge reported no problems when it was checked at ${esc(timeOnly(sx.alertsChecked))}.` : "";
+    const dot = sx ? `<div class="statuswrap"><button type="button" class="statusdot ${al.length ? "bad" : sx.alertsChecked ? "" : "unknown"}" data-pop aria-label="${esc(stLabel)}" aria-expanded="false"><i></i></button>
+      <div class="popover" role="status" hidden><b>${esc(stLabel)}</b>${stNote ? `<span>${stNote}</span>` : ""}</div></div>` : "";
     const head = `<div class="top"><div><div class="eyebrow">${esc(today)}</div><h1>Now</h1></div>
-      <a class="iconbtn" href="#settings" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.4"/><circle cx="15" cy="17" r="2.4"/></svg></a></div>`;
+      <div class="topright">${dot}<a class="iconbtn" href="#settings" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.4"/><circle cx="15" cy="17" r="2.4"/></svg></a></div></div>`;
     const s = solar();
     if (!s) {
       return head + `<section class="first"><p class="lead">SolarEdge isn't connected yet.</p>
@@ -297,35 +324,41 @@
 
     const stale = needsConnect() ? `<section class="notice"><b>SolarEdge needs you to sign in again.</b> These are the last numbers it sent.${connectBtn()}</section>` : "";
     const a = alerts();
-    const status = a.length
+    const alertBox = a.length
       ? `<section class="alerts" id="alerts">${a.map((x) => `<div class="status bad"><i class="dot-s"></i><span><b>${esc(x.type || "Alert")}</b><span class="sub">${[x.component, x.impact != null && `impact ${x.impact} of 9`, x.first && `since ${timeOf(x.first)}`].filter(Boolean).map(esc).join(" · ")}</span></span></div>`).join("")}
-         <p class="sub">SolarEdge also opened an issue in your GitHub repo, which emails you.</p></section>`
-      : `<section><div class="status"><i class="dot-s ${s.alertsChecked ? "" : "unknown"}"></i><span>${s.alertsChecked ? "System normal" : "Alerts not checked yet"}</span>${s.alertsChecked ? `<span class="sub right">checked ${esc(timeOnly(s.alertsChecked))}</span>` : ""}</div></section>`;
+         <p class="sub">SolarEdge also opened an issue in your GitHub repo, which emails you.</p></section>` : "";
 
-    const w = currentWeather(), t = state.data.weather && state.data.weather.tomorrow, k = state.data.weather && state.data.weather.factor;
-    const wrows = [];
-    if (w) wrows.push([`${deg(w.temp)} and ${esc(wx(w.code).toLowerCase())}`, w.hi != null ? `H ${deg(w.hi)} <span class="sub">L ${deg(w.lo)}</span>` : ""]);
-    if (t) { const [, hi, lo, code, , ghi] = t, e = k && ghi != null ? k * ghi : null; wrows.push([`Tomorrow, ${esc(wx(code).toLowerCase())}`, e != null ? `about ${fmt(e)} kWh` : `H ${deg(hi)} <span class="sub">L ${deg(lo)}</span>`]); }
+    // tomorrow's solar, in terms of what the house uses on a day like it
+    const t = state.data.weather && state.data.weather.tomorrow, k = state.data.weather && state.data.weather.factor;
+    const tomorrowKwh = t && k && t[5] != null ? k * t[5] : null;
+    const recent = months().filter((m) => m < torontoToday().slice(0, 7)).reverse().map(monthStats).find((m) => m.home != null);
+    const tomorrowLine = tomorrowKwh != null ? `<div class="forecast">${wxIcon(t[3], 1)}<p>Tomorrow the panels should make <b class="sun">about ${fmt(tomorrowKwh)} kWh</b> over the whole day, judging by the forecast sunlight.${recent ? ` That's roughly ${pct(tomorrowKwh, recent.home)}% of what the house used on an average day in ${esc(mName(recent.ym))} (${fmt(recent.home)} kWh).` : ""}</p></div>` : "";
+
+    const w = currentWeather(), wrows = [];
+    if (w) wrows.push([`<span class="wxrow">${wxIcon(w.code, w.isDay ?? 1)}${deg(w.temp)} and ${esc(wx(w.code).toLowerCase())}</span>`, w.hi != null ? `H ${deg(w.hi)} <span class="sub">L ${deg(w.lo)}</span>` : ""]);
+    if (t) wrows.push([`<span class="wxrow">${wxIcon(t[3], 1)}Tomorrow, ${esc(wx(t[3]).toLowerCase())}</span>`, `H ${deg(t[1])} <span class="sub">L ${deg(t[2])}</span>`]);
 
     const since = s.installed ? s.installed.slice(0, 4) : "install";
-    return `${head}${stale}${a.length ? status : ""}
+    const night = nowD < st.rise || nowD > st.set;
+    return `${head}${stale}${alertBox}
       <section class="first">
         <div class="pair">
           <div><div class="label">Making now</div><div class="big num ${nowKw > 0 ? "sun" : "dim"}">${fmt(nowKw, nowKw ? 2 : 0)}<small> kW</small></div><div class="sub">${esc(nowNote)}</div></div>
-          <div><div class="label">So far today</div><div class="big num">${fmt(todayKwh, 1)}<small> kWh</small></div>${exp ? `<div class="sub">about ${fmt(exp)} expected</div>` : ""}</div>
+          <div><div class="label">So far today</div><div class="big num">${fmt(todayKwh, 1)}<small> kWh</small></div>${exp ? `<div class="sub">about ${fmt(exp)} kWh expected today</div>` : ""}</div>
         </div>
         ${svg}
-        <p class="sub">${hoursOf(new Date()) < hoursOf(st.rise) || new Date() > st.set ? `Tonight's moon: ${esc(moonPhase(new Date()).name.toLowerCase())}, ${moonPhase(new Date()).lit}% lit. The dotted arc is the sun's path from sunrise to sunset.` : "The dotted arc is the sun's path from sunrise to sunset."}</p>
+        <p class="sub">${night ? `Tonight's moon: ${esc(moonPhase(nowD).name.toLowerCase())}, ${moonPhase(nowD).lit}% lit. ` : ""}The dotted arc is the sun's path from sunrise to sunset.</p>
+        ${tomorrowLine}
       </section>
-      ${wrows.length ? `<section>${rows(wrows)}</section>` : ""}
-      ${a.length ? "" : status}
+      ${wrows.length ? `<section><div class="group-label">Weather</div>${rows(wrows)}</section>` : ""}
       <section>
+        <div class="group-label">Generated by your solar panels</div>
         <div class="trio num">
-          <div><div class="label">This month</div><div class="n">${kwh(s.month)}</div></div>
-          <div><div class="label">This year</div><div class="n">${fmt(s.year)}</div></div>
-          <div><div class="label">Since ${esc(since)}</div><div class="n">${fmt(s.lifetime)}</div></div>
+          <div><div class="label">This month</div><div class="n">${kwh(s.month)}</div><div class="unit">kWh</div></div>
+          <div><div class="label">This year</div><div class="n">${fmt(s.year)}</div><div class="unit">kWh</div></div>
+          <div><div class="label">Since ${esc(since)}</div><div class="n">${fmt(s.lifetime)}</div><div class="unit">kWh</div></div>
         </div>
-        <p class="sub">kWh produced${s.updated ? `. SolarEdge last reported ${esc(timeOf(s.updated))}.` : ""}</p>
+        ${s.updated ? `<p class="sub">SolarEdge last reported ${esc(timeOf(s.updated))}.</p>` : ""}
       </section>`;
   }
 
@@ -673,6 +706,12 @@
   }
 
   view.addEventListener("click", (e) => {
+    const pop = e.target.closest("[data-pop]");
+    if (pop) {
+      const box = pop.nextElementSibling, open = box.hidden;
+      box.hidden = !open; pop.setAttribute("aria-expanded", String(open));
+      return;
+    }
     const sh = e.target.closest("[data-sheet]");
     if (sh) {
       if (sh.dataset.sheet === "bill") openSheet(`${mName(state.month)} bill`, billSheet(state.month));

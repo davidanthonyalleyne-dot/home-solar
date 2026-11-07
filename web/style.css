@@ -237,3 +237,31 @@ body.locked .tabs { display: none; }
 .lock-form input:focus { outline: 2px solid var(--sun); }
 .lock .small { font-size: 13px; color: var(--muted); }
 .err { color: var(--bad) !important; min-height: 1.2em; margin: 0; text-align: center; }
+
+/* status dot and its popover */
+.topright { display: flex; align-items: center; gap: 6px; padding-bottom: 4px; }
+.statuswrap { position: relative; }
+.statusdot { width: 36px; height: 36px; border: 0; background: transparent; display: grid; place-items: center; cursor: pointer; padding: 0; position: relative; }
+.statusdot::after { content: ""; position: absolute; inset: -4px; }
+.statusdot i { width: 10px; height: 10px; border-radius: 5px; background: var(--ok); display: block; }
+.statusdot.bad i { background: var(--bad); }
+.statusdot.unknown i { background: var(--faint); }
+.popover {
+  position: absolute; right: -6px; top: 42px; z-index: 6; width: 230px; padding: 12px 14px; border-radius: 12px;
+  background: var(--sheet); box-shadow: 0 6px 24px rgba(0, 0, 0, .16), 0 0 0 .5px var(--rule);
+  display: flex; flex-direction: column; gap: 3px; font-size: 15px;
+}
+.popover[hidden] { display: none; }
+.popover::before { content: ""; position: absolute; top: -6px; right: 18px; width: 12px; height: 12px; background: var(--sheet); transform: rotate(45deg); box-shadow: -.5px -.5px 0 var(--rule); }
+.popover span { font-size: 13px; color: var(--muted); line-height: 1.4; }
+
+/* weather and tomorrow's forecast */
+.wxi { width: 22px; height: 22px; fill: none; stroke: var(--muted); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.wxi .s { stroke: var(--sun); }
+.wxrow { display: inline-flex; align-items: center; gap: 10px; }
+.forecast { display: flex; gap: 10px; align-items: flex-start; margin-top: 16px; padding: 12px 14px; border-radius: 12px; background: var(--well); }
+.forecast p { margin: 0; font-size: 15px; }
+.forecast .wxi { margin-top: 1px; }
+.trio .unit { font-size: 13px; color: var(--muted); margin-top: 1px; }
+.group-label + .trio { margin-top: 10px; }
+.rows .r:has(.wxrow) { align-items: center; }
