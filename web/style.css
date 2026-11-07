@@ -143,6 +143,7 @@ section.first { border-top: 0; padding-top: 16px; }
 .chart .b-grid.est { fill: var(--grid-est); }
 .chart .b-sun { fill: var(--sun); }
 .chart .sel { fill: var(--well); }
+.chart .seldot { fill: var(--text); }
 .chart .hit { fill: transparent; cursor: pointer; }
 .chart .hit:focus-visible { outline: none; stroke: var(--sun); stroke-width: 2; }
 .chart .ghost { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .8; }

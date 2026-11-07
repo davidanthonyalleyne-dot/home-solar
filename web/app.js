@@ -583,7 +583,7 @@
         const ym = `${y}-${String(i + 1).padStart(2, "0")}`, m = M()[ym], x = lab + i * bw + 2, w = Math.max(2, bw - 4);
         if (!m) continue;
         const gh = m.grid != null ? sc(m.grid) : 0, sh = m.saved != null ? sc(Math.max(0, m.saved)) : 0;
-        if (ym === state.month) g += `<rect x="${(x - 2).toFixed(1)}" y="${base - rowH + 12}" width="${bw.toFixed(1)}" height="${rowH - 10}" rx="3" class="sel"/>`;
+        if (ym === state.month) g += `<circle cx="${(x + w / 2).toFixed(1)}" cy="${base + 5}" r="2.2" class="seldot"/>`;
         if (gh) g += `<rect x="${x.toFixed(1)}" y="${(base - gh).toFixed(1)}" width="${w.toFixed(1)}" height="${gh.toFixed(1)}" class="b-grid${m.gridSource === "estimate" ? " est" : ""}"/>`;
         if (sh) g += `<rect x="${x.toFixed(1)}" y="${(base - gh - sh).toFixed(1)}" width="${w.toFixed(1)}" height="${sh.toFixed(1)}" class="b-sun"/>`;
         g += `<rect x="${(x - 2).toFixed(1)}" y="${base - rowH + 10}" width="${bw.toFixed(1)}" height="${rowH}" class="hit" data-ym="${ym}" data-go="month" role="button" aria-label="${esc(monthName(ym))}: paid ${m.grid != null ? dollars(m.grid) : "unknown"}, saved ${m.saved != null ? dollars(m.saved) : "unknown"}"/>`;
