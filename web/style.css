@@ -217,3 +217,12 @@ button.linkrow { width: 100%; border: 0; border-top: .5px solid var(--sep); back
 .bill .row.sub { min-height: 36px; padding-top: 6px; padding-bottom: 6px; padding-left: 28px; font-size: 15px; color: var(--muted); }
 .bill .row.sub + .row.sub, .bill .row + .row.sub { border-top: 0; }
 .val.good { color: var(--good); }
+
+/* money */
+.money .mrow { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.money .mlabel { display: inline-flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 600; }
+.money .mlabel i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.money .mval { font-size: 32px; font-weight: 600; letter-spacing: -.5px; }
+.money .msub { font-size: 13px; color: var(--muted); line-height: 1.4; margin: -4px 0 4px 18px; }
+.good { color: var(--good); }
+.muted { color: var(--muted); }

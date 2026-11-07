@@ -157,14 +157,6 @@
       item("var(--solar)", sunIcon, `Solar ${c >= 0 ? "up" : "down"} ${Math.abs(c)}% on ${esc(monthName(lastYear))}`,
         `${fmt(cur.prod, 1)} kWh a day, against ${fmt(ly.prod, 1)} a year earlier.${Math.abs(c) >= 15 ? " Mostly down to the weather, unless the system had problems." : ""}`);
     }
-    // what the panels were worth on this month's bill
-    const sv = solarValue(ym);
-    if (sv && (sv.credit > 0.5 || sv.usedValue)) {
-      const total = sv.credit + (sv.usedValue || 0);
-      item("var(--good)", '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.2c-.5-.8-1.4-1.2-2.5-1.2-1.6 0-2.7.8-2.7 2s1 1.7 2.7 2c1.7.3 2.8.9 2.8 2.1s-1.2 2-2.8 2c-1.2 0-2.2-.5-2.7-1.3M12 6.5v1.5M12 16v1.5"/></svg>',
-        `Solar was worth about ${money(total)}`,
-        `${money(sv.credit)} in credits on the bill${sv.usedValue ? `, plus about ${money(sv.usedValue)} of power the house used straight from the panels (${fmt(sv.used)} kWh at the bill's average ${fmt(sv.rate * 100, 1)}¢), before delivery and tax` : ""}.`);
-    }
     // share of the home covered
     if (cur.cover != null) {
       const p = prev && prev.cover != null ? prev.cover : null;
@@ -520,13 +512,75 @@
       <div class="list bill">${rows}</div>${carried}`;
   }
 
-  // what the panels were worth on a bill: credits, plus solar used in the house at that bill's average price
-  function solarValue(ym) {
-    const b = billFor(ym);
-    if (!b) return null;
-    const p = billParts(b), t = totals(monthDays(ym));
-    const used = t.bothDays ? t.self : null;
-    return { credit: p.credit, used, usedValue: used != null ? used * p.avgRate : null, rate: p.avgRate };
+
+
+
+  // ---------- money: grid cost first, then what solar saved ----------
+  const M = () => (state.data.money && state.data.money.months) || {};
+  const dollars = (n) => "$" + Math.round(n).toLocaleString("en-CA");
+  function sinceTotals(upTo) {
+    const ms = Object.entries(M()).filter(([k]) => !upTo || k <= upTo);
+    const first = ms.find(([, m]) => m.saved != null);
+    return {
+      grid: ms.reduce((a, [, m]) => a + (m.grid || 0), 0),
+      saved: ms.reduce((a, [, m]) => a + (m.saved || 0), 0),
+      gridMonths: ms.filter(([, m]) => m.grid != null).length,
+      missing: ms.filter(([, m]) => m.grid == null && m.complete !== false).map(([k]) => k),
+      from: first ? first[0] : null,
+    };
+  }
+
+  function moneyCard(ym) {
+    const m = M()[ym];
+    if (!m || (m.grid == null && m.saved == null)) return "";
+    const name = mName(ym), isBill = m.gridSource === "bill";
+    const gridLine = m.grid != null
+      ? `<div class="mrow"><span class="mlabel"><i style="background:var(--grid)"></i>Grid cost</span><span class="mval num">${isBill ? "" : "~"}${money(m.grid)}</span></div>
+         <div class="msub">${isBill ? "From your Toronto Hydro bill" : "Estimated from your meter data and your bills' prices"}</div>`
+      : `<div class="mrow"><span class="mlabel"><i style="background:var(--grid)"></i>Grid cost</span><span class="mval num muted">–</span></div>
+         <div class="msub">${m.complete === false ? "Shown once the month is over and the meter data is in" : "No meter data or bill for this month"}</div>`;
+    const savedLine = m.saved != null
+      ? `<div class="mrow"><span class="mlabel"><i style="background:var(--good)"></i>Solar saved</span><span class="mval num good">${money(m.saved)}</span></div>
+         <div class="msub">${m.credits != null && m.credits >= 0.5 ? `${money(m.credits)} in credits for ${fmt(m.exp)} kWh sent back` : ""}${m.selfValue != null ? `${m.credits != null && m.credits >= 0.5 ? ", plus " : ""}${money(m.selfValue)} of power used straight from the panels (${fmt(m.selfUsed)} kWh at ${fmt(m.avoidedRate * 100, 1)}¢ you didn't pay)` : ""}${(m.estimated || []).length ? ". Some of it estimated" : ""}</div>`
+      : "";
+    let bar = "";
+    if (m.grid != null && m.saved != null && m.without > 0) {
+      const g = (m.grid / m.without) * 100;
+      bar = `<div class="split" style="height:10px;border-radius:5px" role="img" aria-label="Without solar about ${money(m.without)}"><i style="width:${g}%;background:var(--grid)"></i><i style="width:${100 - g}%;background:var(--good)"></i></div>
+        <span class="small">Without solar, ${esc(name)} would have cost about <b class="num">${money(m.without)}</b>. Solar cut it by ${pct(m.saved, m.without)}%.</span>`;
+    }
+    const t = sinceTotals(), from = t.from ? monthName(t.from) : "";
+    return `<section class="card money" style="gap:8px">
+        <span class="label">${esc(name)}${m.complete === false ? " so far" : ""}</span>
+        ${gridLine}${savedLine}${bar}
+      </section>
+      ${t.from ? `<div class="tiles">
+        <div class="tile"><span class="k">Grid since ${esc(from)}</span><span class="v num">${dollars(t.grid)}</span><span class="small">${t.missing.length ? `${t.missing.length} month${t.missing.length > 1 ? "s" : ""} not counted` : "every month counted"}</span></div>
+        <div class="tile"><span class="k">Solar saved since ${esc(from)}</span><span class="v num good">${dollars(t.saved)}</span><span class="small">${dollars(Object.entries(M()).filter(([, x]) => x.complete !== false).slice(-12).reduce((a, [, x]) => a + (x.saved || 0), 0))} in the last 12 months</span></div>
+      </div>` : ""}`;
+  }
+
+  function savingsBlock() {
+    const ms = M();
+    if (!Object.keys(ms).length) return "";
+    const years = {};
+    for (const [k, m] of Object.entries(ms)) {
+      const y = (years[k.slice(0, 4)] ||= { grid: 0, saved: 0, n: 0 });
+      y.grid += m.grid || 0; y.saved += m.saved || 0; y.n += m.grid != null ? 1 : 0;
+    }
+    const t = sinceTotals(), thisYear = torontoToday().slice(0, 4);
+    const rows = Object.keys(years).sort().reverse().map((y) => `<a class="row" href="#overview" data-ym="${monthForYear(y)}" style="color:var(--text);text-decoration:none">
+        <span>${y}${y === thisYear ? ' <span class="small">so far</span>' : ""}</span>
+        <span class="val num" style="display:flex;gap:14px"><span>Grid ${dollars(years[y].grid)}</span><span class="good">Saved ${dollars(years[y].saved)}</span></span>${chev}</a>`).join("");
+    const md = state.data.money.model || {};
+    return `<div class="section">Savings</div>
+      <section class="card" style="gap:4px">
+        <span class="label">Solar has saved you about</span>
+        <div class="hero num"><b class="good">${dollars(t.saved)}</b></div>
+        <span class="small">since ${esc(monthName(t.from))}, against ${dollars(t.grid)} paid for grid power over the same time.</span>
+      </section>
+      <div class="list">${rows}</div>
+      <div class="foot">Bill months use the bill. Other months are estimated from your meter data at Ontario's time-of-use prices, with delivery (${money(md.fixedDelivery || 0)} a month plus ${fmt((md.deliveryPerKwh || 0) * 100, 1)}¢ per kWh), regulatory charges, HST and the Ontario rebate as your bills charge them. Checked against your bills, the estimates land within about 1.5%.</div>`;
   }
 
   // ---------- screens ----------
@@ -534,7 +588,7 @@
     if (!state.month) return `<h1>Overview</h1><div class="card empty"><h2>No data yet</h2><p class="small">Add a Toronto Hydro export to data/hydro or connect SolarEdge.</p></div>`;
     const days = monthDays(state.month), t = totals(days);
     const name = mName(state.month);
-    let html = monthHeader("Overview") + alertBanner();
+    let html = monthHeader("Overview") + alertBanner() + moneyCard(state.month);
 
     if (t.hDays) {
       const net = t.imp - t.exp;
@@ -721,6 +775,7 @@
         <div class="row"><span>Since ${esc(s.installed ? new Date(s.installed + "T12:00").toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "install")}</span><span class="val num">${fmt(s.lifetime)} kWh</span></div>
       </div>
       ${updated ? `<div class="foot">SolarEdge last reported ${esc(updated)}.</div>` : ""}
+      ${savingsBlock()}
       ${yearsBlock()}
       ${inverterRows()}
       ${benefitsCard()}`;
