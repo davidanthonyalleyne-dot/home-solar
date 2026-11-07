@@ -5,7 +5,7 @@
 
   // Safari ignores user-scalable=no, so block its pinch gestures directly
   ["gesturestart", "gesturechange", "gestureend"].forEach((t) => document.addEventListener(t, (e) => e.preventDefault(), { passive: false }));
-  const state = { data: null, month: null, day: null, view: "home" };
+  const state = { data: null, month: null, day: null, lastTab: "now" };
 
   // ---------- helpers ----------
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -14,21 +14,23 @@
   const signed = (n) => (n < 0 ? "−" : "") + kwh(Math.abs(n));
   const parseDay = (d) => { const [y, m, dd] = d.split("-").map(Number); return new Date(y, m - 1, dd); };
   const monthName = (ym, style = "long") => { const [y, m] = ym.split("-").map(Number); return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: style, year: "numeric" }); };
-  const dayName = (d) => parseDay(d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  const mName = (ym) => monthName(ym).replace(/ \d+$/, "");
+  const dayName = (d) => parseDay(d).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   const shortDay = (d) => parseDay(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const daysIn = (ym) => { const [y, m] = ym.split("-").map(Number); return new Date(y, m, 0).getDate(); };
   const pct = (a, b) => b > 0 ? Math.round((a / b) * 100) : 0;
+  const change = (a, b) => Math.round(((a - b) / b) * 100);
+  const money = (n) => (n < 0 ? "−$" : "$") + Math.abs(n).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const dollars = (n) => (n < 0 ? "−$" : "$") + Math.round(Math.abs(n)).toLocaleString("en-CA");
   const chev = '<svg class="chev" viewBox="0 0 10 16" aria-hidden="true"><path d="M2 2l6 6-6 6"/></svg>';
-  const sunIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
-  const boltIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>';
-  const down = (c) => `<svg viewBox="0 0 24 24" stroke="${c}" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>`;
-  const up = (c) => `<svg viewBox="0 0 24 24" stroke="${c}" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>`;
+  const contentWidth = () => Math.max(280, Math.min(560, document.documentElement.clientWidth || innerWidth) - 40);
 
   // ---------- data ----------
   const hydro = () => state.data.hydro || {};
   const solar = () => (state.data.solar && state.data.solar.daily && Object.keys(state.data.solar.daily).length) ? state.data.solar : null;
   const needsConnect = () => !!(state.data.solar && state.data.solar.needsConnect);
-  const connectBtn = () => state.data.connectUrl ? `<a class="list row" href="${esc(state.data.connectUrl)}" style="justify-content:center;color:var(--accent);font-weight:600">Connect SolarEdge</a>` : "";
+  const connectBtn = () => state.data.connectUrl ? `<a class="btn" href="${esc(state.data.connectUrl)}">Connect SolarEdge</a>` : "";
+  const M = () => (state.data.money && state.data.money.months) || {};
 
   let _range = null;
   function solarRange() {
@@ -39,6 +41,7 @@
   function months() {
     const s = new Set(Object.keys(hydro()).map((d) => d.slice(0, 7)));
     if (solar()) Object.keys(solar().daily || {}).forEach((d) => s.add(d.slice(0, 7)));
+    Object.keys(M()).forEach((m) => s.add(m));
     return [...s].sort();
   }
 
@@ -56,8 +59,7 @@
       const h = hydro()[d];
       // inside SolarEdge's history a missing day means the system made nothing (e.g. an outage)
       let p = solar() ? solar().daily[d] : undefined;
-      // ...unless the meter shows power going out to the grid: then the panels were working and
-      // only SolarEdge's monitoring was down, so the day's production is unknown rather than zero
+      // ...unless the meter shows power going out to the grid: then only the monitoring was down
       if (p == null && solar() && h && h[1] < 0.05 && d >= solarRange()[0] && d <= solarRange()[1]) p = 0;
       const r = { d, imp: h ? h[0] : null, exp: h ? h[1] : null, prod: p ?? null };
       if (r.prod != null && r.exp != null) {
@@ -79,30 +81,6 @@
     return t;
   }
 
-  // ---------- shared pieces ----------
-  // the month to open when picking a year: the same month if that year has it, else its latest
-  function monthForYear(y) {
-    const inYear = months().filter((m) => m.startsWith(y));
-    const same = `${y}-${state.month.slice(5)}`;
-    return inYear.includes(same) ? same : inYear.at(-1);
-  }
-
-  function monthHeader(title) {
-    const all = months(), year = state.month.slice(0, 4);
-    const years = [...new Set(all.map((m) => m.slice(0, 4)))];
-    const yearSeg = years.length > 1 ? `<div class="seg years" role="group" aria-label="Year">${years.map((y) =>
-      `<button type="button" data-ym="${monthForYear(y)}" aria-pressed="${y === year}">${y}</button>`).join("")}</div>` : "";
-    const chips = all.filter((m) => m.startsWith(year)).map((ym) => {
-      const [y, m] = ym.split("-").map(Number);
-      const label = new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "short" });
-      return `<button type="button" class="chip" data-ym="${ym}" aria-pressed="${ym === state.month}" aria-label="${esc(monthName(ym))}">${esc(label)}</button>`;
-    }).join("");
-    return `<div class="head"><div><div class="eyebrow">${esc(title)}</div><h1>${esc(monthName(state.month))}</h1></div></div>
-      ${yearSeg}
-      ${all.length > 1 ? `<div class="chips" role="group" aria-label="Month">${chips}</div>` : ""}`;
-  }
-
-  // per-month figures used for comparisons and the year chart
   function monthStats(ym) {
     const t = totals(monthDays(ym));
     return {
@@ -110,159 +88,9 @@
       home: t.bothDays ? t.home / t.bothDays : null,
       imp: t.hDays ? t.imp / t.hDays : null,
       prod: t.pDays ? t.prod / t.pDays : null,
-      self: t.bothDays ? t.self / t.bothDays : null,
       cover: t.bothDays ? pct(t.self, t.home) : null,
     };
   }
-
-  const mName = (ym) => monthName(ym).replace(/ \d+$/, "");
-  const change = (a, b) => Math.round(((a - b) / b) * 100);
-
-  function highlights(ym) {
-    const days = monthDays(ym), cur = monthStats(ym);
-    const all = months(), i = all.indexOf(ym), prev = i > 0 ? monthStats(all[i - 1]) : null;
-    const name = mName(ym), out = [];
-    const item = (color, icon, title, text, extra = "") => out.push(`<div class="hl"><span class="hl-ic" style="color:${color}">${icon}</span><div class="hl-body"><span class="hl-t">${title}</span><span class="small">${text}</span>${extra}</div></div>`);
-    const compareBars = (label, a, b, color) => {
-      const mx = Math.max(a, b) || 1;
-      return `<div class="cmp">
-        <div class="cmp-row"><span class="cmp-l">${esc(name)}</span><span class="cmp-bar"><i style="width:${(a / mx) * 100}%;background:${color}"></i></span><span class="cmp-v num">${fmt(a, 1)}</span></div>
-        <div class="cmp-row"><span class="cmp-l">${esc(mName(prev.ym))}</span><span class="cmp-bar"><i style="width:${(b / mx) * 100}%;background:var(--chev)"></i></span><span class="cmp-v num">${fmt(b, 1)}</span></div>
-        <span class="cmp-u">${label}</span></div>`;
-    };
-    const homeIc = '<svg viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>';
-    const alertIc = '<svg viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/></svg>';
-    const calIc = '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
-    const upIc = '<svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
-
-    // home use against last month
-    const curUse = cur.home ?? cur.imp, prevUse = prev ? (cur.home != null ? prev.home : prev.imp) : null;
-    if (curUse != null && prevUse) {
-      const c = change(curUse, prevUse), what = cur.home != null ? "Home use" : "Grid use";
-      item("var(--grid)", homeIc, `${what} ${c >= 0 ? "up" : "down"} ${Math.abs(c)}% on ${esc(mName(prev.ym))}`,
-        c > 15 && Number(ym.slice(5)) >= 9 ? "Heating season is starting to show." : c < -15 && Number(ym.slice(5)) <= 6 ? "Less heating as the weather warms." : `${fmt(curUse, 1)} kWh a day, against ${fmt(prevUse, 1)}.`,
-        compareBars("kWh a day", curUse, prevUse, "var(--grid)"));
-    }
-    // solar against last month
-    if (cur.prod != null && prev && prev.prod) {
-      const c = change(cur.prod, prev.prod);
-      item("var(--solar)", sunIcon, `Solar ${c >= 0 ? "up" : "down"} ${Math.abs(c)}% on ${esc(mName(prev.ym))}`,
-        c < 0 && Number(ym.slice(5)) >= 7 ? "Shorter days and a lower sun." : c > 0 && Number(ym.slice(5)) <= 6 ? "Longer days and a higher sun." : `${fmt(cur.prod, 1)} kWh a day, against ${fmt(prev.prod, 1)}.`,
-        compareBars("kWh a day", cur.prod, prev.prod, "var(--solar)"));
-    }
-    // solar against the same month a year earlier
-    const lastYear = `${Number(ym.slice(0, 4)) - 1}${ym.slice(4)}`, ly = monthStats(lastYear);
-    if (cur.prod != null && ly.prod && ly.t.pDays >= 20) {
-      const c = change(cur.prod, ly.prod);
-      item("var(--solar)", sunIcon, `Solar ${c >= 0 ? "up" : "down"} ${Math.abs(c)}% on ${esc(monthName(lastYear))}`,
-        `${fmt(cur.prod, 1)} kWh a day, against ${fmt(ly.prod, 1)} a year earlier.${Math.abs(c) >= 15 ? " Mostly down to the weather, unless the system had problems." : ""}`);
-    }
-    // share of the home covered
-    if (cur.cover != null) {
-      const p = prev && prev.cover != null ? prev.cover : null;
-      item("var(--solar)", sunIcon, `The panels covered ${cur.cover}% of the house`,
-        p != null ? `${cur.cover > p ? "Up" : cur.cover < p ? "Down" : "The same as"} ${cur.cover === p ? "" : "from "}${p}% in ${esc(mName(prev.ym))}. The rest came from the grid.` : "The rest came from the grid.");
-    }
-    // solar missing on days the meter also shows nothing sent back
-    const prodDays = days.filter((r) => r.prod != null && r.prod > 0.5);
-    const typical = prodDays.length ? prodDays.reduce((a, r) => a + r.prod, 0) / prodDays.length : 0;
-    const dead = days.filter((r) => r.imp != null && r.exp < 0.05 && (r.prod == null || r.prod < 0.5) && typical > 8);
-    if (dead.length >= 2) {
-      const range = dead.length > 2 ? `${shortDay(dead[0].d)} to ${shortDay(dead.at(-1).d)}` : dead.map((r) => shortDay(r.d)).join(" and ");
-      item("var(--warn)", alertIc, `No solar on ${dead.length} days`, `${range}. The meter shows nothing sent back either, so the system was likely off. On a normal day it made about ${fmt(typical)} kWh, so roughly ${fmt(typical * dead.length)} kWh was missed.`);
-    }
-    // busiest day
-    const used = days.filter((r) => (r.home ?? r.imp) != null);
-    if (used.length >= 5) {
-      const top = used.reduce((a, b) => ((b.home ?? b.imp) > (a.home ?? a.imp) ? b : a));
-      const avg = used.reduce((a, r) => a + (r.home ?? r.imp), 0) / used.length;
-      item("var(--grid)", upIc, `Busiest day was ${esc(dayName(top.d))}`, `${fmt(top.home ?? top.imp, 1)} kWh, ${fmt(((top.home ?? top.imp) / avg - 1) * 100)}% above the month's average.`);
-    }
-    // weekends against weekdays
-    const wk = used.filter((r) => { const d = parseDay(r.d).getDay(); return d > 0 && d < 6; }), we = used.filter((r) => { const d = parseDay(r.d).getDay(); return d === 0 || d === 6; });
-    if (wk.length >= 5 && we.length >= 2) {
-      const a = we.reduce((x, r) => x + (r.home ?? r.imp), 0) / we.length, b = wk.reduce((x, r) => x + (r.home ?? r.imp), 0) / wk.length, c = change(a, b);
-      if (Math.abs(c) >= 5) item("var(--grid)", calIc, `Weekends used ${Math.abs(c)}% ${c > 0 ? "more" : "less"}`, `${fmt(a, 1)} kWh a day on weekends, ${fmt(b, 1)} on weekdays.`);
-    }
-    // best and dullest solar days
-    if (prodDays.length >= 5) {
-      const best = prodDays.reduce((a, b) => (b.prod > a.prod ? b : a)), low = prodDays.reduce((a, b) => (b.prod < a.prod ? b : a));
-      const ahead = days.filter((r) => r.imp != null && r.exp > r.imp).length;
-      item("var(--solar)", sunIcon, `Best solar day was ${esc(shortDay(best.d))}`, `${fmt(best.prod, 1)} kWh. The dullest was ${esc(shortDay(low.d))} at ${fmt(low.prod, 1)}.${days.some((r) => r.imp != null) ? ` ${ahead ? (ahead === 1 ? "One day" : ahead + " days") + " sent back more than the house drew." : "No day sent back more than the house drew."}` : ""}`);
-    }
-    // production against what the sunlight predicted
-    const perf = days.map((r) => [r, r.prod != null ? expectedFor(r.d) : null]).filter(([r, e]) => e != null && e > 1 && parseDay(r.d) < parseDay(torontoToday()));
-    if (perf.length >= 7) {
-      const act = perf.reduce((a, [r]) => a + r.prod, 0), exp = perf.reduce((a, [, e]) => a + e, 0);
-      const weak = perf.filter(([r, e]) => e >= 8 && r.prod < 0.6 * e && !(weatherDay(r.d) && ((weatherDay(r.d)[5] || 0) > 0)));
-      const p = pct(act, exp);
-      item(p >= 85 ? "var(--good)" : "var(--warn)", p >= 85 ? okIc : warnIc, `Panels made ${p}% of what the sunlight predicted`,
-        weak.length ? `${weak.length === 1 ? "One day" : weak.length + " days"} fell well short: ${weak.slice(0, 4).map(([r]) => shortDay(r.d)).join(", ")}${weak.length > 4 ? " and more" : ""}. Outages, snow cover or shade usually explain it.` : "Every day came in close to what the weather allowed.");
-    }
-    // the month's weather
-    const wdays = days.map((r) => [r, weatherDay(r.d)]).filter(([, w]) => w);
-    if (wdays.length >= 5) {
-      const hi = wdays.reduce((a, [, w]) => a + w[0], 0) / wdays.length, lo = wdays.reduce((a, [, w]) => a + w[1], 0) / wdays.length;
-      const sunny = wdays.filter(([, w]) => w[3] != null && w[3] >= 6).length;
-      const withBoth = wdays.filter(([r, w]) => r.prod != null && r.prod > 0.5 && w[3] != null);
-      let link = "";
-      if (withBoth.length >= 6) {
-        const srt = [...withBoth].sort((a, b) => b[1][3] - a[1][3]), half = Math.floor(srt.length / 2);
-        const avgP = (xs) => xs.reduce((a, [r]) => a + r.prod, 0) / xs.length;
-        const top = avgP(srt.slice(0, half)), bot = avgP(srt.slice(-half));
-        if (bot > 0) link = ` The sunniest half of the days made ${fmt(top / bot, 1)} times as much solar as the dullest half.`;
-      }
-      const wc = wx(sunny >= wdays.length / 2 ? 1 : 3);
-      item(wxColor(wc.icon), wxIcon(wc.icon, 20), `Average high ${deg(hi)}, low ${deg(lo)}`, `${sunny} of ${wdays.length} days had 6 or more hours of sunshine.${link}`);
-    }
-    return out.length ? `<div class="section">${esc(name)} highlights</div><div class="list hls">${out.join("")}</div>` : "";
-  }
-
-  function yearChart() {
-    const year = state.month.slice(0, 4);
-    const ms = months().filter((m) => m.startsWith(year)).map(monthStats);
-    const useHome = ms.some((m) => m.imp != null);
-    const shown = ms.filter((m) => (useHome ? m.imp != null : m.prod != null));
-    if (shown.length < 2) return "";
-    const H = 120, val = (m) => (useHome ? m.home ?? m.imp : m.prod), max = Math.max(...shown.map(val)) * 1.05;
-    const px = (v) => Math.round((v / max) * H);
-    const bars = shown.map((m) => {
-      const on = m.ym === state.month, [y, mo] = m.ym.split("-").map(Number);
-      const letter = new Date(y, mo - 1, 1).toLocaleDateString("en-US", { month: "narrow" });
-      const segs = !useHome ? `<i style="height:${px(m.prod)}px;background:var(--solar);border-radius:3px 3px 0 0"></i>`
-        : m.home != null ? `<i style="height:${px(m.self)}px;background:var(--solar);border-radius:3px 3px 0 0"></i><i style="height:${px(m.home - m.self)}px;background:var(--grid)"></i>`
-        : `<i style="height:${px(m.imp)}px;background:var(--grid);border-radius:3px 3px 0 0"></i>`;
-      return `<button type="button" class="ybar${on ? " on" : ""}" data-ym="${m.ym}" aria-pressed="${on}" aria-label="${esc(monthName(m.ym))}"><span class="ystack" style="height:${H}px">${segs}</span><span class="ylab">${letter}</span></button>`;
-    }).join("");
-    let text, legend;
-    if (useHome) {
-      const withBoth = shown.filter((m) => m.home != null), tH = withBoth.reduce((a, m) => a + m.t.home, 0), tS = withBoth.reduce((a, m) => a + m.t.self, 0);
-      text = `Home use per day by month. ${withBoth.length ? `Across these months the panels covered ${pct(tS, tH)}% of what the house used.` : ""}`;
-      legend = `<span><i style="background:var(--solar)"></i>Solar</span><span><i style="background:var(--grid)"></i>From grid</span>`;
-    } else {
-      const tot = shown.reduce((a, m) => a + m.t.prod, 0);
-      text = `Solar per day by month, ${fmt(tot)} kWh in all. There's no Toronto Hydro data for ${year}, so home use isn't shown.`;
-      legend = `<span><i style="background:var(--solar)"></i>Solar produced</span>`;
-    }
-    const yb = (state.data.bills || []).filter((x) => x.to.startsWith(year));
-    if (yb.length) {
-      const cost = yb.reduce((a, x) => a + billParts(x).current, 0), cred = yb.reduce((a, x) => a + billParts(x).credit, 0);
-      text += ` ${yb.length === 1 ? "One bill" : yb.length + " bills"} on file for ${year}: ${money(cost)} in charges, with ${money(cred)} of solar credits.`;
-    }
-    return `<div class="section">${year}</div>
-      <section class="card" style="gap:10px">
-        <span class="small">${text} Tap a month to see it.</span>
-        <div class="legend">${legend}</div>
-        <div class="ychart">${bars}</div>
-      </section>`;
-  }
-
-  function connectCard() {
-    return `<a class="list row" href="#sources" style="text-decoration:none">
-      <span style="display:flex;align-items:center;gap:12px;min-width:0"><span class="icon" style="background:var(--solar)">${sunIcon}</span>
-      <span style="display:flex;flex-direction:column;gap:2px;min-width:0"><span>Solar production</span><span class="small">Connect SolarEdge to see what the panels made and what the house used directly.</span></span></span>${chev}</a>`;
-  }
-
 
   // ---------- sun and weather ----------
   const TZNAME = "America/Toronto";
@@ -274,44 +102,30 @@
     const rad = Math.PI / 180, [y, m, dd] = d.split("-").map(Number);
     const jd = Date.UTC(y, m - 1, dd, 12) / 86400000 + 2440587.5;
     const n = Math.round(jd - 2451545 + 0.0008), js = n - LON() / 360;
-    const M = (357.5291 + 0.98560028 * js) % 360;
-    const C = 1.9148 * Math.sin(M * rad) + 0.02 * Math.sin(2 * M * rad) + 0.0003 * Math.sin(3 * M * rad);
-    const L = (M + C + 180 + 102.9372) % 360;
-    const jt = 2451545 + js + 0.0053 * Math.sin(M * rad) - 0.0069 * Math.sin(2 * L * rad);
+    const Mm = (357.5291 + 0.98560028 * js) % 360;
+    const C = 1.9148 * Math.sin(Mm * rad) + 0.02 * Math.sin(2 * Mm * rad) + 0.0003 * Math.sin(3 * Mm * rad);
+    const L = (Mm + C + 180 + 102.9372) % 360;
+    const jt = 2451545 + js + 0.0053 * Math.sin(Mm * rad) - 0.0069 * Math.sin(2 * L * rad);
     const dec = Math.asin(Math.sin(L * rad) * Math.sin(23.4397 * rad));
     const cosw = (Math.sin(-0.833 * rad) - Math.sin(LAT() * rad) * Math.sin(dec)) / (Math.cos(LAT() * rad) * Math.cos(dec));
     const w = Math.acos(Math.max(-1, Math.min(1, cosw))) / rad;
     const ms = (j) => new Date((j - 2440587.5) * 86400000);
-    return { rise: ms(jt - w / 360), set: ms(jt + w / 360), noon: ms(jt) };
+    return { rise: ms(jt - w / 360), set: ms(jt + w / 360) };
   }
   const clock = (t) => t.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZNAME }).replace(" AM", " am").replace(" PM", " pm");
+  const clockShort = (t) => clock(t).replace(/ [ap]m$/, "");
+  const hoursOf = (t) => { const p = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "numeric", hourCycle: "h23", timeZone: TZNAME }).formatToParts(t); const g = (k) => Number(p.find((x) => x.type === k).value); return g("hour") + g("minute") / 60; };
   const hm = (ms) => { const m = Math.round(ms / 60000); return `${Math.floor(m / 60)} h ${m % 60} min`; };
   const torontoToday = () => new Date().toLocaleDateString("en-CA", { timeZone: TZNAME });
+  const timeOf = (iso) => iso ? new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: TZNAME }).replace(" AM", " am").replace(" PM", " pm") : "";
+  const timeOnly = (iso) => iso ? clock(new Date(iso)) : "";
 
   const WX = [
-    [[0], "Clear", "sun"], [[1], "Mostly clear", "sun"], [[2], "Partly cloudy", "partly"], [[3], "Cloudy", "cloud"],
-    [[45, 48], "Fog", "fog"], [[51, 53, 55, 56, 57], "Drizzle", "rain"], [[61, 63, 65, 66, 67, 80, 81, 82], "Rain", "rain"],
-    [[71, 73, 75, 77, 85, 86], "Snow", "snow"], [[95, 96, 99], "Thunderstorms", "storm"],
+    [[0], "Clear"], [[1], "Mostly clear"], [[2], "Partly cloudy"], [[3], "Cloudy"],
+    [[45, 48], "Fog"], [[51, 53, 55, 56, 57], "Drizzle"], [[61, 63, 65, 66, 67, 80, 81, 82], "Rain"],
+    [[71, 73, 75, 77, 85, 86], "Snow"], [[95, 96, 99], "Thunderstorms"],
   ];
-  function wx(code, isDay = 1) {
-    const hit = WX.find(([codes]) => codes.includes(Number(code))) || [[], "—", "cloud"];
-    let label = hit[1], icon = hit[2];
-    if (!isDay && icon === "sun") { icon = "moon"; label = code === 0 ? "Clear" : "Mostly clear"; }
-    if (!isDay && icon === "partly") icon = "cloud";
-    return { label, icon };
-  }
-  const WXI = {
-    sun: '<circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-    moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
-    partly: '<path d="M8 3v1.5M3.4 6.4l1 1M2 11h1.5M12.6 6.4l-1 1"/><path d="M5.6 12.6A3.5 3.5 0 1 1 11.8 9"/><path d="M8 20h9.5a3.5 3.5 0 0 0 0-7h-.4A5 5 0 0 0 8 14a3 3 0 0 0 0 6z"/>',
-    cloud: '<path d="M7 19h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 12.1 3.5 3.5 0 0 0 7 19z"/>',
-    rain: '<path d="M7 15h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 8.1 3.5 3.5 0 0 0 7 15z"/><path d="M8 18l-1 3M12 18l-1 3M16 18l-1 3"/>',
-    snow: '<path d="M7 14h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 7.1 3.5 3.5 0 0 0 7 14z"/><path d="M8 18h.01M12 20h.01M16 18h.01M10 22h.01M14 22h.01"/>',
-    fog: '<path d="M4 9h16M3 13h18M5 17h14"/>',
-    storm: '<path d="M7 14h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 7.1 3.5 3.5 0 0 0 7 14z"/><path d="M12 15l-2 4h3l-2 4"/>',
-  };
-  const wxIcon = (icon, size = 22, color = "currentColor") => `<svg class="wxi" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${WXI[icon] || WXI.cloud}</svg>`;
-  const wxColor = (icon) => icon === "sun" ? "var(--solar)" : icon === "moon" ? "var(--muted)" : icon === "partly" ? "var(--solar)" : "var(--grid)";
+  const wx = (code) => (WX.find(([codes]) => codes.includes(Number(code))) || [[], "—"])[1];
   const deg = (t) => `${Math.round(t)}°`;
   const weatherDay = (d) => (state.data.weather && state.data.weather.daily && state.data.weather.daily[d]) || null;
 
@@ -324,9 +138,9 @@
       .then((r) => r.json())
       .then((b) => {
         if (!b.current) return;
-        live = { temp: b.current.temperature_2m, code: b.current.weather_code, isDay: b.current.is_day, time: b.current.time,
+        live = { temp: b.current.temperature_2m, code: b.current.weather_code, isDay: b.current.is_day,
                  hi: b.daily && b.daily.temperature_2m_max[0], lo: b.daily && b.daily.temperature_2m_min[0] };
-        if (["solar", "days", "overview"].includes(location.hash.slice(1) || "overview")) render();
+        if (route() === "now") render();
       })
       .catch(() => {});
   }
@@ -334,48 +148,6 @@
     if (live) return live;
     const c = state.data.weather && state.data.weather.current, t = weatherDay(torontoToday());
     return c ? { ...c, hi: t && t[0], lo: t && t[1] } : null;
-  }
-
-  function sunCard() {
-    const d = torontoToday(), { rise, set } = sunTimes(d), now = new Date();
-    const before = now < rise, after = now > set;
-    const status = before ? `Before sunrise · rises at ${clock(rise)}` : after ? `After sunset · set at ${clock(set)}` : `Daylight · sets at ${clock(set)}`;
-    // position along the arc
-    const f = Math.max(0, Math.min(1, (now - rise) / (set - rise)));
-    const W = 300, Hh = 70, x = 20 + f * (W - 40), yArc = (t) => 80 - Math.sin(t * Math.PI) * Hh;
-    let path = ""; for (let i = 0; i <= 40; i++) { const t = i / 40; path += `${i ? "L" : "M"}${(20 + t * (W - 40)).toFixed(1)},${yArc(t).toFixed(1)}`; }
-    const up = !before && !after;
-    const w = currentWeather(), cond = w ? wx(w.code, w.isDay) : null;
-    const weather = w ? `<div class="wx">
-        <span style="color:${wxColor(cond.icon)}">${wxIcon(cond.icon, 40)}</span>
-        <div style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0"><span class="num" style="font-size:34px;font-weight:600;line-height:1">${deg(w.temp)}</span><span class="small">${esc(cond.label)}</span></div>
-        ${w.hi != null ? `<div class="num" style="text-align:right;font-size:15px"><div>H ${deg(w.hi)}</div><div class="small">L ${deg(w.lo)}</div></div>` : ""}
-      </div>` : "";
-    return `<section class="card" style="gap:10px">${weather}
-      <svg viewBox="0 0 ${W} 96" class="sunarc" role="img" aria-label="${esc(status)}">
-        <line x1="0" y1="80" x2="${W}" y2="80" stroke="var(--sep)"/>
-        <path d="${path}" fill="none" stroke="var(--sep)" stroke-width="2" stroke-dasharray="3 4"/>
-        ${up ? `<circle cx="${x.toFixed(1)}" cy="${yArc(f).toFixed(1)}" r="8" fill="var(--solar)"/>` : `<circle cx="${before ? 20 : W - 20}" cy="80" r="6" fill="var(--muted)"/>`}
-      </svg>
-      <div class="axis" style="font-size:13px"><span>↑ ${clock(rise)}</span><span>${hm(set - rise)} of daylight</span><span>↓ ${clock(set)}</span></div>
-      <span class="small" style="font-weight:600;color:var(--text)">${esc(status)}</span>
-    </section>`;
-  }
-
-
-  // ---------- system health, expected production, extras ----------
-  const alerts = () => (solar() && solar().alerts) || [];
-  const warnIc = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/></svg>';
-  const okIc = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/></svg>';
-  const timeOf = (iso) => iso ? new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: TZNAME }) : "";
-
-  function alertBanner() {
-    const a = alerts();
-    if (!a.length) return "";
-    const first = a[0];
-    return `<a class="banner" href="#solar"><span class="banner-ic">${warnIc}</span><span style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1">
-      <span style="font-weight:600">${a.length === 1 ? "SolarEdge reports an alert" : `SolarEdge reports ${a.length} alerts`}</span>
-      <span class="small">${esc(first.type || "Alert")}${first.component ? " · " + esc(first.component) : ""}</span></span>${chev}</a>`;
   }
 
   // kWh per MJ/m² of sunlight, learned from nearby days (skips outages and snow)
@@ -399,472 +171,509 @@
     return w && w[4] != null && k ? k * w[4] : null;
   }
 
+  // ---------- bills ----------
+  const billFor = (ym) => (state.data.bills || []).find((b) => b.to.slice(0, 7) === ym) || null;
+  const lineSum = (lines) => Object.values(lines).reduce((a, [k, r]) => a + Math.round(k * r * 100) / 100, 0);
+  const billParts = (b) => {
+    const buy = lineSum(b.buy), credit = lineSum(b.credit), k = Object.values(b.buy).reduce((a, [x]) => a + x, 0);
+    const current = Math.round((b.due - (b.previous || 0)) * 100) / 100;
+    return { buy, credit, kwh: k, current };
+  };
+
+  // ---------- svg ----------
+  const svgText = (x, y, s, cls = "", anchor = "middle") => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" class="${cls}">${esc(s)}</text>`;
+  const niceStep = (max) => { const raw = max / 4, p = 10 ** Math.floor(Math.log10(raw)), f = raw / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p; };
+
+  // ---------- sheets ----------
+  function openSheet(title, body) {
+    closeSheet(true);
+    const el = document.createElement("div");
+    el.className = "sheet-wrap";
+    el.innerHTML = `<div class="scrim" data-close></div><section class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+      <header><h2>${esc(title)}</h2><button type="button" class="done" data-close>Done</button></header>
+      <div class="sheet-body">${body}</div></section>`;
+    document.body.appendChild(el);
+    document.body.classList.add("noscroll");
+    el.addEventListener("click", (e) => { if (e.target.closest("[data-close]")) closeSheet(); });
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("open")));
+  }
+  function closeSheet(now) {
+    const el = document.querySelector(".sheet-wrap");
+    if (!el) return;
+    document.body.classList.remove("noscroll");
+    if (now || matchMedia("(prefers-reduced-motion: reduce)").matches) { el.remove(); return; }
+    el.classList.remove("open");
+    setTimeout(() => el.remove(), 260);
+  }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
+
+  const rows = (pairs) => `<div class="rows">${pairs.filter(Boolean).map(([k, v, cls]) => `<div class="r${cls ? " " + cls : ""}"><span>${k}</span><span class="v num">${v}</span></div>`).join("")}</div>`;
+
+  // ======================================================================
+  // NOW
+  // ======================================================================
+  const alerts = () => (solar() && solar().alerts) || [];
+
+  function todayChart(s, fresh) {
+    const d = torontoToday(), st = sunTimes(d);
+    const rise = hoursOf(st.rise), set = hoursOf(st.set);
+    let pts = (fresh ? s.todayCurve || [] : []).map(([t, kw]) => { const [h, m] = t.split(":").map(Number); return [h + m / 60, kw]; });
+    // SolarEdge reports the unfinished quarter hour as 0; while the sun is up, drop trailing zeros
+    const nowH = hoursOf(new Date());
+    // a real dusk tapers off; a sudden drop to 0 on the last reading is the unfinished quarter hour
+    if (pts.length > 1 && pts.at(-1)[1] === 0 && pts.at(-2)[1] > 0.3) pts.pop();
+    if (nowH < set) while (pts.length > 1 && pts.at(-1)[1] === 0 && pts.some((p) => p[1] > 0)) pts.pop();
+    pts = pts.filter((p) => p[0] >= rise - 0.75 && p[0] <= set + 0.75);
+    const exp = expectedFor(d);
+    const expPeak = exp ? exp * Math.PI / (2 * (set - rise)) : 0;
+    const W = contentWidth(), H = 150, top = 22, bot = 26, x0 = rise - 0.6, x1 = set + 0.6;
+    const X = (h) => ((h - x0) / (x1 - x0)) * W;
+    const ymax = Math.max(1, expPeak, ...pts.map((p) => p[1])) * 1.12;
+    const Y = (v) => top + (H - top - bot) * (1 - v / ymax);
+    let g = `<line x1="0" x2="${W}" y1="${Y(0)}" y2="${Y(0)}" class="axisline"/>`;
+    if (expPeak) {
+      let p = "";
+      for (let i = 0; i <= 48; i++) { const h = rise + (set - rise) * i / 48; p += `${i ? "L" : "M"}${X(h).toFixed(1)},${Y(expPeak * Math.sin(Math.PI * i / 48)).toFixed(1)}`; }
+      g += `<path d="${p}" class="ghost"/>`;
+    }
+    if (pts.some((p) => p[1] > 0)) {
+      const line = pts.map((p) => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`);
+      g += `<path d="M${X(pts[0][0]).toFixed(1)},${Y(0)}L${line.join("L")}L${X(pts.at(-1)[0]).toFixed(1)},${Y(0)}Z" class="sunfill"/>`;
+      g += `<path d="M${line.join("L")}" class="sunline"/>`;
+      const last = pts.at(-1);
+      if (nowH < set + 0.5 && last[1] > 0) {
+        const lx = X(last[0]), ly = Y(last[1]), hh = Math.floor(last[0]), mm = Math.round((last[0] - hh) * 60);
+        const lab = new Date(2000, 0, 1, hh, mm).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(/ [AP]M$/, "");
+        g += `<circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="4.5" class="dot"/>`;
+        g += svgText(lx + (lx > W - 50 ? -8 : 8), Math.max(12, ly - 7), lab, "sunlabel", lx > W - 50 ? "end" : "start");
+      }
+    }
+    [[rise, "↑ " + clockShort(st.rise)], [set, "↓ " + clockShort(st.set)]].forEach(([h, t]) => {
+      g += `<line x1="${X(h)}" x2="${X(h)}" y1="${Y(0)}" y2="${Y(0) + 5}" class="axisline"/>` + svgText(X(h), H - 4, t);
+    });
+    g += svgText(X((rise + set) / 2), H - 4, "noon");
+    const label = `Solar power today from sunrise at ${clock(st.rise)} to sunset at ${clock(st.set)}`;
+    return { svg: `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${g}</svg>`, exp, st };
+  }
+
+  function nowScreen() {
+    const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: TZNAME });
+    const head = `<div class="top"><div><div class="eyebrow">${esc(today)}</div><h1>Now</h1></div>
+      <a class="iconbtn" href="#settings" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.4"/><circle cx="15" cy="17" r="2.4"/></svg></a></div>`;
+    const s = solar();
+    if (!s) {
+      return head + `<section class="first"><p class="lead">SolarEdge isn't connected yet.</p>
+        <p class="sub">${state.data.connectUrl ? "Sign in with your SolarEdge account and approve access to see what the panels are making." : "Add your SolarEdge client ID, client secret and site ID as repository secrets in GitHub, then run the workflow again."}</p>${connectBtn()}</section>`;
+    }
+    // overnight the last numbers belong to yesterday; don't show them as today's
+    const fresh = !s.todayDate || s.todayDate === torontoToday();
+    const { svg, exp, st } = todayChart(s, fresh), nowD = new Date();
+    // after dark the last reading is stale, so don't show it as power right now
+    const todayKwh = fresh ? s.today : 0, nowKw = fresh && nowD < new Date(st.set.getTime() + 30 * 60000) ? s.nowKw : 0;
+    const nowNote = nowKw > 0 ? `of ${fmt(s.peakKw, 2)} kW` : nowD < st.rise ? `sunrise ${clock(st.rise)}` : nowD > st.set ? `sun set at ${clock(st.set)}` : "not producing";
+
+    const stale = needsConnect() ? `<section class="notice"><b>SolarEdge needs you to sign in again.</b> These are the last numbers it sent.${connectBtn()}</section>` : "";
+    const a = alerts();
+    const status = a.length
+      ? `<section class="alerts" id="alerts">${a.map((x) => `<div class="status bad"><i class="dot-s"></i><span><b>${esc(x.type || "Alert")}</b><span class="sub">${[x.component, x.impact != null && `impact ${x.impact} of 9`, x.first && `since ${timeOf(x.first)}`].filter(Boolean).map(esc).join(" · ")}</span></span></div>`).join("")}
+         <p class="sub">SolarEdge also opened an issue in your GitHub repo, which emails you.</p></section>`
+      : `<section><div class="status"><i class="dot-s ${s.alertsChecked ? "" : "unknown"}"></i><span>${s.alertsChecked ? "System normal" : "Alerts not checked yet"}</span>${s.alertsChecked ? `<span class="sub right">checked ${esc(timeOnly(s.alertsChecked))}</span>` : ""}</div></section>`;
+
+    const w = currentWeather(), t = state.data.weather && state.data.weather.tomorrow, k = state.data.weather && state.data.weather.factor;
+    const wrows = [];
+    if (w) wrows.push([`${deg(w.temp)} and ${esc(wx(w.code).toLowerCase())}`, w.hi != null ? `H ${deg(w.hi)} <span class="sub">L ${deg(w.lo)}</span>` : ""]);
+    if (t) { const [, hi, lo, code, , ghi] = t, e = k && ghi != null ? k * ghi : null; wrows.push([`Tomorrow, ${esc(wx(code).toLowerCase())}`, e != null ? `about ${fmt(e)} kWh` : `H ${deg(hi)} <span class="sub">L ${deg(lo)}</span>`]); }
+
+    const since = s.installed ? s.installed.slice(0, 4) : "install";
+    return `${head}${stale}${a.length ? status : ""}
+      <section class="first">
+        <div class="pair">
+          <div><div class="label">Making now</div><div class="big num ${nowKw > 0 ? "sun" : "dim"}">${fmt(nowKw, nowKw ? 2 : 0)}<small> kW</small></div><div class="sub">${esc(nowNote)}</div></div>
+          <div><div class="label">So far today</div><div class="big num">${fmt(todayKwh, 1)}<small> kWh</small></div>${exp ? `<div class="sub">about ${fmt(exp)} expected</div>` : ""}</div>
+        </div>
+        ${svg}
+        ${exp ? `<p class="sub">The dotted line is what today's sunlight should give.</p>` : ""}
+      </section>
+      ${wrows.length ? `<section>${rows(wrows)}</section>` : ""}
+      ${a.length ? "" : status}
+      <section>
+        <div class="trio num">
+          <div><div class="label">This month</div><div class="n">${kwh(s.month)}</div></div>
+          <div><div class="label">This year</div><div class="n">${fmt(s.year)}</div></div>
+          <div><div class="label">Since ${esc(since)}</div><div class="n">${fmt(s.lifetime)}</div></div>
+        </div>
+        <p class="sub">kWh produced${s.updated ? `. SolarEdge last reported ${esc(timeOf(s.updated))}.` : ""}</p>
+      </section>`;
+  }
+
+  // ======================================================================
+  // MONTH
+  // ======================================================================
+  function monthStrip() {
+    const year = state.month.slice(0, 4), all = new Set(months());
+    const yms = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
+    // bar height is what the month would have cost without solar; energy when the year has no costs
+    const cost = (ym) => { const m = M()[ym]; return m && m.grid != null ? m.grid + Math.max(0, m.saved || 0) : null; };
+    const useMoney = yms.some((ym) => cost(ym) != null);
+    const energy = (ym) => { const t = monthStats(ym).t; return t.hDays ? t.imp + t.self : t.prod || null; };
+    const vs = yms.map((ym) => [ym, all.has(ym) ? (useMoney ? cost(ym) : energy(ym)) : null, all.has(ym)]);
+    const mx = Math.max(1, ...vs.map(([, v]) => v || 0));
+    return `<div class="strip" role="group" aria-label="Months of ${year}">${vs.map(([ym, v, has]) => {
+      const on = ym === state.month, letter = new Date(Number(year), Number(ym.slice(5)) - 1, 1).toLocaleDateString("en-US", { month: "narrow" });
+      return `<button type="button" data-ym="${ym}" ${has ? "" : "disabled"} aria-pressed="${on}" aria-label="${esc(monthName(ym))}">
+        <span class="sb"><i class="${v == null ? (has ? "thin" : "none") : ""}" style="${v != null ? `height:${(4 + 30 * v / mx).toFixed(1)}px` : ""}"></i></span><span class="sl">${letter}</span></button>`;
+    }).join("")}</div>`;
+  }
+
+  function monthHead() {
+    const all = months(), i = all.indexOf(state.month);
+    const prev = i > 0 ? all[i - 1] : null, next = i < all.length - 1 ? all[i + 1] : null;
+    return `<div class="top"><div><div class="eyebrow">${state.month.slice(0, 4)}</div><h1>${esc(mName(state.month))}</h1></div>
+      <div class="steps"><button type="button" ${prev ? `data-ym="${prev}"` : "disabled"} aria-label="Previous month">‹</button><button type="button" ${next ? `data-ym="${next}"` : "disabled"} aria-label="Next month">›</button></div></div>
+      ${monthStrip()}`;
+  }
+
+  function moneyBlock(ym) {
+    const m = M()[ym];
+    if (!m || (m.grid == null && m.saved == null)) return "";
+    const name = mName(ym), isBill = m.gridSource === "bill", sofar = m.complete === false;
+    const grid = m.grid != null ? dollars(m.grid) : "–";
+    let bar = "", line = "";
+    if (m.grid != null && m.saved != null && m.without > 0) {
+      bar = `<div class="split" role="img" aria-label="Grid ${dollars(m.grid)}, solar ${dollars(m.saved)}"><i style="flex:${m.grid};background:var(--grid)"></i><i style="flex:${Math.max(0, m.saved)};background:var(--sun)"></i></div>`;
+      line = `<p class="lead">Without solar, ${esc(name)} would have cost <b class="num">${dollars(m.without)}</b>.</p>`;
+    } else if (m.grid == null) {
+      line = `<p class="sub">${sofar ? "The grid cost shows once the month is over and the meter data is in." : "No meter data or bill for this month, so the grid cost isn't known."}</p>`;
+    }
+    const src = isBill
+      ? `<button type="button" class="linkline" data-sheet="bill">From your Toronto Hydro bill${chev}</button>`
+      : m.grid != null ? `<p class="sub">${totals(monthDays(ym)).hDays ? "Estimated from your meter" : "Estimated from the kWh on your later bills"}. No bill on file for ${esc(name)}.</p>` : "";
+    return `<section class="first">
+      <div class="pair">
+        <div><div class="label">Paid to the grid</div><div class="big num">${grid}</div></div>
+        <div><div class="label">Saved by solar${sofar ? " so far" : ""}</div><div class="big num sun">${m.saved != null ? dollars(m.saved) : "–"}</div></div>
+      </div>${bar}${line}${src}</section>`;
+  }
+
+  function dayChart(ym) {
+    const days = monthDays(ym);
+    const hasHome = days.some((r) => r.home != null), hasImp = days.some((r) => r.imp != null), hasProd = days.some((r) => r.prod != null);
+    if (!hasImp && !hasProd) return "";
+    const segs = (r) => r.home != null ? [[r.imp, "grid"], [r.self, "sun"]] : r.imp != null ? [[r.imp, "grid"]] : (!hasImp && r.prod != null) ? [[r.prod, "sun"]] : null;
+    const val = (r) => { const x = segs(r); return x ? x.reduce((a, [v]) => a + v, 0) : null; };
+    const vals = days.map(val).filter((v) => v != null);
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const W = contentWidth(), H = 196, top = 10, bot = 20, right = 44, n = days.length, pw = W - right, bw = pw / n;
+    const step = niceStep(Math.max(...vals)), ymax = Math.ceil(Math.max(...vals) / step) * step || 1;
+    const Y = (v) => top + (H - top - bot) * (1 - v / ymax);
+    let g = "";
+    for (let v = step; v <= ymax + 1e-9; v += step) {
+      g += `<line x1="0" x2="${pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="gridline"/>`;
+      if (Math.abs(Y(v) - Y(avg)) > 12) g += svgText(pw + 6, Y(v) + 4, fmt(v), "", "start");
+    }
+    days.forEach((r, i) => {
+      const x = i * bw, on = r.d === state.day, s = segs(r);
+      if (on) g += `<rect x="${(x).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H - bot + 2}" rx="3" class="sel"/>`;
+      let acc = 0;
+      if (s) s.forEach(([v, c]) => { g += `<rect x="${(x + 1).toFixed(1)}" y="${Y(acc + v).toFixed(1)}" width="${Math.max(1.5, bw - 2).toFixed(1)}" height="${Math.max(0, Y(acc) - Y(acc + v)).toFixed(1)}" class="b-${c}"/>`; acc += v; });
+      g += `<rect x="${x.toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}" class="hit" data-day="${r.d}" role="button" aria-label="${esc(dayName(r.d))}"/>`;
+    });
+    g += `<line x1="0" x2="${pw}" y1="${Y(avg).toFixed(1)}" y2="${Y(avg).toFixed(1)}" class="avgline"/>` + svgText(pw + 6, Y(avg) + 4, "avg " + kwh(avg).replace(/\.\d$/, (x) => avg < 10 ? x : ""), "strong", "start");
+    [1, 8, 15, 22, 29].filter((d) => d <= n).forEach((d) => { g += svgText((d - 0.5) * bw, H - 4, d); });
+    const title = hasHome ? `Each day, kWh the house used, from the <b class="ink">grid</b> and from <b class="sun">solar</b>`
+      : hasImp ? `Each day, kWh bought from the <b class="ink">grid</b>${hasProd ? ". Solar shows once the meter and SolarEdge both have the day." : ""}`
+      : `Each day, kWh the <b class="sun">panels</b> made. There's no meter data for this month yet.`;
+    return `<section><div class="label">${title}</div>
+      <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Daily chart, tap a day for detail">${g}</svg>
+      <p class="sub">Tap a day to see it.</p></section>`;
+  }
+
+  function facts(ym) {
+    const days = monthDays(ym), cur = monthStats(ym);
+    const all = months(), i = all.indexOf(ym), prev = i > 0 ? monthStats(all[i - 1]) : null, pn = prev ? mName(prev.ym) : "";
+    const out = [];
+    const add = (p, html) => out.push([p, html]);
+    const mo = Number(ym.slice(5));
+
+    // an outage first: the meter shows nothing sent back and SolarEdge shows nothing made
+    const prodDays = days.filter((r) => r.prod != null && r.prod > 0.5);
+    const typical = prodDays.length ? prodDays.reduce((a, r) => a + r.prod, 0) / prodDays.length : 0;
+    const dead = days.filter((r) => r.imp != null && r.exp < 0.05 && (r.prod == null || r.prod < 0.5) && typical > 8);
+    if (dead.length >= 2) {
+      const range = dead.length > 2 ? `${shortDay(dead[0].d)} to ${shortDay(dead.at(-1).d)}` : dead.map((r) => shortDay(r.d)).join(" and ");
+      add(0, `<b class="bad">No solar on ${dead.length} days</b>, ${esc(range)}. The meter shows nothing sent back either, so the system was likely off. That's about <b>${fmt(typical * dead.length)}</b> kWh missed.`);
+    }
+    // production against what the sunlight predicted
+    const perf = days.map((r) => [r, r.prod != null ? expectedFor(r.d) : null]).filter(([r, e]) => e != null && e > 1 && parseDay(r.d) < parseDay(torontoToday()));
+    if (perf.length >= 7) {
+      const act = perf.reduce((a, [r]) => a + r.prod, 0), ex = perf.reduce((a, [, e]) => a + e, 0), p = pct(act, ex);
+      const weak = perf.filter(([r, e]) => e >= 8 && r.prod < 0.6 * e && !(weatherDay(r.d) && (weatherDay(r.d)[5] || 0) > 0));
+      add(p < 85 ? 1 : 4, `The panels made <b class="${p < 85 ? "bad" : ""}">${p}%</b> of what the sunlight predicted.${weak.length ? ` ${weak.length === 1 ? "One day" : weak.length + " days"} fell well short: ${weak.slice(0, 3).map(([r]) => shortDay(r.d)).join(", ")}${weak.length > 3 ? " and more" : ""}.` : ""}`);
+    }
+    // home use against last month
+    const curUse = cur.home ?? cur.imp, prevUse = prev ? (cur.home != null ? prev.home : prev.imp) : null;
+    if (curUse != null && prevUse) {
+      const c = change(curUse, prevUse), what = cur.home != null ? "Home use" : "Grid use";
+      if (Math.abs(c) >= 5) add(2, `${what} ${c > 0 ? "rose" : "fell"} <b>${Math.abs(c)}%</b> on ${esc(pn)}, to <b>${fmt(curUse)}</b> kWh a day.${c > 15 && mo >= 9 ? " Heating has started." : c < -15 && mo <= 6 ? " Less heating as it warms up." : ""}`);
+      else add(6, `${what} held steady at <b>${fmt(curUse)}</b> kWh a day.`);
+    }
+    // share of the house the panels covered
+    if (cur.cover != null) {
+      const p = prev && prev.cover != null ? prev.cover : null;
+      add(3, `Solar covered <b>${cur.cover}%</b> of the house${p != null && p !== cur.cover ? `, ${cur.cover > p ? "up" : "down"} from ${p}%` : ""}.`);
+    }
+    // solar against the same month a year earlier
+    const ly = `${Number(ym.slice(0, 4)) - 1}${ym.slice(4)}`, lys = monthStats(ly);
+    if (cur.prod != null && lys.prod && lys.t.pDays >= 20) {
+      const c = change(cur.prod, lys.prod);
+      add(5, `Solar was <b>${Math.abs(c)}%</b> ${c >= 0 ? "higher" : "lower"} than ${esc(monthName(ly))}, ${fmt(cur.prod, 1)} kWh a day against ${fmt(lys.prod, 1)}.`);
+    }
+    if (cur.prod != null && prev && prev.prod && cur.home == null) {
+      const c = change(cur.prod, prev.prod);
+      add(5, `Solar was <b>${Math.abs(c)}%</b> ${c >= 0 ? "up" : "down"} on ${esc(pn)}.`);
+    }
+    const top = out.sort((a, b) => a[0] - b[0]).slice(0, 3);
+    return top.length ? `<section><div class="label">What changed</div><div class="facts">${top.map(([, h]) => `<p>${h}</p>`).join("")}</div></section>` : "";
+  }
+
+  function ledger(ym) {
+    const days = monthDays(ym), t = totals(days), gm = (state.data.gridMonthly || {})[ym];
+    const r = [];
+    const perDay = (v, n) => n ? fmt(v / n, 1) : "";
+    if (t.hDays) r.push(["Bought from grid", kwh(t.imp), perDay(t.imp, t.hDays)]);
+    else if (gm) r.push(["Bought from grid <span class=\"sub\">bill</span>", fmt(gm), ""]);
+    if (t.pDays) r.push(["Produced", kwh(t.prod), perDay(t.prod, t.pDays), "sun"]);
+    if (t.bothDays) r.push(["Used directly", kwh(t.self), perDay(t.self, t.bothDays)]);
+    if (t.hDays) r.push(["Sent back", kwh(t.exp), perDay(t.exp, t.hDays)]);
+    if (!r.length) return "";
+    return `<section><table class="ledger num"><thead><tr><th></th><th>Month</th><th>A day</th></tr></thead><tbody>
+      ${r.map(([k, a, b, c]) => `<tr><td>${k}</td><td class="${c || ""}">${a}</td><td class="${c || ""}">${b}</td></tr>`).join("")}</tbody></table>
+      <p class="sub">${["All figures in kWh", t.hDays && t.hDays < daysIn(ym) ? `meter data for ${t.hDays} of ${daysIn(ym)} days` : "", t.pDays && t.pDays < daysIn(ym) && ym < torontoToday().slice(0, 7) ? `SolarEdge data for ${t.pDays} days` : ""].filter(Boolean).join(", ")}.</p></section>`;
+  }
+
+  function monthScreen() {
+    if (!state.month) return `<div class="top"><div><h1>Month</h1></div></div><section class="first"><p class="lead">No data yet.</p><p class="sub">Add a Toronto Hydro export to data/hydro or connect SolarEdge.</p></section>`;
+    return monthHead() + moneyBlock(state.month) + dayChart(state.month) + facts(state.month) + ledger(state.month);
+  }
+
+  function daySheet(d) {
+    const r = monthDays(d.slice(0, 7)).find((x) => x.d === d);
+    const p = [];
+    if (r.home != null) p.push(["Home used", `<b>${kwh(r.home)} kWh</b>`]);
+    if (r.imp != null) p.push(["Bought from grid", `${kwh(r.imp)} kWh`]);
+    if (r.prod != null) p.push(["Solar produced", `${kwh(r.prod)} kWh`, "sun"]);
+    const ex = r.prod != null ? expectedFor(r.d) : null;
+    if (ex != null && ex > 0.5) p.push(["Expected from the sunlight", `${kwh(ex)} kWh <span class="sub">· ${pct(r.prod, ex)}%</span>`]);
+    if (r.self != null) p.push(["Used directly", `${kwh(r.self)} kWh`]);
+    if (r.exp != null) p.push(["Sent back", `${kwh(r.exp)} kWh`]);
+    if (!p.length) p.push(["No data for this day", ""]);
+    const wd = weatherDay(r.d), sun = sunTimes(r.d), w = [];
+    if (wd) { w.push([esc(wx(wd[2])), `H ${deg(wd[0])} <span class="sub">L ${deg(wd[1])}</span>`]); if (wd[3] != null) w.push(["Sunshine", `${fmt(wd[3], 1)} h`]); }
+    w.push(["Sunrise and sunset", `${clock(sun.rise)} · ${clock(sun.set)}`], ["Daylight", hm(sun.set - sun.rise)]);
+    return rows(p) + `<div class="gap"></div>` + rows(w);
+  }
+
+  function billSheet(ym) {
+    const b = billFor(ym), p = billParts(b), name = mName(ym);
+    const tou = ["on", "mid", "off"].filter((k) => b.buy[k]).map((k) => [`<span class="indent">${{ on: "On-peak", mid: "Mid-peak", off: "Off-peak" }[k]} <span class="sub">${fmt(b.buy[k][0])} kWh at ${fmt(b.buy[k][1] * 100, 1)}¢</span></span>`, money(b.buy[k][0] * b.buy[k][1]), "minor"]);
+    const r = [
+      [`Electricity bought <span class="sub">${fmt(p.kwh)} kWh</span>`, money(p.buy)], ...tou,
+      p.credit > 0 ? [`Solar credits <span class="sub">${fmt(b.generated)} kWh sent back</span>`, money(-p.credit), "sun"] : null,
+      ["Delivery", money(b.delivery)], ["Regulatory", money(b.regulatory)],
+      b.other ? ["Late payment charge", money(b.other)] : null,
+      ["HST", money(b.hst)], b.rebate ? ["Ontario Electricity Rebate", money(-b.rebate)] : null,
+      [`<b>${esc(name)} charges</b>`, `<b>${money(p.current)}</b>`, "total"],
+    ];
+    const carried = Math.abs(b.previous || 0) >= 0.5 ? (b.previous > 0 ? `The amount due was ${money(b.due)}, including ${money(b.previous)} carried over unpaid from the bill before.` : `The amount due was ${money(b.due)} after a ${money(-b.previous)} credit from the bill before.`) : "";
+    return `<p class="sub">${shortDay(b.from)} to ${shortDay(b.to)} · ${fmt(p.current / p.kwh * 100, 1)}¢ per kWh all in · ${b.season} prices</p>${rows(r)}${carried ? `<p class="sub">${carried}</p>` : ""}`;
+  }
+
+  // ======================================================================
+  // HISTORY
+  // ======================================================================
+  function yearTotals() {
+    const ys = {};
+    for (const [k, m] of Object.entries(M())) {
+      const y = (ys[k.slice(0, 4)] ||= { grid: 0, saved: 0, gridN: 0, last: null, first: null });
+      y.grid += m.grid || 0; y.saved += m.saved || 0;
+      if (m.grid != null) { y.gridN++; y.last = k; y.first ||= k; }
+    }
+    if (solar()) for (const [d, v] of Object.entries(solar().daily)) { const y = (ys[d.slice(0, 4)] ||= { grid: 0, saved: 0, gridN: 0 }); y.prod = (y.prod || 0) + (v || 0); }
+    return ys;
+  }
+
+  function historyChart() {
+    const ys = Object.keys(yearTotals()).sort().reverse();
+    if (!ys.length) return "";
+    const W = contentWidth(), rowH = 64, lab = 42, top = 6, H = ys.length * rowH + 18, bw = (W - lab) / 12;
+    const vals = ys.flatMap((y) => Array.from({ length: 12 }, (_, i) => { const m = M()[`${y}-${String(i + 1).padStart(2, "0")}`]; return m ? (m.grid || 0) + Math.max(0, m.saved || 0) : 0; }));
+    const mx = Math.max(1, ...vals), sc = (v) => (rowH - 16) * v / mx;
+    let g = "";
+    ys.forEach((y, r) => {
+      const base = top + r * rowH + rowH - 10;
+      g += svgText(0, base - 2, y, "strong", "start") + `<line x1="${lab}" x2="${W}" y1="${base}" y2="${base}" class="axisline"/>`;
+      for (let i = 0; i < 12; i++) {
+        const ym = `${y}-${String(i + 1).padStart(2, "0")}`, m = M()[ym], x = lab + i * bw + 2, w = Math.max(2, bw - 4);
+        if (!m) continue;
+        const gh = m.grid != null ? sc(m.grid) : 0, sh = m.saved != null ? sc(Math.max(0, m.saved)) : 0;
+        if (ym === state.month) g += `<rect x="${(x - 2).toFixed(1)}" y="${base - rowH + 12}" width="${bw.toFixed(1)}" height="${rowH - 10}" rx="3" class="sel"/>`;
+        if (gh) g += `<rect x="${x.toFixed(1)}" y="${(base - gh).toFixed(1)}" width="${w.toFixed(1)}" height="${gh.toFixed(1)}" class="b-grid${m.gridSource === "estimate" ? " est" : ""}"/>`;
+        if (sh) g += `<rect x="${x.toFixed(1)}" y="${(base - gh - sh).toFixed(1)}" width="${w.toFixed(1)}" height="${sh.toFixed(1)}" class="b-sun"/>`;
+        g += `<rect x="${(x - 2).toFixed(1)}" y="${base - rowH + 10}" width="${bw.toFixed(1)}" height="${rowH}" class="hit" data-ym="${ym}" data-go="month" role="button" aria-label="${esc(monthName(ym))}: paid ${m.grid != null ? dollars(m.grid) : "unknown"}, saved ${m.saved != null ? dollars(m.saved) : "unknown"}"/>`;
+      }
+    });
+    "JFMAMJJASOND".split("").forEach((c, i) => { g += svgText(lab + i * bw + bw / 2, H - 2, c); });
+    return `<section><div class="label">Cost each month, from the <b class="ink">grid</b> and saved by <b class="sun">solar</b>. Same scale every year.</div>
+      <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Monthly cost by year">${g}</svg>
+      <p class="sub">Paler bars are estimates. Tap a month to open it.</p></section>`;
+  }
+
+  function historyScreen() {
+    const ms = Object.entries(M());
+    if (!ms.length) return `<div class="top"><div><h1>History</h1></div></div><section class="first"><p class="lead">No cost history yet.</p></section>`;
+    const grid = ms.reduce((a, [, m]) => a + (m.grid || 0), 0), saved = ms.reduce((a, [, m]) => a + (m.saved || 0), 0);
+    const first = ms.map(([k]) => k).sort()[0], missing = ms.filter(([, m]) => m.grid == null && m.complete !== false).length;
+    const ys = yearTotals(), thisYear = torontoToday().slice(0, 4);
+    const instY = solar() && solar().installed ? solar().installed.slice(0, 4) : null;
+    const trs = Object.keys(ys).sort().reverse().map((y) => {
+      const v = ys[y];
+      const note = y === thisYear && v.last ? ` <span class="sub">to ${new Date(2000, Number(v.last.slice(5)) - 1, 1).toLocaleDateString("en-US", { month: "short" })}</span>` : v.first && v.first.slice(5) !== "01" ? ` <span class="sub">from ${new Date(2000, Number(first.slice(5)) - 1, 1).toLocaleDateString("en-US", { month: "short" })}</span>` : "";
+      const target = (y === thisYear || !v.last) ? (Object.keys(M()).filter((k) => k.startsWith(y) && M()[k].grid != null).at(-1) || `${y}-01`) : v.last;
+      return `<tr data-ym="${target}" data-go="month"><td>${y}${note}</td><td>${dollars(v.grid)}</td><td class="sun">${dollars(v.saved)}</td><td>${v.prod != null ? fmt(v.prod) : "–"}</td></tr>`;
+    }).join("");
+    const bt = (state.data.money && state.data.money.backtest) || [];
+    // the typical miss: three in four estimated months land at least this close to the bill
+    const offs = bt.map((b) => Math.abs(b.off)).sort((a, b) => a - b), typ = offs.length ? offs[Math.floor(offs.length * 0.75)] : null;
+    return `<div class="top"><div><div class="eyebrow">Since ${esc(monthName(first))}</div><h1>History</h1></div></div>
+      <section class="first">
+        <div class="pair">
+          <div><div class="label">Paid to the grid</div><div class="big num${dollars(grid).length > 6 ? " long" : ""}">${dollars(grid)}</div></div>
+          <div><div class="label">Saved by solar</div><div class="big num sun${dollars(grid).length > 6 ? " long" : ""}">${dollars(saved)}</div></div>
+        </div>
+        <div class="split"><i style="flex:${grid};background:var(--grid)"></i><i style="flex:${Math.max(0, saved)};background:var(--sun)"></i></div>
+        <p class="lead">Solar has taken about <b>${pct(saved, grid + saved)}%</b> off what power would have cost.</p>
+        ${missing ? `<p class="sub">${missing} month${missing > 1 ? "s" : ""} with no meter data or bill ${missing > 1 ? "aren't" : "isn't"} counted.</p>` : ""}
+      </section>
+      ${historyChart()}
+      <section>
+        <table class="ledger years num"><thead><tr><th></th><th>Paid</th><th>Saved</th><th>Made, kWh</th></tr></thead><tbody>${trs}</tbody></table>
+        <button type="button" class="linkline" data-sheet="method">Months with a bill use the bill. The rest are estimated${typ != null ? `, usually within ${fmt(Math.max(1, Math.ceil(typ * 100)))}% of the real bill` : ""}.${chev}</button>
+      </section>`;
+  }
+
+  function methodSheet() {
+    const md = (state.data.money && state.data.money.model) || {}, bt = (state.data.money && state.data.money.backtest) || [];
+    const r = bt.map((b) => [esc(monthName(b.month, "short")), `${money(b.estimate)} <span class="sub">bill ${money(b.bill)} · ${b.off >= 0 ? "+" : "−"}${fmt(Math.abs(b.off) * 100, 1)}%</span>`]);
+    return `<p>Months with a Toronto Hydro bill use what the bill charged. For the other months, the app prices each hour your meter recorded at Ontario's time-of-use rates, then adds delivery (${money(md.fixedDelivery || 0)} a month plus ${fmt((md.deliveryPerKwh || 0) * 100, 1)}¢ per kWh), regulatory charges, HST and the Ontario Electricity Rebate the way your bills apply them.</p>
+      <p>Solar's saving is the credit for power sent back plus the power the house used straight from the panels, valued at what buying it would have cost.</p>
+      ${r.length ? `<div class="label" style="margin-top:8px">Estimates checked against your bills</div>${rows(r)}` : ""}`;
+  }
+
+  // ======================================================================
+  // SETTINGS
+  // ======================================================================
   const pretty = (name) => name.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase()).replace(/\bAc\b/, "AC").replace(/\bDc\b/, "DC");
   function inverterRows() {
     const inv = solar() && solar().inverter;
     if (!inv || !inv.metrics) return "";
     const m = inv.metrics, names = Object.keys(m);
-    // skip readings that are all zero (e.g. consumption on a site without a consumption meter)
-    const live = names.filter((n) => !(typeof m[n].max === "number" && m[n].max === 0 && m[n].min === 0));
-    const pick = (re) => live.find((n) => re.test(n));
+    const livem = names.filter((n) => !(typeof m[n].max === "number" && m[n].max === 0 && m[n].min === 0));
+    const pick = (re) => livem.find((n) => re.test(n));
     const order = [pick(/^power$|^ac.*power|activepower/i), pick(/mode|status|state/i), pick(/temp/i), pick(/^voltage$|^ac.*volt/i), pick(/^current$|^ac.*curr/i), pick(/freq/i), pick(/dc.*power/i), pick(/dc.*volt/i), pick(/^energy$/i)];
-    const shown = [...new Set(order.filter(Boolean)), ...live.filter((n) => !order.includes(n))].slice(0, 8);
+    const shown = [...new Set(order.filter(Boolean)), ...livem.filter((n) => !order.includes(n))].slice(0, 8);
     const LABELS = { power: "Output", energy: "Energy in the last hour", voltage: "Grid voltage", current: "Current", frequency: "Grid frequency", temperature: "Temperature" };
-    const pretty = (n) => LABELS[n] || n.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase()).replace(/\bAc\b/, "AC").replace(/\bDc\b/, "DC");
     const UNITS = { C: "°C", CELSIUS: "°C", W: " W", WATT: " W", V: " V", VOLT: " V", HZ: " Hz", HERTZ: " Hz", A: " A", AMPERE: " A", WH: " Wh", KWH: " kWh" };
     const unitOf = (x) => { const u = String(x.unit || "").toUpperCase(); return UNITS[u] ?? (x.unit ? " " + x.unit.toLowerCase() : ""); };
     const MODES = { MPPT: "Producing", SLEEPING: "Sleeping", NIGHT: "Night", NIGHT_MODE: "Night", THROTTLED: "Limited", FAULT: "Fault", STARTING: "Starting up", OFF: "Off", SHUTTING_DOWN: "Shutting down", STANDBY: "Standby", LOCKED: "Locked" };
     const val = (x) => typeof x.latest === "number" ? fmt(x.latest, Math.abs(x.latest) < 100 ? 1 : 0) + unitOf(x) : esc(MODES[String(x.latest).toUpperCase()] || String(x.latest ?? "–").replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase()));
-    const rows = shown.map((n) => {
-      const x = m[n], extra = /temp|^power$/i.test(n) && typeof x.max === "number" && x.max !== x.latest ? ` <span class="small">· high ${fmt(x.max, 0)}${unitOf(x)}</span>` : "";
-      return `<div class="row"><span>${esc(pretty(n))}</span><span class="val num">${val(x)}${extra}</span></div>`;
-    }).join("");
-    return `<div class="section">Inverter</div><div class="list">${rows}</div><div class="foot">Hourly readings from SolarEdge, last at ${esc(timeOf(inv.at))}.</div>`;
+    return `<div class="group-label">Inverter readings</div>${rows(shown.map((n) => [esc(LABELS[n] || pretty(n)), val(m[n])]))}<p class="sub">Hourly from SolarEdge, last at ${esc(timeOf(inv.at))}.</p>`;
   }
 
-  function healthBlock() {
-    const s = solar();
-    if (!s) return "";
-    const a = alerts();
-    const rows = a.length
-      ? a.map((x) => `<div class="row" style="align-items:flex-start"><span class="hl-ic" style="color:var(--warn)">${warnIc}</span><span style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:0">
-          <span style="font-weight:600">${esc(x.type || "Alert")}</span>
-          <span class="small">${[x.component, x.category && pretty(String(x.category).toLowerCase()), x.impact != null && `impact ${x.impact} of 9`, x.first && `since ${timeOf(x.first)}`].filter(Boolean).map(esc).join(" · ")}</span></span></div>`).join("")
-      : `<div class="row" style="justify-content:flex-start;gap:10px"><span class="hl-ic" style="color:var(--good)">${okIc}</span><span>${s.alertsChecked ? "No open alerts" : "Alerts not checked yet"}</span></div>`;
-    return `<div class="section" id="alerts">System health</div><div class="list hl-list">${rows}</div>
-      ${s.alertsChecked ? `<div class="foot">SolarEdge checked ${esc(timeOf(s.alertsChecked))}. New alerts also open an issue in your GitHub repo, which emails you.</div>` : ""}`;
-  }
-
-  function benefitsCard() {
-    const b = solar() && solar().benefits;
-    if (!b) return "";
-    const keys = Object.keys(b), num = (re) => { const k = keys.find((x) => re.test(x) && typeof b[x] === "number"); return k ? [k, b[k]] : null; };
-    const co2 = num(/co2/i), trees = num(/tree/i), bulbs = num(/bulb/i), ev = num(/ev(miles|km)?/i);
-    const unitK = keys.find((k) => /unit/i.test(k)), unit = unitK ? String(b[unitK]).toLowerCase() : "kg";
-    const parts = [];
-    if (co2) { const kg = /lb/.test(unit) ? co2[1] * 0.4536 : /^t|ton/.test(unit) ? co2[1] * 1000 : co2[1]; parts.push(`<div class="tile"><span class="k">CO₂ avoided</span><span class="v num">${kg >= 1000 ? fmt(kg / 1000, 1) + " <small>tonnes</small>" : fmt(kg) + " <small>kg</small>"}</span></div>`); }
-    if (trees) parts.push(`<div class="tile"><span class="k">Like planting</span><span class="v num">${fmt(trees[1])} <small>trees</small></span></div>`);
-    if (!trees && bulbs) parts.push(`<div class="tile"><span class="k">Light bulbs for a day</span><span class="v num">${fmt(bulbs[1])}</span></div>`);
-    if (!trees && !bulbs && ev) parts.push(`<div class="tile"><span class="k">Enough to drive an EV</span><span class="v num">${fmt(/km/i.test(ev[0]) ? ev[1] : ev[1] * 1.609)} <small>km</small></span></div>`);
-    if (!parts.length) return "";
-    return `<div class="section">Since ${esc(solar().installed ? new Date(solar().installed + "T12:00").toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "install")}</div><div class="tiles">${parts.join("")}</div><div class="foot">SolarEdge's estimates. Its CO₂ figure uses a general grid average, and Ontario's grid is mostly nuclear and hydro, so the real saving here is smaller.</div>`;
-  }
-
-  function yearsBlock() {
-    const s = solar();
-    if (!s) return "";
-    const by = {};
-    for (const [d, v] of Object.entries(s.daily)) by[d.slice(0, 4)] = (by[d.slice(0, 4)] || 0) + (v || 0);
-    const years = Object.keys(by).sort().reverse();
-    if (years.length < 2) return "";
-    const first = Object.keys(s.daily).sort()[0], thisYear = torontoToday().slice(0, 4);
-    const max = Math.max(...years.map((y) => by[y]));
-    const rows = years.map((y) => {
-      const note = y === thisYear ? " so far" : y === first.slice(0, 4) && first.slice(5) > "01-15" ? ` from ${shortDay(first)}` : "";
-      return `<a class="row" href="#overview" data-ym="${monthForYear(y)}" style="gap:12px;color:var(--text);text-decoration:none"><span style="width:110px;flex-shrink:0">${y}<span class="small">${note}</span></span><span class="bar thick" style="flex:1"><i style="width:${(by[y] / max) * 100}%"></i></span><span class="val num" style="min-width:84px">${fmt(by[y])} kWh</span>${chev}</a>`;
-    }).join("");
-    return `<div class="section">By year</div><div class="list">${rows}</div>`;
-  }
-
-  function tomorrowRow() {
-    const t = state.data.weather && state.data.weather.tomorrow, k = state.data.weather && state.data.weather.factor;
-    if (!t) return "";
-    const [d, hi, lo, code, , ghi] = t, c = wx(code), exp = k && ghi != null ? k * ghi : null;
-    return `<div class="list"><div class="row"><span style="display:flex;align-items:center;gap:8px"><span style="color:${wxColor(c.icon)}">${wxIcon(c.icon, 20)}</span>Tomorrow · ${esc(c.label)}</span><span class="val num">${exp != null ? `about ${fmt(exp)} kWh` : `H ${deg(hi)} · L ${deg(lo)}`}</span></div></div>`;
-  }
-
-
-  // ---------- bills ----------
-  const money = (n) => (n < 0 ? "−$" : "$") + Math.abs(n).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const billFor = (ym) => (state.data.bills || []).find((b) => b.to.slice(0, 7) === ym) || null;
-  const lineSum = (lines) => Object.values(lines).reduce((a, [k, r]) => a + Math.round(k * r * 100) / 100, 0);
-  const billParts = (b) => {
-    const buy = lineSum(b.buy), credit = lineSum(b.credit), kwh = Object.values(b.buy).reduce((a, [k]) => a + k, 0);
-    const current = Math.round((b.due - (b.previous || 0)) * 100) / 100;
-    return { buy, credit, kwh, current, avgRate: kwh ? buy / kwh : 0 };
-  };
-
-  function billCard(ym) {
-    const b = billFor(ym);
-    if (!b) return "";
-    const p = billParts(b), name = mName(ym);
-    const tou = ["on", "mid", "off"].map((k) => [k, b.buy[k]]).filter(([, x]) => x);
-    const touRows = tou.map(([k, [kwh, rate]]) => `<div class="row sub"><span>${{ on: "On-peak", mid: "Mid-peak", off: "Off-peak" }[k]} <span class="small">${fmt(kwh)} kWh at ${fmt(rate * 100, 1)}¢</span></span><span class="val num">${money(kwh * rate)}</span></div>`).join("");
-    const rows = [
-      `<div class="row"><span>Electricity bought <span class="small">${fmt(p.kwh)} kWh</span></span><span class="val num">${money(p.buy)}</span></div>`,
-      touRows,
-      p.credit > 0 ? `<div class="row"><span>Solar credits <span class="small">${fmt(b.generated)} kWh sent back</span></span><span class="val num good">${money(-p.credit)}</span></div>` : "",
-      `<div class="row"><span>Delivery</span><span class="val num">${money(b.delivery)}</span></div>`,
-      `<div class="row"><span>Regulatory</span><span class="val num">${money(b.regulatory)}</span></div>`,
-      b.other ? `<div class="row"><span>Late payment charge</span><span class="val num">${money(b.other)}</span></div>` : "",
-      `<div class="row"><span>HST</span><span class="val num">${money(b.hst)}</span></div>`,
-      b.rebate ? `<div class="row"><span>Ontario Electricity Rebate</span><span class="val num good">${money(-b.rebate)}</span></div>` : "",
-      `<div class="row"><span style="font-weight:600">${esc(name)} charges</span><span class="val strong num">${money(p.current)}</span></div>`,
-    ].join("");
-    const carried = Math.abs(b.previous || 0) >= 0.5 ? `<div class="foot">${b.previous > 0 ? `The amount due was ${money(b.due)}, including ${money(b.previous)} carried over unpaid from the bill before.` : `The amount due was ${money(b.due)} after a ${money(-b.previous)} credit from the bill before.`}</div>` : "";
-    const fromTo = `${shortDay(b.from)} to ${shortDay(b.to)}`;
-    return `<div class="section">Toronto Hydro bill</div>
-      <section class="card" style="gap:6px">
-        <span class="label">${esc(name)} charges</span>
-        <div class="hero num" style="gap:4px"><b style="font-size:44px">${money(p.current)}</b></div>
-        <span class="small">${esc(fromTo)} · ${fmt(p.current / p.kwh * 100, 1)}¢ per kWh all in · ${b.season === "winter" ? "winter" : "summer"} prices</span>
+  function settingsScreen() {
+    const d = state.data, s = d.solar, h = Object.keys(hydro()).sort(), e = s && s.equipment;
+    const ok = s && s.connected && !s.needsConnect;
+    const sol = [
+      ["Status", ok ? `<span class="okc">Connected</span>` : s && s.needsConnect && s.daily ? "Sign-in expired" : "Not connected"],
+      ok && s.peakKw && ["System size", `${fmt(s.peakKw, 2)} kW`],
+      ok && s.installed && ["Installed", esc(new Date(s.installed + "T12:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }))],
+    ];
+    if (e) {
+      (e.inverters || []).forEach((i) => {
+        sol.push(["Inverter", esc(i.model || i.name || "–")]);
+        if (i.firmware) sol.push(["Firmware", esc(i.firmware)]);
+        if (i.communication) sol.push(["Connection", esc(({ WIFI: "Wi-Fi", ETHERNET: "Ethernet", LAN: "Ethernet", CELLULAR: "Cellular" })[String(i.communication).toUpperCase()] || pretty(String(i.communication).toLowerCase()))]);
+      });
+      // the inverter's own count is what's actually wired in; SolarEdge's inventory can list a replaced optimizer
+      const connected = (e.inverters || []).reduce((a, i) => a + (Number(i.optimizers) || 0), 0) || e.optimizers;
+      const models = [...new Set((e.optimizerModels || []).map((m) => m.split("-")[0]))];
+      if (connected != null) sol.push(["Optimizers", `${connected}${models.length ? " · " + esc(models.join(", ")) : ""}`]);
+    }
+    if (ok && s.alertsChecked) sol.push(["Alerts checked", esc(timeOf(s.alertsChecked))]);
+    const bills = d.bills || [];
+    return `<div class="top"><div><h1>Settings</h1></div><button type="button" class="done" data-back>Done</button></div>
+      <section class="first"><div class="group-label">SolarEdge</div>${rows(sol)}
+        ${ok ? `<p class="sub">Refreshes every hour during the day.${s.error ? " The last refresh failed, so these are the previous numbers." : ""}</p>` : connectBtn() + `<p class="sub">${d.connectUrl ? "You'll sign in with SolarEdge, then paste a one-time code into GitHub." : "Add SOLAREDGE_CLIENT_ID, SOLAREDGE_CLIENT_SECRET, SOLAREDGE_SITE_ID and GH_PAT under Settings, Secrets and variables, Actions in your GitHub repository."}</p>`}
+        ${inverterRows()}
       </section>
-      <div class="list bill">${rows}</div>${carried}`;
-  }
-
-
-
-
-  // ---------- money: grid cost first, then what solar saved ----------
-  const M = () => (state.data.money && state.data.money.months) || {};
-  const dollars = (n) => "$" + Math.round(n).toLocaleString("en-CA");
-  function sinceTotals(upTo) {
-    const ms = Object.entries(M()).filter(([k]) => !upTo || k <= upTo);
-    const first = ms.find(([, m]) => m.saved != null);
-    return {
-      grid: ms.reduce((a, [, m]) => a + (m.grid || 0), 0),
-      saved: ms.reduce((a, [, m]) => a + (m.saved || 0), 0),
-      gridMonths: ms.filter(([, m]) => m.grid != null).length,
-      missing: ms.filter(([, m]) => m.grid == null && m.complete !== false).map(([k]) => k),
-      from: first ? first[0] : null,
-    };
-  }
-
-  function moneyCard(ym) {
-    const m = M()[ym];
-    if (!m || (m.grid == null && m.saved == null)) return "";
-    const name = mName(ym), isBill = m.gridSource === "bill";
-    const gridLine = m.grid != null
-      ? `<div class="mrow"><span class="mlabel"><i style="background:var(--grid)"></i>Grid cost</span><span class="mval num">${isBill ? "" : "~"}${money(m.grid)}</span></div>
-         <div class="msub">${isBill ? "From your Toronto Hydro bill" : "Estimated from your meter data and your bills' prices"}</div>`
-      : `<div class="mrow"><span class="mlabel"><i style="background:var(--grid)"></i>Grid cost</span><span class="mval num muted">–</span></div>
-         <div class="msub">${m.complete === false ? "Shown once the month is over and the meter data is in" : "No meter data or bill for this month"}</div>`;
-    const savedLine = m.saved != null
-      ? `<div class="mrow"><span class="mlabel"><i style="background:var(--good)"></i>Solar saved</span><span class="mval num good">${money(m.saved)}</span></div>
-         <div class="msub">${m.credits != null && m.credits >= 0.5 ? `${money(m.credits)} in credits for ${fmt(m.exp)} kWh sent back` : ""}${m.selfValue != null ? `${m.credits != null && m.credits >= 0.5 ? ", plus " : ""}${money(m.selfValue)} of power used straight from the panels (${fmt(m.selfUsed)} kWh at ${fmt(m.avoidedRate * 100, 1)}¢ you didn't pay)` : ""}${(m.estimated || []).length ? ". Some of it estimated" : ""}</div>`
-      : "";
-    let bar = "";
-    if (m.grid != null && m.saved != null && m.without > 0) {
-      const g = (m.grid / m.without) * 100;
-      bar = `<div class="split" style="height:10px;border-radius:5px" role="img" aria-label="Without solar about ${money(m.without)}"><i style="width:${g}%;background:var(--grid)"></i><i style="width:${100 - g}%;background:var(--good)"></i></div>
-        <span class="small">Without solar, ${esc(name)} would have cost about <b class="num">${money(m.without)}</b>. Solar cut it by ${pct(m.saved, m.without)}%.</span>`;
-    }
-    const t = sinceTotals(), from = t.from ? monthName(t.from) : "";
-    return `<section class="card money" style="gap:8px">
-        <span class="label">${esc(name)}${m.complete === false ? " so far" : ""}</span>
-        ${gridLine}${savedLine}${bar}
+      <section><div class="group-label">Toronto Hydro</div>${rows([
+        ["Meter data", h.length ? `${esc(shortDay(h[0]))}, ${h[0].slice(0, 4)} to ${esc(shortDay(h.at(-1)))}, ${h.at(-1).slice(0, 4)}` : "None yet"],
+        bills.length && ["Bills", `${bills.length} · ${esc(monthName(bills[0].to.slice(0, 7), "short"))} to ${esc(monthName(bills.at(-1).to.slice(0, 7), "short"))}`],
+      ])}<p class="sub">To add meter data, download it from MyTorontoHydro and upload the file to the data/hydro folder in GitHub. The site rebuilds on its own.</p></section>
+      <section><div class="group-label">Security</div>${rows([
+        ["Data", state.encrypted ? "Encrypted" : "Not encrypted"],
+        state.encrypted && ["Unlock", esc(HomeSolarLock.status())],
+      ])}
+        ${state.encrypted ? `<button type="button" class="linkline danger" id="lockapp">Lock and forget this device</button><p class="sub">You'll need your passphrase to open the app here again.</p>` : `<p class="sub">Add a SITE_PASSPHRASE secret in GitHub to encrypt everything the site publishes.</p>`}
       </section>
-      ${t.from ? `<div class="tiles">
-        <div class="tile"><span class="k">Grid since ${esc(from)}</span><span class="v num">${dollars(t.grid)}</span><span class="small">${t.missing.length ? `${t.missing.length} month${t.missing.length > 1 ? "s" : ""} not counted` : "every month counted"}</span></div>
-        <div class="tile"><span class="k">Solar saved since ${esc(from)}</span><span class="v num good">${dollars(t.saved)}</span><span class="small">${dollars(Object.entries(M()).filter(([, x]) => x.complete !== false).slice(-12).reduce((a, [, x]) => a + (x.saved || 0), 0))} in the last 12 months</span></div>
-      </div>` : ""}`;
-  }
-
-  function savingsBlock() {
-    const ms = M();
-    if (!Object.keys(ms).length) return "";
-    const years = {};
-    for (const [k, m] of Object.entries(ms)) {
-      const y = (years[k.slice(0, 4)] ||= { grid: 0, saved: 0, n: 0 });
-      y.grid += m.grid || 0; y.saved += m.saved || 0; y.n += m.grid != null ? 1 : 0;
-    }
-    const t = sinceTotals(), thisYear = torontoToday().slice(0, 4);
-    const rows = Object.keys(years).sort().reverse().map((y) => `<a class="row" href="#overview" data-ym="${monthForYear(y)}" style="color:var(--text);text-decoration:none">
-        <span>${y}${y === thisYear ? ' <span class="small">so far</span>' : ""}</span>
-        <span class="val num" style="display:flex;gap:14px"><span>Grid ${dollars(years[y].grid)}</span><span class="good">Saved ${dollars(years[y].saved)}</span></span>${chev}</a>`).join("");
-    const md = state.data.money.model || {};
-    return `<div class="section">Savings</div>
-      <section class="card" style="gap:4px">
-        <span class="label">Solar has saved you about</span>
-        <div class="hero num"><b class="good">${dollars(t.saved)}</b></div>
-        <span class="small">since ${esc(monthName(t.from))}, against ${dollars(t.grid)} paid for grid power over the same time.</span>
-      </section>
-      <div class="list">${rows}</div>
-      <div class="foot">Bill months use the bill. Other months are estimated from your meter data at Ontario's time-of-use prices, with delivery (${money(md.fixedDelivery || 0)} a month plus ${fmt((md.deliveryPerKwh || 0) * 100, 1)}¢ per kWh), regulatory charges, HST and the Ontario rebate as your bills charge them. Checked against your bills, the estimates land within about 1.5%.</div>`;
-  }
-
-  // ---------- screens ----------
-  function overview() {
-    if (!state.month) return `<h1>Overview</h1><div class="card empty"><h2>No data yet</h2><p class="small">Add a Toronto Hydro export to data/hydro or connect SolarEdge.</p></div>`;
-    const days = monthDays(state.month), t = totals(days);
-    const name = mName(state.month);
-    let html = monthHeader("Overview") + alertBanner() + moneyCard(state.month);
-
-    if (t.hDays) {
-      const net = t.imp - t.exp;
-      let detail;
-      if (t.bothDays && t.bothDays === t.hDays) {
-        const sp = pct(t.self, t.home);
-        detail = `<div class="split" role="img" aria-label="${sp}% of home use came straight from the panels"><i style="width:${sp}%;background:var(--solar)"></i><i style="width:${100 - sp}%;background:var(--grid)"></i></div>
-          <div class="legend"><span><i style="background:var(--solar)"></i>Solar, used directly</span><span><i style="background:var(--grid)"></i>From the grid</span></div>
-          <span class="small">In ${esc(name)} your home used <b class="num">${kwh(t.home)} kWh</b>. The panels covered ${sp}% of it directly, and you sent ${kwh(t.exp)} kWh back for credit.</span>`;
-      } else {
-        const cp = pct(t.exp, t.imp);
-        detail = `<div class="split" role="img" aria-label="Exports covered ${cp}% of imports"><i style="width:${Math.min(cp, 100)}%;background:var(--solar)"></i><i style="width:${Math.max(0, 100 - cp)}%;background:var(--grid)"></i></div>
-          <span class="small">What you sent back covered ${cp}% of what you drew from the grid.</span>`;
-      }
-      html += `<section class="card"><span class="label">${net >= 0 ? "Net from the grid" : "Net sent to the grid"} in ${esc(name)}</span>
-        <div class="hero num"><b>${kwh(Math.abs(net))}</b><span>kWh</span></div>${detail}</section>`;
-      html += `<div class="tiles">
-        <div class="tile"><span class="k">${down("var(--grid)")}From grid</span><span class="v num">${kwh(t.imp)} <small>kWh</small></span><span class="small num">${fmt(t.imp / t.hDays, 1)} a day</span></div>
-        <div class="tile"><span class="k">${up("var(--solar)")}To grid</span><span class="v num">${kwh(t.exp)} <small>kWh</small></span><span class="small num">${fmt(t.exp / t.hDays, 1)} a day</span></div>
-        ${t.pDays ? `<div class="tile"><span class="k">${sunIcon.replace("<svg", '<svg stroke="var(--solar)"')}Produced</span><span class="v num">${kwh(t.prod)} <small>kWh</small></span><span class="small num">${fmt(t.prod / t.pDays, 1)} a day</span></div>` : ""}
-        ${t.bothDays ? `<div class="tile"><span class="k">${sunIcon.replace("<svg", '<svg stroke="var(--solar)"')}Used directly</span><span class="v num">${kwh(t.self)} <small>kWh</small></span><span class="small num">${pct(t.self, t.prod)}% of production</span></div>` : ""}
-      </div>`;
-    } else if (t.pDays) {
-      const gm = (state.data.gridMonthly || {})[state.month];
-      html += `<section class="card"><span class="label">Solar produced</span><div class="hero num"><b>${kwh(t.prod)}</b><span>kWh</span></div>
-        <span class="small">${gm ? `Your bill shows ${fmt(gm)} kWh drawn from the grid this month. Daily detail needs the Toronto Hydro export.` : `No Toronto Hydro data for ${esc(name)} yet. Upload the export to see what you drew from and sent to the grid.`}</span></section>`;
-      if (gm) html += `<div class="tiles">
-        <div class="tile"><span class="k">${down("var(--grid)")}From grid</span><span class="v num">${fmt(gm)} <small>kWh</small></span><span class="small">from your bill</span></div>
-        <div class="tile"><span class="k">${sunIcon.replace("<svg", '<svg stroke="var(--solar)"')}Produced</span><span class="v num">${kwh(t.prod)} <small>kWh</small></span><span class="small num">${fmt(t.prod / t.pDays, 1)} a day</span></div></div>`;
-    }
-
-    if (!solar()) html += connectCard();
-
-    html += billCard(state.month);
-    html += highlights(state.month);
-    html += yearChart();
-    return html;
-  }
-
-  function daysScreen() {
-    if (!state.month) return `<h1>Days</h1>`;
-    const days = monthDays(state.month);
-    const hasH = days.some((r) => r.imp != null), hasP = days.some((r) => r.prod != null);
-    const avail = [hasH && "home", hasP && "solar", hasH && "net"].filter(Boolean);
-    if (!avail.includes(state.view)) state.view = avail[0] || "home";
-    const V = state.view;
-    if (!state.day || !state.day.startsWith(state.month)) {
-      const last = [...days].reverse().find((r) => r.imp != null || r.prod != null);
-      state.day = last ? last.d : days[0].d;
-    }
-
-    // what each view plots: stacked segments [value, colour] from the bottom up, or one signed value for net
-    const anyHome = days.some((r) => r.home != null), anySelf = days.some((r) => r.self != null);
-    const segs = (r) => {
-      if (V === "home") return r.home != null ? [[r.imp, "var(--grid)"], [r.self, "var(--solar)"]] : r.imp != null ? [[r.imp, "var(--grid)"]] : null;
-      if (V === "solar") return r.prod == null ? null : r.self != null ? [[r.self, "var(--solar)"], [r.exp, "var(--back)"]] : [[r.prod, "var(--solar)"]];
-      return r.imp != null ? r.imp - r.exp : null;
-    };
-    const value = (r) => { const x = segs(r); return x == null ? null : Array.isArray(x) ? x.reduce((a, b) => a + b[0], 0) : x; };
-    const vals = days.map(value).filter((v) => v != null);
-    const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-    const t = totals(days);
-
-    let label, sub, legend;
-    if (V === "home") {
-      label = anyHome ? "Home use" : "From the grid";
-      sub = anyHome ? `The panels covered ${pct(t.self, t.self + t.imp)}% of what the house used.` : (solar() ? "No solar data for these days." : "Connect SolarEdge to see how much of this the panels covered.");
-      legend = anyHome ? [["Solar", "var(--solar)"], ["From grid", "var(--grid)"]] : [["From grid", "var(--grid)"]];
-    } else if (V === "solar") {
-      label = "Solar produced";
-      sub = anySelf ? `${pct(t.self, t.self + t.exp)}% was used in the house and ${pct(t.exp, t.self + t.exp)}% sent back for credit.` : "Add this month's Toronto Hydro file to see how much was used in the house.";
-      legend = anySelf ? [["Used in the house", "var(--solar)"], ["Sent back", "var(--back)"]] : [["Produced", "var(--solar)"]];
-    } else {
-      const ahead = days.filter((r) => r.imp != null && r.exp > r.imp).length;
-      label = "Net from the grid";
-      sub = ahead ? `${ahead === 1 ? "One day" : ahead + " days"} sent back more than the house drew.` : "Every day drew more from the grid than it sent back.";
-      legend = [["Drew more", "var(--grid)"], ["Sent back more", "var(--back)"]];
-    }
-
-    // geometry
-    const H = 200;
-    let bars, avgBottom;
-    if (V !== "net") {
-      const max = Math.max(1, ...vals) * 1.05, px = (v) => Math.max(0, Math.round((v / max) * H));
-      bars = days.map((r) => {
-        const x = segs(r);
-        const inner = x ? x.map(([v, c], i) => `<i style="height:${px(v)}px;background:${c}${i === x.length - 1 ? ";border-radius:3px 3px 0 0" : ""}"></i>`).reverse().join("") : "";
-        return `<button type="button" data-day="${r.d}" aria-pressed="${r.d === state.day}" aria-label="${esc(dayName(r.d))}" class="${x ? "" : "gap"}"><span class="up" style="height:${H}px">${inner}</span></button>`;
-      }).join("");
-      avgBottom = px(avg);
-    } else {
-      const pos = Math.max(0, ...vals), neg = Math.max(0, ...vals.map((v) => -v));
-      const span = Math.max(1, pos + neg) * 1.05, upH = Math.round((pos / Math.max(1e-9, pos + neg || 1)) * H) || (neg ? 0 : H);
-      const px = (v) => Math.round((Math.abs(v) / span) * H);
-      bars = days.map((r) => {
-        const v = segs(r);
-        const up = v != null && v >= 0 ? `<i style="height:${px(v)}px;background:var(--grid);border-radius:3px 3px 0 0"></i>` : "";
-        const dn = v != null && v < 0 ? `<i style="height:${px(v)}px;background:var(--back);border-radius:0 0 3px 3px"></i>` : "";
-        return `<button type="button" data-day="${r.d}" aria-pressed="${r.d === state.day}" aria-label="${esc(dayName(r.d))}" class="${v == null ? "gap" : ""}"><span class="up" style="height:${upH}px">${up}</span><span class="dn" style="height:${H - upH}px">${dn}</span></button>`;
-      }).join("");
-      avgBottom = (H - upH) + (avg >= 0 ? px(avg) : -px(avg));
-    }
-
-    const n = days.length, r = days.find((x) => x.d === state.day);
-    const names = { home: "Home use", solar: "Solar", net: "Net grid" };
-    const seg = avail.length > 1 ? `<div class="seg" role="group" aria-label="Chart">${avail.map((v) => `<button type="button" data-view="${v}" aria-pressed="${v === V}">${names[v]}</button>`).join("")}</div>` : "";
-
-    let rows = "";
-    if (r.home != null) rows += `<div class="row"><span>Home used</span><span class="val strong num">${kwh(r.home)} kWh</span></div>`;
-    if (r.prod != null) rows += `<div class="row"><span>Solar produced</span><span class="val num">${kwh(r.prod)} kWh</span></div>`;
-    const ex = r.prod != null ? expectedFor(r.d) : null;
-    if (ex != null && ex > 0.5) rows += `<div class="row"><span>Expected</span><span class="val num">${kwh(ex)} kWh <span class="small">· made ${pct(r.prod, ex)}%</span></span></div>`;
-    if (r.self != null) rows += `<div class="row"><span>Solar used in the house</span><span class="val num">${kwh(r.self)} kWh</span></div>`;
-    if (r.imp != null) rows += `<div class="row"><span>From grid</span><span class="val num">${kwh(r.imp)} kWh</span></div><div class="row"><span>Sent back</span><span class="val num">${kwh(r.exp)} kWh</span></div><div class="row"><span>Net from grid</span><span class="val ${r.home == null ? "strong" : ""} num">${signed(r.imp - r.exp)} kWh</span></div>`;
-    if (!rows) rows = `<div class="row"><span class="val" style="text-align:left">No data for this day</span></div>`;
-    const wd = weatherDay(r.d), sun = sunTimes(r.d);
-    let wrows = "";
-    if (wd) {
-      const c = wx(wd[2]);
-      wrows += `<div class="row"><span style="display:flex;align-items:center;gap:8px"><span style="color:${wxColor(c.icon)}">${wxIcon(c.icon, 20)}</span>${esc(c.label)}</span><span class="val num">H ${deg(wd[0])} · L ${deg(wd[1])}</span></div>`;
-      if (wd[3] != null) wrows += `<div class="row"><span>Sunshine</span><span class="val num">${fmt(wd[3], 1)} h</span></div>`;
-    }
-    wrows += `<div class="row"><span>Sunrise · sunset</span><span class="val num">${clock(sun.rise)} · ${clock(sun.set)}</span></div><div class="row"><span>Daylight</span><span class="val num">${hm(sun.set - sun.rise)}</span></div>`;
-
-    return `${monthHeader("Days")}
-      ${seg}
-      <section class="card" style="padding:16px 10px 10px">
-        <div style="display:flex;flex-direction:column;gap:2px;padding:0 6px">
-          <span class="label">${label}, average a day</span>
-          <div class="hero num" style="gap:5px"><b style="font-size:40px">${signed(avg)}</b><span style="font-size:17px">kWh</span></div>
-          <span class="small">${esc(sub)}</span>
-        </div>
-        <div class="legend" style="padding:0 6px">${legend.map(([l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join("")}<span><i class="dash"></i>Average</span></div>
-        <div class="chartwrap"><div class="chart" style="height:${H}px">${bars}</div><div class="avg" style="bottom:${avgBottom}px" aria-hidden="true"></div></div>
-        <div class="axis"><span>1</span><span>${Math.round(n / 4)}</span><span>${Math.round(n / 2)}</span><span>${Math.round((3 * n) / 4)}</span><span>${n}</span></div>
-      </section>
-      <div class="section">${esc(dayName(r.d))}</div>
-      <div class="list">${rows}</div>
-      <div class="list">${wrows}</div>`;
-  }
-
-  function solarScreen() {
-    const s = solar();
-    if (!s) return `<h1>Solar</h1>
-      <section class="card empty"><span class="big">${sunIcon}</span><h2>SolarEdge isn't connected</h2>
-      <p class="small" style="margin:0">${state.data.connectUrl ? "Sign in with your SolarEdge account and approve access to turn this on." : "Add your SolarEdge app's client ID, client secret and site ID as repository secrets in GitHub, then run the workflow again."}</p>
-      </section>${connectBtn()}${sunCard()}`;
-
-    const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: TZNAME });
-    // overnight the last numbers belong to yesterday; don't show them as today's
-    const fresh = !s.todayDate || s.todayDate === torontoToday();
-    const todayKwh = fresh ? s.today : 0, nowKw = fresh ? s.nowKw : 0;
-    const pts = (fresh ? s.todayCurve || [] : []).map(([t, kw]) => { const [h, m] = t.split(":").map(Number); return [h + m / 60, kw]; });
-    const peak = Math.max(...pts.map((p) => p[1]), 0.1) * 1.15;
-    let curve = "";
-    if (pts.some((p) => p[1] > 0)) {
-      const X = (h) => ((h - 5) / 16) * 300, Y = (kw) => 110 - (kw / peak) * 100;
-      const line = pts.filter((p) => p[0] >= 5 && p[0] <= 21).map((p) => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`);
-      curve = `<svg class="curve" viewBox="0 0 300 124" preserveAspectRatio="none" role="img" aria-label="Solar power through the day">
-        <line x1="0" y1="110" x2="300" y2="110" stroke="var(--sep)"/>
-        <polygon points="${line[0].split(",")[0]},110 ${line.join(" ")} ${line.at(-1).split(",")[0]},110" fill="var(--solar)" fill-opacity=".14"/>
-        <polyline points="${line.join(" ")}" fill="none" stroke="var(--solar)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
-      </svg><div class="axis"><span>6 am</span><span>Noon</span><span>6 pm</span></div>`;
-    }
-    const st = sunTimes(torontoToday()), nowD = new Date();
-    const nowNote = nowKw > 0 ? "Producing now" : nowD < st.rise ? `Sunrise ${clock(st.rise)}` : nowD > st.set ? `Sunset was ${clock(st.set)}` : "Not producing";
-    const updated = s.updated ? new Date(s.updated).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : null;
-
-    const stale = needsConnect() ? `<section class="card" style="gap:6px"><span style="font-weight:600;font-size:15px">SolarEdge needs you to sign in again</span><span class="small">These are the last numbers it sent. Reconnect to start updating again.</span></section>${connectBtn()}` : "";
-    const expT = expectedFor(torontoToday());
-    return `<div><div class="eyebrow">${esc(today)}</div><h1>Solar</h1></div>${stale}${alertBanner()}
-      <section class="card">
-        <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px">
-          <div style="display:flex;flex-direction:column;gap:6px"><span class="label">Produced today</span><div class="hero num"><b>${fmt(todayKwh, 1)}</b><span>kWh</span></div>${expT ? `<span class="small">Sunlight today suggests about ${fmt(expT)} kWh</span>` : ""}</div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding-bottom:4px"><span class="small">Right now</span><span class="num" style="font-size:20px;font-weight:600">${fmt(nowKw, nowKw ? 2 : 0)} kW</span><span class="small">${nowKw > 0 ? "of " + fmt(s.peakKw, 2) + " kW peak" : nowNote}</span></div>
-        </div>${curve}
-      </section>
-      ${sunCard()}
-      ${tomorrowRow()}
-      ${healthBlock()}
-      <div class="list">
-        <div class="row"><span>This month</span><span class="val num">${kwh(s.month)} kWh</span></div>
-        <div class="row"><span>This year</span><span class="val num">${fmt(s.year)} kWh</span></div>
-        <div class="row"><span>Since ${esc(s.installed ? new Date(s.installed + "T12:00").toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "install")}</span><span class="val num">${fmt(s.lifetime)} kWh</span></div>
-      </div>
-      ${updated ? `<div class="foot">SolarEdge last reported ${esc(updated)}.</div>` : ""}
-      ${savingsBlock()}
-      ${yearsBlock()}
-      ${inverterRows()}
-      ${benefitsCard()}`;
-  }
-
-
-
-  function equipmentBlock() {
-    const e = solar() && solar().equipment;
-    if (!e) return "";
-    const inv = (e.inverters || []).map((i) => `
-      <div class="row"><span>Inverter</span><span class="val">${esc([i.manufacturer, i.model].filter(Boolean).join(" ") || i.name || "–")}</span></div>
-      ${i.firmware ? `<div class="row"><span>Firmware</span><span class="val num">${esc(i.firmware)}</span></div>` : ""}
-      ${i.communication ? `<div class="row"><span>Connection</span><span class="val">${esc(({ WIFI: "Wi-Fi", ETHERNET: "Ethernet", LAN: "Ethernet", CELLULAR: "Cellular", ZIGBEE: "ZigBee", RS485: "RS485" })[String(i.communication).toUpperCase()] || pretty(String(i.communication).toLowerCase()))}</span></div>` : ""}`).join("");
-    // the inverter's own count is what's actually wired in; SolarEdge's inventory can still list a replaced optimizer
-    const connected = (e.inverters || []).reduce((a, i) => a + (Number(i.optimizers) || 0), 0) || e.optimizers;
-    const models = [...new Set((e.optimizerModels || []).map((m) => m.split("-")[0]))];
-    const opt = connected != null ? `<div class="row"><span>Optimizers</span><span class="val num">${connected} connected${models.length ? " · " + esc(models.join(", ")) : ""}</span></div>` : "";
-    return inv || opt ? `<div class="section">Equipment</div><div class="list">${inv}${opt}</div>` : "";
-  }
-
-  function sourcesScreen() {
-    const d = state.data, s = d.solar, h = Object.keys(hydro()).sort();
-    const sol = s && s.connected && !s.needsConnect
-      ? `<div class="row"><span>Status</span><span class="ok">Connected</span></div>
-         ${s.peakKw ? `<div class="row"><span>System size</span><span class="val num">${fmt(s.peakKw, 2)} kW</span></div>` : ""}
-         ${s.installed ? `<div class="row"><span>Installed</span><span class="val">${esc(new Date(s.installed + "T12:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }))}</span></div>` : ""}
-         <div class="row"><span>Daily history</span><span class="val num">${Object.keys(s.daily || {}).length} days</span></div>`
-      : `<div class="row"><span>Status</span><span class="val">${s && s.needsConnect && s.daily ? "Sign-in expired" : "Not connected"}</span></div>`;
-    return `<h1>Sources</h1>
-      <div class="section">Solar inverter</div>
-      <div class="list">
-        <div class="row" style="justify-content:flex-start"><span class="icon" style="background:var(--solar)">${sunIcon}</span><span>SolarEdge</span></div>
-        ${sol}
-      </div>
-      ${equipmentBlock()}
-      ${s && s.connected && !s.needsConnect ? "" : connectBtn()}
-      <div class="foot">${s && s.connected && !s.needsConnect ? "Refreshes every hour during the day." + (s.error ? " The last refresh failed, so these are the previous numbers." : "") : state.data.connectUrl ? "You'll sign in with SolarEdge, then paste a one-time code into GitHub." : "Add SOLAREDGE_CLIENT_ID, SOLAREDGE_CLIENT_SECRET, SOLAREDGE_SITE_ID and GH_PAT under Settings, Secrets and variables, Actions in your GitHub repository."}</div>
-      <div class="section">Grid meter</div>
-      <div class="list">
-        <div class="row" style="justify-content:flex-start"><span class="icon" style="background:var(--grid)">${boltIcon}</span><span>Toronto Hydro</span></div>
-        ${h.length ? `<div class="row"><span>Data</span><span class="val num">${esc(shortDay(h[0]))} to ${esc(shortDay(h.at(-1)))}, ${parseDay(h.at(-1)).getFullYear()}</span></div><div class="row"><span>Days</span><span class="val num">${h.length}</span></div>` : `<div class="row"><span>Data</span><span class="val">None yet</span></div>`}
-      </div>
-      <div class="foot">To add a month, download it from MyTorontoHydro and upload the file to the data/hydro folder in GitHub. The site rebuilds on its own.</div>
-      <div class="foot" style="margin-top:0">Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a>. Sunrise and sunset are calculated for Parkdale.</div>
-      <div class="section">Security</div>
-      <div class="list">
-        <div class="row"><span>Data</span><span class="val">${state.encrypted ? "Encrypted" : "Not encrypted"}</span></div>
-        ${state.encrypted ? `<div class="row"><span>Unlock</span><span class="val">${esc(HomeSolarLock.status())}</span></div>
-        <button type="button" class="row linkrow" id="lockapp">Lock and forget this device</button>` : ""}
-      </div>
-      <div class="foot">${state.encrypted ? "Locking removes the saved unlock from this device. You'll need your passphrase to open the app again here." : "Add a SITE_PASSPHRASE secret in GitHub to encrypt everything the site publishes."}</div>
-      <div class="foot" style="margin-top:0">Built ${esc(new Date(d.generated).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))}.</div>`;
+      <section><p class="sub">Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a>. Sunrise and sunset are calculated for Parkdale. Built ${esc(timeOf(d.generated))}.</p></section>`;
   }
 
   // ---------- routing ----------
-  const screens = { overview, days: daysScreen, solar: solarScreen, sources: sourcesScreen };
+  const screens = { now: nowScreen, month: monthScreen, history: historyScreen, settings: settingsScreen };
+  const OLD = { overview: "month", days: "month", solar: "now", sources: "settings" };
+  function route() { const r = location.hash.slice(1) || "now"; return screens[r] ? r : OLD[r] || "now"; }
 
   function render() {
-    const route = (location.hash.slice(1) || "overview");
-    const screen = screens[route] ? route : "overview";
-    view.innerHTML = screens[screen]();
-    const tab = screen;
-    document.querySelectorAll(".tabs a").forEach((a) => { if (a.dataset.tab === tab) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
-    document.title = (screen[0].toUpperCase() + screen.slice(1)) + " · Home Solar";
-    const strip = view.querySelector(".chips"), chip = strip && strip.querySelector('[aria-pressed="true"]');
-    if (chip) strip.scrollLeft = chip.offsetLeft - strip.clientWidth / 2 + chip.offsetWidth / 2;
+    const r = route();
+    if (OLD[location.hash.slice(1)]) { history.replaceState(null, "", "#" + r); }
+    if (r !== "settings") state.lastTab = r;
+    view.innerHTML = screens[r]();
+    document.querySelectorAll(".tabs a").forEach((a) => { if (a.dataset.tab === r) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+    document.title = { now: "Now", month: mName(state.month || "2000-01"), history: "History", settings: "Settings" }[r] + " · Home Solar";
   }
 
   view.addEventListener("click", (e) => {
-    const m = e.target.closest("[data-ym]");
-    if (m) {
-      state.month = m.dataset.ym; state.day = null;
-      if (m.tagName === "A" && location.hash !== m.getAttribute("href")) return;  // the hash change renders
-      e.preventDefault(); render(); return;
+    const sh = e.target.closest("[data-sheet]");
+    if (sh) {
+      if (sh.dataset.sheet === "bill") openSheet(`${mName(state.month)} bill`, billSheet(state.month));
+      if (sh.dataset.sheet === "method") openSheet("How costs are worked out", methodSheet());
+      return;
     }
+    const m = e.target.closest("[data-ym]");
+    if (m && !m.disabled) {
+      state.month = m.dataset.ym; state.day = null;
+      if (m.dataset.go === "month" && route() !== "month") { location.hash = "#month"; return; }
+      render(); return;
+    }
+    if (e.target.closest("[data-back]")) { location.hash = "#" + (state.lastTab || "now"); return; }
     if (e.target.closest("#lockapp")) { HomeSolarLock.forget(); location.reload(); return; }
-    const v = e.target.closest("[data-view]");
-    if (v) { state.view = v.dataset.view; render(); return; }
     const d = e.target.closest("[data-day]");
-    if (d) { state.day = d.dataset.day; render(); }
+    if (d) { state.day = d.dataset.day; render(); openSheet(dayName(state.day), daySheet(state.day)); }
   });
-  window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
+  view.addEventListener("keydown", (e) => {
+    if ((e.key === "Enter" || e.key === " ") && e.target.matches("[role=button]")) { e.preventDefault(); e.target.dispatchEvent(new MouseEvent("click", { bubbles: true })); }
+  });
+  window.addEventListener("hashchange", () => { closeSheet(true); render(); window.scrollTo(0, 0); });
+  let lastW = innerWidth;
+  window.addEventListener("resize", () => { if (state.data && Math.abs(innerWidth - lastW) > 20) { lastW = innerWidth; render(); } });
   document.addEventListener("visibilitychange", () => { if (!document.hidden && state.data) { refreshLive(); render(); } });
 
   view.innerHTML = '<p class="loading">Loading…</p>';
   fetch("data.json", { cache: "no-store" })
     .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then((data) => { state.encrypted = HomeSolarLock.isEncrypted(data); return state.encrypted ? HomeSolarLock.unlock(view, data) : data; })
-    .then((data) => { state.data = data; state.month = defaultMonth(); render(); refreshLive(); })
-    .catch(() => { view.innerHTML = '<h1>Home Solar</h1><p class="small">Couldn\'t load data.json. If you opened index.html straight from your computer, run the build and serve the _site folder instead.</p>'; });
+    .then((data) => {
+      state.data = data; state.month = defaultMonth(); render(); refreshLive();
+    })
+    .catch(() => { view.innerHTML = '<h1>Home Solar</h1><p class="sub">Couldn\'t load data.json. If you opened index.html straight from your computer, run the build and serve the _site folder instead.</p>'; });
 })();
