@@ -491,13 +491,19 @@
     const days = monthDays(ym), t = totals(days), gm = (state.data.gridMonthly || {})[ym];
     const r = [];
     const perDay = (v, n) => n ? fmt(v / n, 1) : "";
-    if (t.hDays) r.push(["Bought from grid", kwh(t.imp), perDay(t.imp, t.hDays)]);
-    else if (gm) r.push(["Bought from grid <span class=\"sub\">bill</span>", fmt(gm), ""]);
-    if (t.pDays) r.push(["Produced", kwh(t.prod), perDay(t.prod, t.pDays), "sun"]);
-    if (t.bothDays) r.push(["Used directly", kwh(t.self), perDay(t.self, t.bothDays)]);
-    if (t.hDays) r.push(["Sent back", kwh(t.exp), perDay(t.exp, t.hDays)]);
+    const ic = (d, cls) => `<svg class="li ${cls}" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+    const icTower = ic('<path d="M12 3L8 21M12 3l4 18M7 8h10M6 13h12M9.4 13L12 17.5 14.6 13M9 8l3 5 3-5"/>', "g");
+    const icSun = ic('<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M2.5 12h2M19.5 12h2M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>', "s");
+    const icHome = ic('<path d="M3.5 10.5L12 3.5l8.5 7V20a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/><path d="M13 10.5l-2.5 4h3l-2.5 4"/>', "s");
+    const icBack = ic('<path d="M2.5 12h7M7 9l3 3-3 3"/><path d="M17 3l-3 18M17 3l3 18M14 8h6M13.3 13.5h7.4"/>', "s");
+    const lab = (icon, text, sub) => `<span class="lk${sub ? " sub2" : ""}">${icon}${text}</span>`;
+    if (t.hDays) r.push([lab(icTower, "Bought from grid"), kwh(t.imp), perDay(t.imp, t.hDays)]);
+    else if (gm) r.push([lab(icTower, "Bought from grid <span class=\"sub\">bill</span>"), fmt(gm), ""]);
+    if (t.pDays) r.push([lab(icSun, "Produced"), kwh(t.prod), perDay(t.prod, t.pDays), "sun"]);
+    if (t.bothDays) r.push([lab(icHome, "Used immediately", true), kwh(t.self), perDay(t.self, t.bothDays)]);
+    if (t.hDays) r.push([lab(icBack, "Sent back to grid", true), kwh(t.exp), perDay(t.exp, t.hDays)]);
     if (!r.length) return "";
-    return `<section class="accsec"><details class="acc"${state.ledgerOpen ? " open" : ""}><summary>Energy in kWh${chev}</summary>
+    return `<section class="accsec"><details class="acc"${state.ledgerOpen ? " open" : ""}><summary>Energy Consumption (in kWh)${chev}</summary>
       <table class="ledger num"><thead><tr><th></th><th>Month</th><th>A day</th></tr></thead><tbody>
       ${r.map(([k, a, b, c]) => `<tr><td>${k}</td><td class="${c || ""}">${a}</td><td class="${c || ""}">${b}</td></tr>`).join("")}</tbody></table>
       ${t.hDays && t.hDays < daysIn(ym) || (t.pDays && t.pDays < daysIn(ym) && ym < torontoToday().slice(0, 7)) ? `<p class="sub">${[t.hDays && t.hDays < daysIn(ym) ? `Meter data for ${t.hDays} of ${daysIn(ym)} days` : "", t.pDays && t.pDays < daysIn(ym) && ym < torontoToday().slice(0, 7) ? `SolarEdge data for ${t.pDays} days` : ""].filter(Boolean).join(", ")}.</p>` : ""}
@@ -517,8 +523,8 @@
     if (r.prod != null) p.push(["Solar produced", `${kwh(r.prod)} kWh`, "sun"]);
     const ex = r.prod != null ? expectedFor(r.d) : null;
     if (ex != null && ex > 0.5) p.push(["Expected from the sunlight", `${kwh(ex)} kWh <span class="sub">· ${pct(r.prod, ex)}%</span>`]);
-    if (r.self != null) p.push(["Used directly", `${kwh(r.self)} kWh`]);
-    if (r.exp != null) p.push(["Sent back", `${kwh(r.exp)} kWh`]);
+    if (r.self != null) p.push(["Used immediately", `${kwh(r.self)} kWh`]);
+    if (r.exp != null) p.push(["Sent back to grid", `${kwh(r.exp)} kWh`]);
     if (!p.length) p.push(["No data for this day", ""]);
     const wd = weatherDay(r.d), sun = sunTimes(r.d), w = [];
     if (wd) { w.push([esc(wx(wd[2])), `H ${deg(wd[0])} <span class="sub">L ${deg(wd[1])}</span>`]); if (wd[3] != null) w.push(["Sunshine", `${fmt(wd[3], 1)} h`]); }

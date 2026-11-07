@@ -320,3 +320,11 @@ body.locked .tabs { display: none; }
 .acc[open] summary .chev { transform: rotate(90deg); }
 .acc[open] summary { margin-bottom: 10px; }
 @media (prefers-reduced-motion: reduce) { .acc summary .chev { transition: none; } }
+
+/* energy table: icons and indented solar rows */
+.ledger .lk { display: inline-flex; align-items: center; gap: 10px; }
+.ledger .lk.sub2 { padding-left: 24px; }
+.ledger .li { width: 20px; height: 20px; flex: none; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.ledger .li.g { stroke: var(--grid); }
+.ledger .li.s { stroke: var(--sun); }
+.acc summary { white-space: nowrap; gap: 8px; }
