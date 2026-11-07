@@ -264,7 +264,7 @@
     if (nowH < set) while (pts.length > 1 && pts.at(-1)[1] === 0 && pts.some((p) => p[1] > 0)) pts.pop();
     pts = pts.filter((p) => p[0] >= rise - 0.75 && p[0] <= set + 0.75);
     const exp = expectedFor(d);
-    const W = contentWidth(), H = 170, top = 22, bot = 26, x0 = rise - 0.6, x1 = set + 0.6;
+    const W = contentWidth(), H = state.nowH || 200, top = 22, bot = 26, x0 = rise - 0.6, x1 = set + 0.6;
     const X = (h) => ((h - x0) / (x1 - x0)) * W;
     // what today's forecast sunlight should give, spread over daylight hours, on the same kW scale
     const expPeak = exp ? exp * Math.PI / (2 * (set - rise)) : 0;
@@ -277,9 +277,7 @@
     if (expPeak) {
       let p = "";
       for (let i = 0; i <= 48; i++) p += `${i ? "L" : "M"}${X(rise + (set - rise) * i / 48).toFixed(1)},${Y(expPeak * Math.sin(Math.PI * i / 48)).toFixed(1)}`;
-      g += `<path d="${p}L${X(set).toFixed(1)},${Y(0)}L${X(rise).toFixed(1)},${Y(0)}Z" class="expfill"/><path d="${p}" class="ghost"/>`;
-      const px = X((rise + set) / 2);
-      g += svgText(px, Y(expPeak) - 7, `expected · ${fmt(exp)} kWh`, "explabel");
+      g += `<path d="${p}" class="ghost"/>`;
     }
     const isDay = nowH >= rise && nowH <= set;
     if (!isDay) g += moonIcon(new Date(), W - 14, 14, 10);
@@ -295,10 +293,11 @@
         g += svgText(lx + (lx > W - 50 ? -8 : 8), Math.max(12, ly - 7), lab, "sunlabel", lx > W - 50 ? "end" : "start");
       }
     }
-    [[rise, "↑ " + clockShort(st.rise)], [set, "↓ " + clockShort(st.set)]].forEach(([h, t]) => {
-      g += `<line x1="${X(h)}" x2="${X(h)}" y1="${Y(0)}" y2="${Y(0) + 5}" class="axisline"/>` + svgText(X(h), H - 4, t);
-    });
-    g += svgText(X((rise + set) / 2), H - 4, "noon");
+    // sunrise and sunset marked with a small horizon glyph and the time
+    const horizon = (x, up) => `<g transform="translate(${x.toFixed(1)},${(Y(0) + 13).toFixed(1)})" class="rise"><path d="M-7 3h14M-4.2 3a4.2 4.2 0 0 1 8.4 0"/><path d="${up ? "M0 -7.5v-4M-2 -9.5l2-2 2 2" : "M0 -11.5v4M-2 -9.5l2 2 2-2"}" transform="translate(0,4)"/></g>`;
+    g += horizon(X(rise), true) + svgText(X(rise) + 11, Y(0) + 17, clockShort(st.rise), "", "start");
+    g += horizon(X(set), false) + svgText(X(set) - 11, Y(0) + 17, clockShort(st.set), "", "end");
+    g += svgText(X((rise + set) / 2), Y(0) + 17, "noon");
     const label = `Solar power today from sunrise at ${clock(st.rise)} to sunset at ${clock(st.set)}`;
     return { svg: `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${g}</svg>`, exp, st };
   }
@@ -310,7 +309,7 @@
     const stNote = !sx ? "" : al.length ? "Details are at the top of this screen." : sx.alertsChecked ? `SolarEdge reported no problems when it was checked at ${esc(timeOnly(sx.alertsChecked))}.` : "";
     const dot = sx ? `<div class="statuswrap"><button type="button" class="statusdot ${al.length ? "bad" : sx.alertsChecked ? "" : "unknown"}" data-pop aria-label="${esc(stLabel)}" aria-expanded="false"><i></i></button>
       <div class="popover" role="status" hidden><b>${esc(stLabel)}</b>${stNote ? `<span>${stNote}</span>` : ""}</div></div>` : "";
-    const head = `<div class="top"><div><div class="eyebrow">${esc(today)}</div><h1>Now</h1></div>
+    const head = `<div class="top nowhead"><div><div class="eyebrow">${esc(today)}</div><h1>Now</h1></div>
       <div class="topright">${dot}<a class="iconbtn" href="#settings" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.4"/><circle cx="15" cy="17" r="2.4"/></svg></a></div></div>`;
     const s = solar();
     if (!s) {
@@ -330,30 +329,22 @@
       ? `<section class="alerts" id="alerts">${a.map((x) => `<div class="status bad"><i class="dot-s"></i><span><b>${esc(x.type || "Alert")}</b><span class="sub">${[x.component, x.impact != null && `impact ${x.impact} of 9`, x.first && `since ${timeOf(x.first)}`].filter(Boolean).map(esc).join(" · ")}</span></span></div>`).join("")}
          <p class="sub">SolarEdge also opened an issue in your GitHub repo, which emails you.</p></section>` : "";
 
-    // tomorrow's solar, in terms of what the house uses on a day like it
-    const t = state.data.weather && state.data.weather.tomorrow, k = state.data.weather && state.data.weather.factor;
-    const tomorrowKwh = t && k && t[5] != null ? k * t[5] : null;
-    const recent = months().filter((m) => m < torontoToday().slice(0, 7)).reverse().map(monthStats).find((m) => m.home != null);
-    const tomorrowLine = tomorrowKwh != null ? `<div class="forecast">${wxIcon(t[3], 1)}<p>Tomorrow the panels should make <b class="sun">about ${fmt(tomorrowKwh)} kWh</b> over the whole day, judging by the forecast sunlight.${recent ? ` That's roughly ${pct(tomorrowKwh, recent.home)}% of what the house used on an average day in ${esc(mName(recent.ym))} (${fmt(recent.home)} kWh).` : ""}</p></div>` : "";
-
+    const t = state.data.weather && state.data.weather.tomorrow;
     const w = currentWeather(), wrows = [];
     if (w) wrows.push([`<span class="wxrow">${wxIcon(w.code, w.isDay ?? 1)}${deg(w.temp)} and ${esc(wx(w.code).toLowerCase())}</span>`, w.hi != null ? `H ${deg(w.hi)} <span class="sub">L ${deg(w.lo)}</span>` : ""]);
     if (t) wrows.push([`<span class="wxrow">${wxIcon(t[3], 1)}Tomorrow, ${esc(wx(t[3]).toLowerCase())}</span>`, `H ${deg(t[1])} <span class="sub">L ${deg(t[2])}</span>`]);
 
     const since = s.installed ? s.installed.slice(0, 4) : "install";
-    const night = nowD < st.rise || nowD > st.set;
     return `${head}${stale}${alertBox}
-      <section class="first">
+      <section class="first nowtop">
         <div class="pair">
-          <div><div class="label">Making now</div><div class="big num ${nowKw > 0 ? "sun" : "dim"}">${fmt(nowKw, nowKw ? 2 : 0)}<small> kW</small></div><div class="sub">${esc(nowNote)}</div></div>
-          <div><div class="label">So far today</div><div class="big num">${fmt(todayKwh, 1)}<small> kWh</small></div>${exp ? `<div class="sub">about ${fmt(exp)} kWh expected today</div>` : ""}</div>
+          <div><div class="label">Generating now</div><div class="big num ${nowKw > 0 ? "sun" : "dim"}">${fmt(nowKw, nowKw ? 2 : 0)}<small> kW</small></div><div class="sub">${esc(nowNote)}</div></div>
+          <div><div class="label">So far today</div><div class="big num">${fmt(todayKwh, 1)}<small> kWh</small></div>${exp ? `<div class="sub">${fmt(exp)} kWh expected</div>` : ""}</div>
         </div>
         ${svg}
-        <p class="sub">${night ? `Tonight's moon: ${esc(moonPhase(nowD).name.toLowerCase())}, ${moonPhase(nowD).lit}% lit. ` : ""}${exp ? `Orange is what the panels have made so far. The grey curve is what today's forecast sunlight should give from sunrise to sunset, about ${fmt(exp)} kWh in all.` : "Orange is what the panels have made so far, from sunrise to sunset."}</p>
-        ${tomorrowLine}
       </section>
-      ${wrows.length ? `<section><div class="group-label">Weather</div>${rows(wrows)}</section>` : ""}
-      <section>
+      ${wrows.length ? `<section class="nowwx"><div class="group-label">Weather</div>${rows(wrows)}</section>` : ""}
+      <section class="nowgen">
         <div class="group-label">Generated by your solar panels</div>
         <div class="trio num">
           <div><div class="label">This month</div><div class="n">${kwh(s.month)}</div><div class="unit">kWh</div></div>
@@ -698,12 +689,19 @@
   const OLD = { overview: "month", days: "month", solar: "now", sources: "settings" };
   function route() { const r = location.hash.slice(1) || "now"; return screens[r] ? r : OLD[r] || "now"; }
 
+  let fitting = false;
   function render() {
     const r = route();
     if (OLD[location.hash.slice(1)]) { history.replaceState(null, "", "#" + r); }
     if (r !== "settings") state.lastTab = r;
     view.innerHTML = screens[r]();
     document.querySelectorAll(".tabs a").forEach((a) => { if (a.dataset.tab === r) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+    if (r === "now" && !fitting) {
+      const tabs = document.querySelector(".tabs"), tb = tabs ? tabs.getBoundingClientRect().height : 0;
+      const used = view.getBoundingClientRect().height - parseFloat(getComputedStyle(view).paddingBottom) + tb + 8;
+      const next = Math.max(130, Math.min(340, (state.nowH || 200) + innerHeight - used));
+      if (Math.abs(next - (state.nowH || 200)) > 4) { state.nowH = next; fitting = true; view.innerHTML = screens.now(); fitting = false; }
+    }
     document.title = { now: "Now", month: mName(state.month || "2000-01"), history: "History", settings: "Settings" }[r] + " · Home Solar";
   }
 

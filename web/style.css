@@ -139,8 +139,9 @@ section.first { border-top: 0; padding-top: 16px; }
 .chart .sel { fill: var(--well); }
 .chart .hit { fill: transparent; cursor: pointer; }
 .chart .hit:focus-visible { outline: none; stroke: var(--sun); stroke-width: 2; }
-.chart .ghost { fill: none; stroke: var(--faint); stroke-width: 1.5; stroke-dasharray: 4 3; }
-.chart .sunfill { fill: var(--sunwash); }
+.chart .ghost { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .8; }
+.chart .sunfill { fill: var(--sun); fill-opacity: .28; }
+.chart .rise { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .chart .sunline { fill: none; stroke: var(--sun); stroke-width: 2.2; stroke-linejoin: round; }
 .chart .dot { fill: var(--sun); stroke: var(--bg); stroke-width: 2; }
 .chart .expfill { fill: var(--well); }
@@ -267,3 +268,16 @@ body.locked .tabs { display: none; }
 .trio .unit { font-size: 13px; color: var(--muted); margin-top: 1px; }
 .group-label + .trio { margin-top: 10px; }
 .rows .r:has(.wxrow) { align-items: center; }
+
+/* Now fits one screen: roomier type below the chart, tighter spacing */
+.nowtop { padding-top: 10px; padding-bottom: 14px; }
+.nowtop .chart { margin-top: 10px; }
+.nowwx, .nowgen { padding: 14px 0; }
+.nowwx .rows .r { font-size: 17px; padding: 9px 0; }
+.nowwx .rows .r:last-child { padding-bottom: 2px; }
+.nowgen .sub { margin-top: 4px; }
+.nowwx .wxi { width: 26px; height: 26px; }
+.nowgen .label { font-size: 15px; }
+.nowgen .trio .n { font-size: 28px; }
+.nowgen .trio .unit { font-size: 15px; }
+.nowhead { padding-top: 8px; }
