@@ -141,6 +141,8 @@ def read_hydro():
     for t, (imp, exp) in by_interval.items():
         x = from_intervals[t.date().isoformat()]
         x[0] += imp; x[1] += exp; x[2] += 1
+    global HYDRO_INTERVALS
+    HYDRO_INTERVALS = by_interval
     daily = {d: [v[0], v[1]] for d, v in by_day.items()}
     for d, (imp, exp, count) in from_intervals.items():
         if d not in daily or count >= 20:  # a nearly complete day of intervals beats a daily total
@@ -777,6 +779,16 @@ def decrypt_data(box):
     return json.loads(pt)
 
 
+def _money(hydro, solar, weather):
+    try:
+        import money
+        return money.build_money(hydro, (solar or {}).get("daily"), HYDRO_INTERVALS, _json_file("data/bills.json", "bills"),
+                                 _json_file("data/grid_monthly.json", "months"), dt.datetime.now(TZ).date())
+    except Exception as e:  # costs are extra: never fail the build over them
+        log(f"::warning::cost model failed: {e}")
+        return None
+
+
 def _json_file(path, key):
     f = ROOT / path
     try:
@@ -806,6 +818,7 @@ def main():
         "solar": solar,
         "weather": weather,
         "bills": _json_file("data/bills.json", "bills"),
+        "money": _money(hydro, solar, weather),
         "gridMonthly": _json_file("data/grid_monthly.json", "months"),
         "connectUrl": authorize_url() if solar and solar.get("needsConnect") else None,
         "repo": os.environ.get("GITHUB_REPOSITORY"),
@@ -826,6 +839,7 @@ def main():
 
 SITE = ""
 PREV_SALT = None
+HYDRO_INTERVALS = {}
 
 if __name__ == "__main__":
     main()
