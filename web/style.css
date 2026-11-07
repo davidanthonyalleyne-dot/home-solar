@@ -296,3 +296,27 @@ body.locked .tabs { display: none; }
 .ptr.spin svg { animation: ptrspin .8s linear infinite; }
 @keyframes ptrspin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .ptr.spin svg { animation: none; } }
+
+/* footnote popover on Saved by solar */
+.popwrap { position: relative; }
+.popbtn { border: 0; background: transparent; padding: 0; text-align: left; cursor: pointer; width: 100%; color: inherit; }
+.label .ast { color: var(--sun); margin-left: 2px; font-weight: 600; }
+.popover.left { left: auto; right: 0; top: 86px; width: 250px; max-width: calc(100vw - 40px); }
+.popover.left::before { left: 112px; right: auto; }
+.popover.left span { font-size: 14px; color: var(--text); }
+
+/* chart legend */
+.legend { display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.legend .lg-grid { background: var(--grid); }
+.legend .lg-sun { background: var(--sun); }
+.legend .u { margin-left: auto; }
+
+/* energy accordion */
+.acc summary { list-style: none; display: flex; align-items: center; justify-content: space-between; cursor: pointer; font-size: 15px; font-weight: 500; min-height: 32px; }
+.acc summary::-webkit-details-marker { display: none; }
+.acc summary .chev { transition: transform .2s; }
+.acc[open] summary .chev { transform: rotate(90deg); }
+.acc[open] summary { margin-bottom: 10px; }
+@media (prefers-reduced-motion: reduce) { .acc summary .chev { transition: none; } }

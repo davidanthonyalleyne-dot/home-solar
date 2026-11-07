@@ -226,7 +226,7 @@
   }
   const closePops = () => document.querySelectorAll(".popover:not([hidden])").forEach((p) => { p.hidden = true; p.previousElementSibling.setAttribute("aria-expanded", "false"); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeSheet(); closePops(); } });
-  document.addEventListener("click", (e) => { if (!e.target.closest(".statuswrap")) closePops(); });
+  document.addEventListener("click", (e) => { if (!e.target.closest(".statuswrap, .popwrap")) closePops(); });
   view.addEventListener("scroll", closePops, { passive: true });
 
   const rows = (pairs) => `<div class="rows">${pairs.filter(Boolean).map(([k, v, cls]) => `<div class="r${cls ? " " + cls : ""}"><span>${k}</span><span class="v num">${v}</span></div>`).join("")}</div>`;
@@ -390,8 +390,7 @@
     let bar = "", line = "";
     if (m.grid != null && m.saved != null && m.without > 0) {
       bar = `<div class="split" role="img" aria-label="Grid ${dollars(m.grid)}, solar ${dollars(m.saved)}"><i style="flex:${m.grid};background:var(--grid)"></i><i style="flex:${Math.max(0, m.saved)};background:var(--sun)"></i></div>`;
-      line = `<p class="lead">Without solar, ${esc(name)} would have cost <b class="num">${dollars(m.without)}</b>.</p>`
-        + (m.credits >= 1 && m.exp != null ? `<p class="sub">That includes <b class="sun">${dollars(m.credits)}</b> in net metering credits for ${fmt(m.exp)} kWh sent back${m.selfValue >= 1 ? `, and ${dollars(m.selfValue)} of power the house took straight from the panels` : ""}.</p>` : "");
+      line = `<p class="lead">Without solar, ${esc(name)} would have cost <b class="num">${dollars(m.without)}</b>.</p>`;
     } else if (m.grid == null) {
       line = `<p class="sub">${sofar ? "The grid cost shows once the month is over and the meter data is in." : "No meter data or bill for this month, so the grid cost isn't known."}</p>`;
     }
@@ -401,7 +400,11 @@
     return `<section class="first">
       <div class="pair">
         <div><div class="label">Paid to the grid</div><div class="big num">${grid}</div></div>
-        <div><div class="label">Saved by solar${sofar ? " so far" : ""}</div><div class="big num sun">${m.saved != null ? dollars(m.saved) : "–"}</div></div>
+        ${(() => {
+          const note = m.credits >= 1 && m.exp != null ? `*Includes an estimated ${dollars(m.credits)} in net metering credits for ${fmt(totals(monthDays(ym)).hDays >= 25 ? totals(monthDays(ym)).exp : m.exp)} kWh sent back${m.selfValue >= 1 ? `, and ${dollars(m.selfValue)} of power the house took straight from the panels` : ""}.` : "";
+          const body = `<div class="label">Saved by solar${sofar ? " so far" : ""}${note ? '<span class="ast">*</span>' : ""}</div><div class="big num sun">${m.saved != null ? dollars(m.saved) : "–"}</div>`;
+          return note ? `<div class="popwrap"><button type="button" class="popbtn" data-pop aria-expanded="false" aria-label="How solar saved ${m.saved != null ? dollars(m.saved) : ""}">${body}</button><div class="popover left" role="status" hidden><span>${esc(note)}</span></div></div>` : `<div>${body}</div>`;
+        })()}
       </div>${bar}${line}${src}</section>`;
   }
 
@@ -430,10 +433,8 @@
     });
     g += `<line x1="0" x2="${pw}" y1="${Y(avg).toFixed(1)}" y2="${Y(avg).toFixed(1)}" class="avgline"/>` + svgText(pw + 6, Y(avg) + 4, "avg " + kwh(avg).replace(/\.\d$/, (x) => avg < 10 ? x : ""), "strong", "start");
     [1, 8, 15, 22, 29].filter((d) => d <= n).forEach((d) => { g += svgText((d - 0.5) * bw, H - 4, d); });
-    const title = hasHome ? `Each day, kWh the house used, from the <b class="ink">grid</b> and from <b class="sun">solar</b>`
-      : hasImp ? `Each day, kWh bought from the <b class="ink">grid</b>${hasProd ? ". Solar shows once the meter and SolarEdge both have the day." : ""}`
-      : `Each day, kWh the <b class="sun">panels</b> made. There's no meter data for this month yet.`;
-    return `<section><div class="label">${title}</div>
+    const legend = [(hasImp) && `<span><i class="lg-grid"></i>Grid</span>`, (hasHome || !hasImp) && `<span><i class="lg-sun"></i>Solar</span>`, `<span class="u">kWh a day</span>`].filter(Boolean).join("");
+    return `<section><div class="legend">${legend}</div>
       <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Daily chart, tap a day for detail">${g}</svg>
       <p class="sub">Tap a day to see it.</p></section>`;
   }
@@ -496,9 +497,11 @@
     if (t.bothDays) r.push(["Used directly", kwh(t.self), perDay(t.self, t.bothDays)]);
     if (t.hDays) r.push(["Sent back", kwh(t.exp), perDay(t.exp, t.hDays)]);
     if (!r.length) return "";
-    return `<section><table class="ledger num"><thead><tr><th></th><th>Month</th><th>A day</th></tr></thead><tbody>
+    return `<section class="accsec"><details class="acc"${state.ledgerOpen ? " open" : ""}><summary>Energy in kWh${chev}</summary>
+      <table class="ledger num"><thead><tr><th></th><th>Month</th><th>A day</th></tr></thead><tbody>
       ${r.map(([k, a, b, c]) => `<tr><td>${k}</td><td class="${c || ""}">${a}</td><td class="${c || ""}">${b}</td></tr>`).join("")}</tbody></table>
-      <p class="sub">${["All figures in kWh", t.hDays && t.hDays < daysIn(ym) ? `meter data for ${t.hDays} of ${daysIn(ym)} days` : "", t.pDays && t.pDays < daysIn(ym) && ym < torontoToday().slice(0, 7) ? `SolarEdge data for ${t.pDays} days` : ""].filter(Boolean).join(", ")}.</p></section>`;
+      ${t.hDays && t.hDays < daysIn(ym) || (t.pDays && t.pDays < daysIn(ym) && ym < torontoToday().slice(0, 7)) ? `<p class="sub">${[t.hDays && t.hDays < daysIn(ym) ? `Meter data for ${t.hDays} of ${daysIn(ym)} days` : "", t.pDays && t.pDays < daysIn(ym) && ym < torontoToday().slice(0, 7) ? `SolarEdge data for ${t.pDays} days` : ""].filter(Boolean).join(", ")}.</p>` : ""}
+      </details></section>`;
   }
 
   function monthScreen() {
@@ -729,6 +732,7 @@
     const d = e.target.closest("[data-day]");
     if (d) { state.day = d.dataset.day; render(); openSheet(dayName(state.day), daySheet(state.day)); }
   });
+  view.addEventListener("toggle", (e) => { if (e.target.matches("details.acc")) state.ledgerOpen = e.target.open; }, true);
   view.addEventListener("keydown", (e) => {
     if ((e.key === "Enter" || e.key === " ") && e.target.matches("[role=button]")) { e.preventDefault(); e.target.dispatchEvent(new MouseEvent("click", { bubbles: true })); }
   });
