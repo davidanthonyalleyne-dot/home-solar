@@ -459,7 +459,13 @@
     if (perf.length >= 7) {
       const act = perf.reduce((a, [r]) => a + r.prod, 0), ex = perf.reduce((a, [, e]) => a + e, 0), p = pct(act, ex);
       const weak = perf.filter(([r, e]) => e >= 8 && r.prod < 0.6 * e && !(weatherDay(r.d) && (weatherDay(r.d)[5] || 0) > 0));
-      add(p < 85 ? 1 : 4, `The panels made <b class="${p < 85 ? "bad" : ""}">${p}%</b> of what the sunlight predicted.${weak.length ? ` ${weak.length === 1 ? "One day" : weak.length + " days"} fell well short: ${weak.slice(0, 3).map(([r]) => shortDay(r.d)).join(", ")}${weak.length > 3 ? " and more" : ""}.` : ""}`);
+      const overall = p >= 95 ? "Overall your solar output matched the available sunshine."
+        : p >= 85 ? `Overall your solar output was a little under the available sunshine, at <b>${p}%</b>.`
+        : `Overall your solar output fell short of the available sunshine, at <b class="bad">${p}%</b>.`;
+      const names = weak.slice(0, 3).map(([r]) => shortDay(r.d));
+      const more = weak.length - names.length;
+      const list = more ? `${names.join(", ")} and ${more} more ${more === 1 ? "day" : "days"}` : names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0];
+      add(p < 85 ? 1 : 4, `${overall}${weak.length ? ` ${list} underperformed.` : ""}`);
     }
     // home use against last month
     const curUse = cur.home ?? cur.imp, prevUse = prev ? (cur.home != null ? prev.home : prev.imp) : null;
