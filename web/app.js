@@ -696,7 +696,7 @@
       ])}
         ${state.encrypted ? `<button type="button" class="linkline danger" id="lockapp">Lock and forget this device</button><p class="sub">You'll need your passphrase to open the app here again.</p>` : `<p class="sub">Add a SITE_PASSPHRASE secret in GitHub to encrypt everything the site publishes.</p>`}
       </section>
-      <section><p class="sub">Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a>. Sunrise and sunset are calculated for Parkdale. Built ${esc(timeOf(d.generated))}${state.version ? `, version ${esc(state.version.slice(0, 7))}` : ""}.</p></section>`;
+      <section><p class="sub">Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a>. Sunrise and sunset are calculated for Parkdale. Built ${esc(timeOf(d.generated))}${state.version ? `. Version ${esc(state.version)}` : ""}.</p></section>`;
   }
 
   // ---------- routing ----------
@@ -794,13 +794,13 @@
 
   // Home Screen apps on iPhone can hold on to an old copy of the page. Each time the app
   // opens or comes back, ask for the latest page and reload if its code version changed.
-  const myVer = ((document.querySelector('script[src*="app.js"]') || {}).src || "").match(/v=(\w+)/)?.[1] || null;
+  const myVer = ((document.querySelector('script[src*="app.js"]') || {}).src || "").match(/v=([\w.]+)/)?.[1] || null;
   state.version = myVer;
   function checkVersion() {
     if (!myVer) return;
     fetch(`./?check=${Date.now()}`, { cache: "no-store" })
       .then((r) => r.text())
-      .then((t) => { const v = (t.match(/app\.js\?v=(\w+)/) || [])[1]; if (v && v !== myVer) location.replace(`./?v=${v}${location.hash}`); })
+      .then((t) => { const v = (t.match(/app\.js\?v=([\w.]+)/) || [])[1]; if (v && v !== myVer) location.replace(`./?v=${v}${location.hash}`); })
       .catch(() => {});
   }
   checkVersion();
