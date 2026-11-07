@@ -684,7 +684,7 @@
       ])}
         ${state.encrypted ? `<button type="button" class="linkline danger" id="lockapp">Lock and forget this device</button><p class="sub">You'll need your passphrase to open the app here again.</p>` : `<p class="sub">Add a SITE_PASSPHRASE secret in GitHub to encrypt everything the site publishes.</p>`}
       </section>
-      <section><p class="sub">Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a>. Sunrise and sunset are calculated for Parkdale. Built ${esc(timeOf(d.generated))}.</p></section>`;
+      <section><p class="sub">Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a>. Sunrise and sunset are calculated for Parkdale. Built ${esc(timeOf(d.generated))}${state.version ? `, version ${esc(state.version.slice(0, 7))}` : ""}.</p></section>`;
   }
 
   // ---------- routing ----------
@@ -766,6 +766,7 @@
     refreshing = true;
     ptr.classList.add("spin"); ptr.style.opacity = 1; ptr.style.transform = `translateY(${PULL}px)`;
     const finish = () => { refreshing = false; ptr.classList.remove("spin", "ready"); ptr.style.opacity = 0; ptr.style.transform = ""; };
+    checkVersion();
     fetch("data.json", { cache: "no-store" })
       .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then((data) => HomeSolarLock.isEncrypted(data) ? HomeSolarLock.reopen(data).catch(() => HomeSolarLock.unlock(view, data)) : data)
@@ -778,6 +779,20 @@
       .catch(() => {})
       .finally(() => setTimeout(finish, 300));
   }
+
+  // Home Screen apps on iPhone can hold on to an old copy of the page. Each time the app
+  // opens or comes back, ask for the latest page and reload if its code version changed.
+  const myVer = ((document.querySelector('script[src*="app.js"]') || {}).src || "").match(/v=(\w+)/)?.[1] || null;
+  state.version = myVer;
+  function checkVersion() {
+    if (!myVer) return;
+    fetch(`./?check=${Date.now()}`, { cache: "no-store" })
+      .then((r) => r.text())
+      .then((t) => { const v = (t.match(/app\.js\?v=(\w+)/) || [])[1]; if (v && v !== myVer) location.replace(`./?v=${v}${location.hash}`); })
+      .catch(() => {});
+  }
+  checkVersion();
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) checkVersion(); });
 
   view.innerHTML = '<p class="loading">Loading…</p>';
   fetch("data.json", { cache: "no-store" })
