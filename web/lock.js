@@ -16,7 +16,9 @@ window.HomeSolarLock = (() => {
 
   const load = () => { try { return JSON.parse(localStorage.getItem(STORE) || "null"); } catch { return null; } };
   const save = (v) => { try { localStorage.setItem(STORE, JSON.stringify(v)); } catch {} };
-  const forget = () => { try { localStorage.removeItem(STORE); } catch {} idbDel(); };
+  const forget = () => { sessionKey = null; try { localStorage.removeItem(STORE); } catch {} idbDel(); };
+  // the key that opened the data this session, kept in memory only, so a refresh needn't ask again
+  let sessionKey = null;
 
   async function keyFromPassphrase(pass, box) {
     const base = await crypto.subtle.importKey("raw", enc.encode(pass.normalize("NFKC")), "PBKDF2", false, ["deriveBits"]);
@@ -93,7 +95,7 @@ window.HomeSolarLock = (() => {
   function unlock(view, box) {
     return new Promise((resolve) => {
       let rawKey = null;
-      const done = (data) => { document.body.classList.remove("locked"); resolve(data); };
+      const done = (data) => { if (rawKey) sessionKey = rawKey; document.body.classList.remove("locked"); resolve(data); };
 
       const offerFaceId = (data) => {
         if (!passkeysPossible()) return askKeep(data);
@@ -165,7 +167,7 @@ window.HomeSolarLock = (() => {
       const s = load();
       if (s && s.kind === "passkey") return askFaceId(s);
       if (s && s.kind === "device") {
-        return idbGet().then((k) => k ? decryptWith(k, box).then(done) : Promise.reject())
+        return idbGet().then((k) => k ? decryptWith(k, box).then((d) => { sessionKey = k; done(d); }) : Promise.reject())
           .catch(() => { forget(); askPassphrase("The passphrase has changed. Enter the new one."); });
       }
       askPassphrase();
@@ -177,5 +179,8 @@ window.HomeSolarLock = (() => {
     return s && s.kind === "passkey" ? "Face ID" : s && s.kind === "device" ? "Kept unlocked on this device" : "Passphrase each time";
   }
 
-  return { unlock, forget, status, isEncrypted: (d) => !!(d && d.ct && d.iv && d.salt) };
+  // decrypt a freshly fetched data.json with this session's key; rejects if it can't
+  const reopen = (box) => sessionKey ? decryptWith(sessionKey, box) : Promise.reject(new Error("locked"));
+
+  return { unlock, reopen, forget, status, isEncrypted: (d) => !!(d && d.ct && d.iv && d.salt) };
 })();
