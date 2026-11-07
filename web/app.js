@@ -266,20 +266,22 @@
     const exp = expectedFor(d);
     const W = contentWidth(), H = 170, top = 22, bot = 26, x0 = rise - 0.6, x1 = set + 0.6;
     const X = (h) => ((h - x0) / (x1 - x0)) * W;
-    const ymax = Math.max(1, ...pts.map((p) => p[1])) * 1.12;
+    // what today's forecast sunlight should give, spread over daylight hours, on the same kW scale
+    const expPeak = exp ? exp * Math.PI / (2 * (set - rise)) : 0;
+    const ymax = Math.max(1, expPeak, ...pts.map((p) => p[1])) * 1.15;
     const Y = (v) => top + (H - top - bot) * (1 - v / ymax);
-    let g = `<line x1="0" x2="${W}" y1="${Y(0)}" y2="${Y(0)}" class="axisline"/>`;
-    // the sun's path from sunrise to sunset: a time guide, drawn on its own scale so it
-    // stays a clear arc whatever the panels are making
-    const arcY = (f) => Y(0) - (Y(0) - top - 6) * 0.72 * Math.sin(Math.PI * f);
-    let arc = "";
-    for (let i = 0; i <= 48; i++) arc += `${i ? "L" : "M"}${X(rise + (set - rise) * i / 48).toFixed(1)},${arcY(i / 48).toFixed(1)}`;
-    g += `<path d="${arc}" class="ghost"/>`;
-    const isDay = nowH >= rise && nowH <= set;
-    if (isDay && fresh) {
-      const f = (nowH - rise) / (set - rise);
-      g += `<circle cx="${X(nowH).toFixed(1)}" cy="${arcY(f).toFixed(1)}" r="6" class="sunpos"/>`;
+    let g = "";
+    const step = ymax > 5 ? 2 : 1;
+    for (let v = step; v < ymax; v += step) g += `<line x1="0" x2="${W}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="gridline"/>` + svgText(0, Y(v) - 4, `${v} kW`, "", "start");
+    g += `<line x1="0" x2="${W}" y1="${Y(0)}" y2="${Y(0)}" class="axisline"/>`;
+    if (expPeak) {
+      let p = "";
+      for (let i = 0; i <= 48; i++) p += `${i ? "L" : "M"}${X(rise + (set - rise) * i / 48).toFixed(1)},${Y(expPeak * Math.sin(Math.PI * i / 48)).toFixed(1)}`;
+      g += `<path d="${p}L${X(set).toFixed(1)},${Y(0)}L${X(rise).toFixed(1)},${Y(0)}Z" class="expfill"/><path d="${p}" class="ghost"/>`;
+      const px = X((rise + set) / 2);
+      g += svgText(px, Y(expPeak) - 7, `expected · ${fmt(exp)} kWh`, "explabel");
     }
+    const isDay = nowH >= rise && nowH <= set;
     if (!isDay) g += moonIcon(new Date(), W - 14, 14, 10);
     if (pts.some((p) => p[1] > 0)) {
       const line = pts.map((p) => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`);
@@ -347,7 +349,7 @@
           <div><div class="label">So far today</div><div class="big num">${fmt(todayKwh, 1)}<small> kWh</small></div>${exp ? `<div class="sub">about ${fmt(exp)} kWh expected today</div>` : ""}</div>
         </div>
         ${svg}
-        <p class="sub">${night ? `Tonight's moon: ${esc(moonPhase(nowD).name.toLowerCase())}, ${moonPhase(nowD).lit}% lit. ` : ""}The dotted arc is the sun's path from sunrise to sunset.</p>
+        <p class="sub">${night ? `Tonight's moon: ${esc(moonPhase(nowD).name.toLowerCase())}, ${moonPhase(nowD).lit}% lit. ` : ""}${exp ? `Orange is what the panels have made so far. The grey curve is what today's forecast sunlight should give from sunrise to sunset, about ${fmt(exp)} kWh in all.` : "Orange is what the panels have made so far, from sunrise to sunset."}</p>
         ${tomorrowLine}
       </section>
       ${wrows.length ? `<section><div class="group-label">Weather</div>${rows(wrows)}</section>` : ""}
