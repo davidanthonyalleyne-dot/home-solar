@@ -11,6 +11,7 @@
   --grid-est: #8E8E93;
   --sun: #E8830C;
   --sunwash: #FBE3C4;
+  --moon: #8E8E93;
   --ok: #2E9E5B;
   --bad: #D33A2C;
   --tabbar: rgba(255, 255, 255, 0.92);
@@ -35,6 +36,7 @@
     --grid-est: #6E6E73;
     --sun: #FF9F0A;
     --sunwash: #3D2A0F;
+    --moon: #E5E5EA;
     --ok: #30D158;
     --bad: #FF6B5E;
     --tabbar: rgba(18, 18, 20, 0.92);
@@ -141,6 +143,9 @@ section.first { border-top: 0; padding-top: 16px; }
 .chart .sunfill { fill: var(--sunwash); }
 .chart .sunline { fill: none; stroke: var(--sun); stroke-width: 2.2; stroke-linejoin: round; }
 .chart .dot { fill: var(--sun); stroke: var(--bg); stroke-width: 2; }
+.chart .sunpos { fill: var(--bg); stroke: var(--sun); stroke-width: 2; }
+.chart .moondark { fill: var(--well); stroke: var(--faint); stroke-width: .75; }
+.chart .moonlit { fill: var(--moon); }
 
 /* facts */
 .facts p { margin: 0; padding: 11px 0; border-bottom: 1px solid var(--rule); font-size: 15px; }

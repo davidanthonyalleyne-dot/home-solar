@@ -214,6 +214,23 @@
   // ======================================================================
   const alerts = () => (solar() && solar().alerts) || [];
 
+  // moon phase from the mean synodic month, counted from the new moon of 6 January 2000
+  function moonPhase(t) {
+    const P = 29.530588853, age = (((t.getTime() - Date.UTC(2000, 0, 6, 18, 14)) / 86400000) % P + P) % P;
+    const lit = (1 - Math.cos(2 * Math.PI * age / P)) / 2, waxing = age < P / 2;
+    const name = age < 1.0 || age > P - 1.0 ? "New moon" : Math.abs(age - P / 2) < 1.0 ? "Full moon"
+      : Math.abs(age - P / 4) < 1.0 ? "First quarter" : Math.abs(age - 3 * P / 4) < 1.0 ? "Last quarter"
+      : (waxing ? "Waxing " : "Waning ") + (lit < 0.5 ? "crescent" : "gibbous");
+    return { age, lit: Math.round(lit * 100), frac: lit, waxing, name };
+  }
+  // the lit part as seen from the northern hemisphere: waxing lights the right side
+  function moonIcon(t, cx, cy, R) {
+    const m = moonPhase(t), rx = Math.abs(1 - 2 * m.frac) * R;
+    const lit = m.frac < 0.02 ? "" : m.frac > 0.98 ? `<circle r="${R}" class="moonlit"/>`
+      : `<path d="M0,${-R}A${R},${R} 0 0 1 0,${R}A${rx.toFixed(2)},${R} 0 0 ${m.frac > 0.5 ? 1 : 0} 0,${-R}Z" class="moonlit"/>`;
+    return `<g transform="translate(${cx},${cy})${m.waxing ? "" : " scale(-1,1)"}" role="img" aria-label="${esc(m.name)}, ${m.lit}% lit"><circle r="${R}" class="moondark"/>${lit}</g>`;
+  }
+
   function todayChart(s, fresh) {
     const d = torontoToday(), st = sunTimes(d);
     const rise = hoursOf(st.rise), set = hoursOf(st.set);
@@ -225,17 +242,23 @@
     if (nowH < set) while (pts.length > 1 && pts.at(-1)[1] === 0 && pts.some((p) => p[1] > 0)) pts.pop();
     pts = pts.filter((p) => p[0] >= rise - 0.75 && p[0] <= set + 0.75);
     const exp = expectedFor(d);
-    const expPeak = exp ? exp * Math.PI / (2 * (set - rise)) : 0;
-    const W = contentWidth(), H = 150, top = 22, bot = 26, x0 = rise - 0.6, x1 = set + 0.6;
+    const W = contentWidth(), H = 170, top = 22, bot = 26, x0 = rise - 0.6, x1 = set + 0.6;
     const X = (h) => ((h - x0) / (x1 - x0)) * W;
-    const ymax = Math.max(1, expPeak, ...pts.map((p) => p[1])) * 1.12;
+    const ymax = Math.max(1, ...pts.map((p) => p[1])) * 1.12;
     const Y = (v) => top + (H - top - bot) * (1 - v / ymax);
     let g = `<line x1="0" x2="${W}" y1="${Y(0)}" y2="${Y(0)}" class="axisline"/>`;
-    if (expPeak) {
-      let p = "";
-      for (let i = 0; i <= 48; i++) { const h = rise + (set - rise) * i / 48; p += `${i ? "L" : "M"}${X(h).toFixed(1)},${Y(expPeak * Math.sin(Math.PI * i / 48)).toFixed(1)}`; }
-      g += `<path d="${p}" class="ghost"/>`;
+    // the sun's path from sunrise to sunset: a time guide, drawn on its own scale so it
+    // stays a clear arc whatever the panels are making
+    const arcY = (f) => Y(0) - (Y(0) - top - 6) * 0.72 * Math.sin(Math.PI * f);
+    let arc = "";
+    for (let i = 0; i <= 48; i++) arc += `${i ? "L" : "M"}${X(rise + (set - rise) * i / 48).toFixed(1)},${arcY(i / 48).toFixed(1)}`;
+    g += `<path d="${arc}" class="ghost"/>`;
+    const isDay = nowH >= rise && nowH <= set;
+    if (isDay && fresh) {
+      const f = (nowH - rise) / (set - rise);
+      g += `<circle cx="${X(nowH).toFixed(1)}" cy="${arcY(f).toFixed(1)}" r="6" class="sunpos"/>`;
     }
+    if (!isDay) g += moonIcon(new Date(), W - 14, 14, 10);
     if (pts.some((p) => p[1] > 0)) {
       const line = pts.map((p) => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`);
       g += `<path d="M${X(pts[0][0]).toFixed(1)},${Y(0)}L${line.join("L")}L${X(pts.at(-1)[0]).toFixed(1)},${Y(0)}Z" class="sunfill"/>`;
@@ -292,7 +315,7 @@
           <div><div class="label">So far today</div><div class="big num">${fmt(todayKwh, 1)}<small> kWh</small></div>${exp ? `<div class="sub">about ${fmt(exp)} expected</div>` : ""}</div>
         </div>
         ${svg}
-        ${exp ? `<p class="sub">The dotted line is what today's sunlight should give.</p>` : ""}
+        <p class="sub">${hoursOf(new Date()) < hoursOf(st.rise) || new Date() > st.set ? `Tonight's moon: ${esc(moonPhase(new Date()).name.toLowerCase())}, ${moonPhase(new Date()).lit}% lit. The dotted arc is the sun's path from sunrise to sunset.` : "The dotted arc is the sun's path from sunrise to sunset."}</p>
       </section>
       ${wrows.length ? `<section>${rows(wrows)}</section>` : ""}
       ${a.length ? "" : status}
