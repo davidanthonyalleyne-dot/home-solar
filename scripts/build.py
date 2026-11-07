@@ -117,8 +117,11 @@ def read_hydro():
                 if any("delivered" in c for c in labels) and any("received" in c for c in labels):
                     # the export can repeat each column when the meter's channel changes
                     # part way through (e.g. from October 2026), with each row filled in only one of them
-                    imp_cols = [i for i, c in enumerate(labels) if "delivered" in c]
-                    exp_cols = [i for i, c in enumerate(labels) if "received" in c]
+                    # some exports also carry kVAh and loss-adjusted copies of each channel
+                    # (and older meters alongside the current one); use only the plain kWh ones
+                    plain = lambda word: [i for i, c in enumerate(labels) if f"kwh {word}" in c and "with" not in c]
+                    imp_cols = plain("delivered") or [i for i, c in enumerate(labels) if "delivered" in c]
+                    exp_cols = plain("received") or [i for i, c in enumerate(labels) if "received" in c]
                 continue
             if not cells:
                 continue
