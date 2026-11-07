@@ -47,7 +47,7 @@ The Actions tab shows **Build and deploy** running. When it turns green the site
 
 ### 6. Connect SolarEdge (once)
 
-1. Open the site, go to **Sources** and tap **Connect SolarEdge**.
+1. Open the site, tap the settings button on **Now** and tap **Connect SolarEdge**.
 2. Sign in with your mySolarEdge account and approve access.
 3. SolarEdge sends you back to the site's callback page, which shows a one-time code. Tap **Copy code**, then **Open the workflow**.
 4. In GitHub tap **Run workflow**, paste the code and run it. Do this within a few minutes, because the code expires.
@@ -72,7 +72,7 @@ Bills live in `data/bills.json`, typed from the PDFs with only the numbers the a
 
 ## If SolarEdge stops updating
 
-The Sources screen will say the sign-in expired and show **Connect SolarEdge** again. Repeat step 6. That happens if access goes unused for about 30 days, when the 24-month approval runs out, if your GitHub token from step 3 expires, or if a build couldn't save the new token. In that last case GitHub emails you that the run failed.
+Settings will say the sign-in expired and show **Connect SolarEdge** again. Repeat step 6. That happens if access goes unused for about 30 days, when the 24-month approval runs out, if your GitHub token from step 3 expires, or if a build couldn't save the new token. In that last case GitHub emails you that the run failed.
 
 ## Good to know
 
