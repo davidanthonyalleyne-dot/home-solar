@@ -139,10 +139,12 @@ section.first { border-top: 0; padding-top: 16px; }
 .chart .sel { fill: var(--well); }
 .chart .hit { fill: transparent; cursor: pointer; }
 .chart .hit:focus-visible { outline: none; stroke: var(--sun); stroke-width: 2; }
-.chart .ghost { fill: none; stroke: var(--faint); stroke-width: 1.5; stroke-dasharray: 2 4; }
+.chart .ghost { fill: none; stroke: var(--faint); stroke-width: 1.5; stroke-dasharray: 4 3; }
 .chart .sunfill { fill: var(--sunwash); }
 .chart .sunline { fill: none; stroke: var(--sun); stroke-width: 2.2; stroke-linejoin: round; }
 .chart .dot { fill: var(--sun); stroke: var(--bg); stroke-width: 2; }
+.chart .expfill { fill: var(--well); }
+.chart text.explabel { fill: var(--muted); font-weight: 500; }
 .chart .sunpos { fill: var(--bg); stroke: var(--sun); stroke-width: 2; }
 .chart .moondark { fill: var(--well); stroke: var(--faint); stroke-width: .75; }
 .chart .moonlit { fill: var(--moon); }
