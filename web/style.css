@@ -341,3 +341,33 @@ body.locked .tabs { display: none; }
 .status-pop .pi.unknown > i { background: var(--faint); }
 .status-pop .pi > div { display: flex; flex-direction: column; gap: 2px; }
 .status-pop .btn { margin-top: 2px; min-height: 44px; font-size: 15px; }
+
+/* current weather beside the date; hairlines between the three totals */
+.wxnow { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; color: var(--text); }
+.wxnow .wxi { width: 16px; height: 16px; stroke: var(--text); }
+.trio.ruled { gap: 0; }
+.trio.ruled > div { padding: 0 12px; }
+.trio.ruled > div:first-child { padding-left: 0; }
+.trio.ruled > div + div { border-left: 1px solid var(--rule); }
+
+/* jump to the latest month */
+.steps .latest svg { width: 18px; height: 18px; fill: none; stroke: var(--sun); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* History: Cost / Energy switch */
+.seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; padding: 2px; margin: 12px 0 2px; background: var(--well); border-radius: 9px; }
+.seg button { height: 32px; border: 0; border-radius: 7px; background: transparent; font: inherit; font-size: 14px; font-weight: 500; color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--sheet); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.chart .b-sun.est { opacity: .45; }
+
+/* EV comparison and CO2 lines */
+.evline { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-top: 6px; font-size: 15px; }
+.evline svg, .co2 svg { width: 20px; height: 20px; flex-shrink: 0; fill: none; stroke: var(--muted); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.evline .ast { color: var(--sun); margin-left: 2px; font-weight: 600; }
+.popover.below { left: 0; right: auto; top: 52px; width: 290px; max-width: calc(100vw - 40px); }
+.popover.below::before { left: 22px; right: auto; }
+.popover.below span { font-size: 14px; color: var(--text); }
+.co2 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 15px; }
+
+/* bill period under the sheet title */
+.period { margin: 0; font-size: 17px; font-weight: 600; color: var(--sun); }
+.period + .sub { margin-top: 2px; }

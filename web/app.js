@@ -5,7 +5,8 @@
 
   // Safari ignores user-scalable=no, so block its pinch gestures directly
   ["gesturestart", "gesturechange", "gestureend"].forEach((t) => document.addEventListener(t, (e) => e.preventDefault(), { passive: false }));
-  const state = { data: null, month: null, day: null, lastTab: "now" };
+  const state = { data: null, month: null, day: null, lastTab: "now", histView: "cost" };
+  try { if (localStorage.getItem("histView") === "energy") state.histView = "energy"; } catch (_) {}
 
   // ---------- helpers ----------
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -326,12 +327,23 @@
     return { level, items, connect, label: items.map((x) => x.title).join(", ") };
   }
 
+  // "just now", "12 min ago", "3 hr ago", then the date and time once it's a day old
+  function ago(iso) {
+    const t = new Date(iso), min = Math.round((Date.now() - t) / 60000);
+    if (min < 1) return "just now";
+    if (min < 60) return `${min} min ago`;
+    if (min < 24 * 60) return `${Math.round(min / 60)} hr ago`;
+    return t.toLocaleString("en-US", { month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: TZNAME }).replace(" at ", ", ").replace(" AM", " am").replace(" PM", " pm");
+  }
+
   function nowScreen() {
     const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: TZNAME });
     const sys = systemStatus();
     const dot = sys ? `<div class="statuswrap"><button type="button" class="statusdot ${sys.level}" data-pop aria-label="${esc(sys.label)}" aria-expanded="false"><i></i></button>
       <div class="popover status-pop" role="status" hidden>${sys.items.map((x) => `<div class="pi ${x.level}"><i></i><div><b>${esc(x.title)}</b>${x.note ? `<span>${x.note}</span>` : ""}</div></div>`).join("")}${sys.connect ? connectBtn() : ""}</div></div>` : "";
-    const head = `<div class="top nowhead"><div><div class="eyebrow">${esc(today)}</div><h1>Now</h1></div>
+    const cw = currentWeather();
+    const wxNow = cw ? `<span class="wxnow">${wxIcon(cw.code, cw.isDay ?? 1)}${deg(cw.temp)} ${esc(wx(cw.code).toLowerCase())}</span>` : "";
+    const head = `<div class="top nowhead"><div><div class="eyebrow">${esc(today)}${wxNow}</div><h1>Now</h1></div>
       <div class="topright">${dot}<a class="iconbtn" href="#settings" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.4"/><circle cx="15" cy="17" r="2.4"/></svg></a></div></div>`;
     const s = solar();
     if (!s) {
@@ -347,12 +359,12 @@
     const offline = !!(s.needsConnect || s.authTroubleSince);
     const nowNote = offline && nowD > st.rise && nowD < st.set ? "no live reading" : nowKw > 0 ? `of ${fmt(s.peakKw, 2)} kW` : nowD < st.rise ? `sunrise ${clock(st.rise)}` : nowD > st.set ? `sun set at ${clock(st.set)}` : "not producing";
     const nowBig = offline && nowD > st.rise && nowD < st.set ? "–" : fmt(nowKw, nowKw ? 2 : 0);
-    const todayBig = offline && !fresh ? "–" : fmt(todayKwh, 1);
+    const smallDay = todayKwh > 0 && todayKwh < 1;
+    const todayBig = offline && !fresh ? "–" : smallDay ? fmt(todayKwh * 1000) : fmt(todayKwh, 1);
     const todayNote = offline ? (fresh ? `as of ${esc(timeOnly(s.updated))}` : "waiting for SolarEdge") : exp ? `${fmt(exp)} kWh expected` : "";
 
     const t = state.data.weather && state.data.weather.tomorrow;
-    const w = currentWeather(), wrows = [];
-    if (w) wrows.push([`<span class="wxrow">${wxIcon(w.code, w.isDay ?? 1)}${deg(w.temp)} and ${esc(wx(w.code).toLowerCase())}</span>`, w.hi != null ? `H ${deg(w.hi)} <span class="sub">L ${deg(w.lo)}</span>` : ""]);
+    const wrows = [];
     if (t) wrows.push([`<span class="wxrow">${wxIcon(t[3], 1)}Tomorrow, ${esc(wx(t[3]).toLowerCase())}</span>`, `H ${deg(t[1])} <span class="sub">L ${deg(t[2])}</span>`]);
 
     const since = s.installed ? s.installed.slice(0, 4) : "install";
@@ -360,19 +372,19 @@
       <section class="first nowtop">
         <div class="pair">
           <div><div class="label">Generating now</div><div class="big num ${nowKw > 0 && !offline ? "sun" : "dim"}">${nowBig}<small> kW</small></div><div class="sub">${esc(nowNote)}</div></div>
-          <div><div class="label">So far today</div><div class="big num${offline ? " dim" : ""}">${todayBig}<small> kWh</small></div>${todayNote ? `<div class="sub">${todayNote}</div>` : ""}</div>
+          <div><div class="label">So far today</div><div class="big num${offline ? " dim" : ""}">${todayBig}<small> ${smallDay && !(offline && !fresh) ? "Wh" : "kWh"}</small></div>${todayNote ? `<div class="sub">${todayNote}</div>` : ""}</div>
         </div>
         ${svg}
       </section>
-      ${wrows.length ? `<section class="nowwx"><div class="group-label">Weather</div>${rows(wrows)}</section>` : ""}
+      ${wrows.length ? `<section class="nowwx">${rows(wrows)}</section>` : ""}
       <section class="nowgen">
         <div class="group-label">Generated by solar</div>
-        <div class="trio num">
+        <div class="trio ruled num">
           <div><div class="label">This month</div><div class="n">${kwh(s.month)}</div><div class="unit">kWh</div></div>
           <div><div class="label">This year</div><div class="n">${fmt(s.year)}</div><div class="unit">kWh</div></div>
           <div><div class="label">Since ${esc(since)}</div><div class="n">${fmt(s.lifetime)}</div><div class="unit">kWh</div></div>
         </div>
-        ${s.updated ? `<p class="sub updated">Updated ${esc(new Date(s.updated).toLocaleString("en-US", { month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: TZNAME }).replace(" at ", ", ").replace(" AM", " am").replace(" PM", " pm"))}</p>` : ""}
+        ${s.updated ? `<p class="sub updated">Updated ${esc(ago(s.updated))}</p>` : ""}
       </section>`;
   }
 
@@ -397,9 +409,9 @@
 
   function monthHead() {
     const all = months(), i = all.indexOf(state.month);
-    const prev = i > 0 ? all[i - 1] : null, next = i < all.length - 1 ? all[i + 1] : null;
+    const prev = i > 0 ? all[i - 1] : null, next = i < all.length - 1 ? all[i + 1] : null, latest = defaultMonth();
     return `<div class="top"><div><div class="eyebrow">${state.month.slice(0, 4)}</div><h1>${esc(mName(state.month))}</h1></div>
-      <div class="steps"><button type="button" ${prev ? `data-ym="${prev}"` : "disabled"} aria-label="Previous month">‹</button><button type="button" ${next ? `data-ym="${next}"` : "disabled"} aria-label="Next month">›</button></div></div>
+      <div class="steps"><button type="button" ${prev ? `data-ym="${prev}"` : "disabled"} aria-label="Previous month">‹</button><button type="button" ${next ? `data-ym="${next}"` : "disabled"} aria-label="Next month">›</button>${latest && state.month < latest ? `<button type="button" class="latest" data-ym="${latest}" aria-label="Jump to ${esc(mName(latest))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5l7 7-7 7M18 5v14"/></svg></button>` : ""}</div></div>
       ${monthStrip()}`;
   }
 
@@ -437,7 +449,7 @@
     const val = (r) => { const x = segs(r); return x ? x.reduce((a, [v]) => a + v, 0) : null; };
     const vals = days.map(val).filter((v) => v != null);
     const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-    const W = contentWidth(), H = 196, top = 10, bot = 20, right = 44, n = days.length, pw = W - right, bw = pw / n;
+    const W = contentWidth(), H = 214, top = 28, bot = 20, right = 44, n = days.length, pw = W - right, bw = pw / n;
     const step = niceStep(Math.max(...vals)), ymax = Math.ceil(Math.max(...vals) / step) * step || 1;
     const Y = (v) => top + (H - top - bot) * (1 - v / ymax);
     let g = "";
@@ -447,7 +459,11 @@
     }
     days.forEach((r, i) => {
       const x = i * bw, on = r.d === state.day, s = segs(r);
-      if (on) g += `<rect x="${(x).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H - bot + 2}" rx="3" class="sel"/>`;
+      if (on) {
+        g += `<rect x="${(x).toFixed(1)}" y="${top - 6}" width="${bw.toFixed(1)}" height="${H - bot + 8 - top}" rx="3" class="sel"/>`;
+        const v = val(r), cx = Math.min(pw - 40, Math.max(40, x + bw / 2));
+        g += svgText(cx, 14, `${shortDay(r.d)}: ${v != null ? kwh(v) + " kWh" : "no data"}`, "strong");
+      }
       let acc = 0;
       if (s) s.forEach(([v, c]) => { g += `<rect x="${(x + 1).toFixed(1)}" y="${Y(acc + v).toFixed(1)}" width="${Math.max(1.5, bw - 2).toFixed(1)}" height="${Math.max(0, Y(acc) - Y(acc + v)).toFixed(1)}" class="b-${c}"/>`; acc += v; });
       g += `<rect x="${x.toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}" class="hit" data-day="${r.d}" role="button" aria-label="${esc(dayName(r.d))}"/>`;
@@ -573,7 +589,9 @@
     const mm = M()[ym] || {}, dc = mm.deliveryCredit || 0;
     const creditNote = p.credit > 0.5 ? `<p class="sub">Net metering also takes about <b class="sun">${money(dc)}</b> off the delivery and regulatory lines, because those are charged on what you bought minus what you sent back. Toronto Hydro folds that into the lines rather than printing it. HST is charged as if neither credit applied, while the rebate is worked out after both.</p>` : "";
     const carried = Math.abs(b.previous || 0) >= 0.5 ? (b.previous > 0 ? `The amount due was ${money(b.due)}, including ${money(b.previous)} carried over unpaid from the bill before.` : `The amount due was ${money(b.due)} after a ${money(-b.previous)} credit from the bill before.`) : "";
-    return `<p class="sub">${shortDay(b.from)} to ${shortDay(b.to)} · ${fmt(p.current / p.kwh * 100, 1)}¢ per kWh all in · ${b.season} prices</p>${rows(r)}${creditNote}${carried ? `<p class="sub">${carried}</p>` : ""}`;
+    const nDays = Math.round((parseDay(b.to) - parseDay(b.from)) / 86400000);
+    const issued = b.statement ? `, issued ${parseDay(b.statement).toLocaleDateString("en-US", { month: "long", day: "numeric" })}` : "";
+    return `<p class="period">${shortDay(b.from)} to ${shortDay(b.to)}, ${b.to.slice(0, 4)}</p><p class="sub">${nDays} days${issued} · ${fmt(p.current / p.kwh * 100, 1)}¢ per kWh all in · ${b.season} prices</p>${rows(r)}${creditNote}${carried ? `<p class="sub">${carried}</p>` : ""}`;
   }
 
   // ======================================================================
@@ -591,15 +609,15 @@
   }
 
   function historyChart() {
-    const ys = Object.keys(yearTotals()).sort().reverse();
+    const yt = yearTotals(), ys = Object.keys(yt).sort().reverse();
     if (!ys.length) return "";
-    const W = contentWidth(), rowH = 64, lab = 42, top = 6, H = ys.length * rowH + 18, bw = (W - lab) / 12;
+    const W = contentWidth(), rowH = 64, lab = 50, top = 6, H = ys.length * rowH + 18, bw = (W - lab) / 12;
     const vals = ys.flatMap((y) => Array.from({ length: 12 }, (_, i) => { const m = M()[`${y}-${String(i + 1).padStart(2, "0")}`]; return m ? (m.grid || 0) + Math.max(0, m.saved || 0) : 0; }));
     const mx = Math.max(1, ...vals), sc = (v) => (rowH - 16) * v / mx;
     let g = "";
     ys.forEach((y, r) => {
       const base = top + r * rowH + rowH - 10;
-      g += svgText(0, base - 2, y, "strong", "start") + `<line x1="${lab}" x2="${W}" y1="${base}" y2="${base}" class="axisline"/>`;
+      g += svgText(0, base - 18, y, "strong", "start") + svgText(0, base - 2, dollars(yt[y].grid), "", "start") + `<line x1="${lab}" x2="${W}" y1="${base}" y2="${base}" class="axisline"/>`;
       for (let i = 0; i < 12; i++) {
         const ym = `${y}-${String(i + 1).padStart(2, "0")}`, m = M()[ym], x = lab + i * bw + 2, w = Math.max(2, bw - 4);
         if (!m) continue;
@@ -616,7 +634,60 @@
       <p class="sub">Paler bars are estimates. Tap a month to open it.</p></section>`;
   }
 
+  // what the panels made each month, one row per year on one scale
+  function prodByMonth() {
+    const out = {};
+    if (solar()) for (const [d, v] of Object.entries(solar().daily)) out[d.slice(0, 7)] = (out[d.slice(0, 7)] || 0) + (v || 0);
+    return out;
+  }
+  function energyChart() {
+    const pm = prodByMonth(), ys = [...new Set(Object.keys(pm).map((k) => k.slice(0, 4)))].sort().reverse();
+    if (!ys.length) return "";
+    const W = contentWidth(), rowH = 64, lab = 50, top = 6, H = ys.length * rowH + 18, bw = (W - lab) / 12;
+    const mx = Math.max(1, ...Object.values(pm)), sc = (v) => (rowH - 16) * v / mx, cur = torontoToday().slice(0, 7);
+    let g = "";
+    ys.forEach((y, r) => {
+      const base = top + r * rowH + rowH - 10, tot = Object.entries(pm).filter(([k]) => k.startsWith(y)).reduce((a, [, v]) => a + v, 0);
+      g += svgText(0, base - 18, y, "strong", "start") + svgText(0, base - 2, fmt(tot), "", "start") + `<line x1="${lab}" x2="${W}" y1="${base}" y2="${base}" class="axisline"/>`;
+      for (let i = 0; i < 12; i++) {
+        const ym = `${y}-${String(i + 1).padStart(2, "0")}`, v = pm[ym], x = lab + i * bw + 2, w = Math.max(2, bw - 4);
+        if (v == null) continue;
+        const h = Math.max(0.5, sc(v));
+        g += `<rect x="${x.toFixed(1)}" y="${(base - h).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" class="b-sun${ym === cur ? " est" : ""}"/>`;
+        g += `<rect x="${(x - 2).toFixed(1)}" y="${base - rowH + 10}" width="${bw.toFixed(1)}" height="${rowH}" class="hit" data-ym="${ym}" data-go="month" role="button" aria-label="${esc(monthName(ym))}: ${fmt(v)} kWh"/>`;
+      }
+    });
+    "JFMAMJJASOND".split("").forEach((c, i) => { g += svgText(lab + i * bw + bw / 2, H - 2, c); });
+    return `<section><div class="label">kWh generated each month, with the year's total. Same scale every year.</div>
+      <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Solar generation by month and year">${g}</svg>
+      <p class="sub">Tap a month to open it.</p></section>`;
+  }
+  // Ontario's grid is mostly nuclear and hydro: about 30 g of CO2 per kWh
+  const CO2_KG = 0.03, EV_KWH_100KM = 25;
+  const lifetimeKwh = () => solar() ? (solar().lifetime || Object.values(solar().daily).reduce((a, v) => a + (v || 0), 0)) : 0;
+  const co2Line = () => lifetimeKwh() ? `<p class="co2"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21c-4-3-7-6.5-7-10.5A7 7 0 0 1 12 3a7 7 0 0 1 7 7.5c0 4-3 7.5-7 10.5z"/><path d="M12 21V10M12 14l-3-2.5M12 12l3-2.5"/></svg>Avoided about ${fmt(Math.round(lifetimeKwh() * CO2_KG / 10) * 10)} kg of CO₂ since ${esc(solar().installed ? solar().installed.slice(0, 4) : "install")}</p>` : "";
+  function energyView() {
+    const total = lifetimeKwh(), since = solar() && solar().installed ? monthName(solar().installed.slice(0, 7)) : "install";
+    const km = Math.round(total / EV_KWH_100KM * 100 / 1000) * 1000;
+    // how many months of the house's own use that is, from the last twelve full months
+    const recent = Object.entries(M()).filter(([, m]) => m.imp != null && m.selfUsed != null && m.complete !== false).slice(-12);
+    const perMonth = recent.length ? recent.reduce((a, [, m]) => a + m.imp + m.selfUsed, 0) / recent.length : 0;
+    const houseMonths = perMonth ? Math.round(total / perMonth) : null;
+    const note = `*At about ${EV_KWH_100KM} kWh per 100 km, what a Taycan uses in mixed driving.${houseMonths ? ` It's also about ${houseMonths} months of what your house uses.` : ""}`;
+    return `<section class="first">
+        <div class="label">Generated by solar since ${esc(since)}</div>
+        <div class="big num sun">${fmt(total)}<small> kWh</small></div>
+        ${total ? `<div class="popwrap"><button type="button" class="popbtn evline" data-pop aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15.5v-2.2c0-.8.5-1.5 1.3-1.8L7 10.5l2.4-3.2c.4-.5 1-.8 1.6-.8h4.5c.7 0 1.3.3 1.7.9L19 10.5l1.4.5c.4.2.6.6.6 1v3.5"/><circle cx="7" cy="16" r="2"/><circle cx="17" cy="16" r="2"/><path d="M9 16h6"/></svg><span>Enough to drive an EV about ${fmt(km)} km<span class="ast">*</span></span></button><div class="popover below" role="status" hidden><span>${esc(note)}</span></div></div>` : ""}
+      </section>
+      ${energyChart()}
+      <section>${co2Line()}</section>`;
+  }
+  const histSwitch = () => `<div class="seg" role="group" aria-label="Show cost or energy">${["cost", "energy"].map((v) => `<button type="button" data-hview="${v}" aria-pressed="${state.histView === v}">${v === "cost" ? "Cost" : "Energy"}</button>`).join("")}</div>`;
+
   function historyScreen() {
+    if (state.histView === "energy" && solar()) {
+      return `<div class="top"><div><div class="eyebrow">Since ${esc(monthName(solar().installed ? solar().installed.slice(0, 7) : Object.keys(solar().daily).sort()[0].slice(0, 7)))}</div><h1>History</h1></div></div>${histSwitch()}${energyView()}`;
+    }
     const ms = Object.entries(M());
     if (!ms.length) return `<div class="top"><div><h1>History</h1></div></div><section class="first"><p class="lead">No cost history yet.</p></section>`;
     const grid = ms.reduce((a, [, m]) => a + (m.grid || 0), 0), saved = ms.reduce((a, [, m]) => a + (m.saved || 0), 0);
@@ -633,6 +704,7 @@
     // the typical miss: three in four estimated months land at least this close to the bill
     const offs = bt.map((b) => Math.abs(b.off)).sort((a, b) => a - b), typ = offs.length ? offs[Math.floor(offs.length * 0.75)] : null;
     return `<div class="top"><div><div class="eyebrow">Since ${esc(monthName(first))}</div><h1>History</h1></div></div>
+      ${solar() ? histSwitch() : ""}
       <section class="first">
         <div class="pair">
           <div><div class="label">Paid to the grid</div><div class="big num${dollars(grid).length > 6 ? " long" : ""}">${dollars(grid)}</div></div>
@@ -644,9 +716,10 @@
       </section>
       ${historyChart()}
       <section>
-        <table class="ledger years num"><thead><tr><th></th><th>Paid</th><th>Saved</th><th>Made, kWh</th></tr></thead><tbody>${trs}</tbody></table>
+        <table class="ledger years num"><thead><tr><th></th><th>Paid</th><th>Saved</th><th>Generated, kWh</th></tr></thead><tbody>${trs}</tbody></table>
         <button type="button" class="linkline" data-sheet="method">Months with a bill use the bill. The rest are estimated${typ != null ? `, usually within ${fmt(Math.max(1, Math.ceil(typ * 100)))}% of the real bill` : ""}.${chev}</button>
-      </section>`;
+      </section>
+      ${co2Line() ? `<section>${co2Line()}</section>` : ""}`;
   }
 
   function methodSheet() {
@@ -748,6 +821,8 @@
       box.hidden = !open; pop.setAttribute("aria-expanded", String(open));
       return;
     }
+    const hv = e.target.closest("[data-hview]");
+    if (hv) { state.histView = hv.dataset.hview; try { localStorage.setItem("histView", state.histView); } catch (_) {} render(); return; }
     const sh = e.target.closest("[data-sheet]");
     if (sh) {
       if (sh.dataset.sheet === "bill") openSheet(`${mName(state.month)} bill`, billSheet(state.month));
