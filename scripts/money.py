@@ -118,7 +118,8 @@ def _fit_rates(bills):
         by[b["to"][:4]].append(b)
     out = {}
     for y, bs in by.items():
-        if len(bs) < 3:
+        # two bills fit a line exactly; fine when their kWh differ enough to separate fixed from per-kWh
+        if len(bs) < 2 or (len(bs) == 2 and abs((bs[0]["used"] - bs[0]["generated"]) - (bs[1]["used"] - bs[1]["generated"])) < 300):
             continue
         net = [(b["used"] - b["generated"], b) for b in bs]
         fixed, per = _line([(x, b["delivery"]) for x, b in net])
@@ -158,6 +159,8 @@ def build_money(hydro, solar_daily, intervals, bills, grid_monthly, today):
     bills = bills or []
     grid_monthly = grid_monthly or {}
     solar_daily = solar_daily or {}
+    # bills from before the net meter (and solar) went in are kept for the record only
+    bills = [b for b in bills if not b.get("preSolar")]
     fitted, rates = _fit_rates(bills)
     by_month_bill = {b["to"][:7]: b for b in bills}
 

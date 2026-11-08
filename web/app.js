@@ -191,7 +191,7 @@
   }
 
   // ---------- bills ----------
-  const billFor = (ym) => (state.data.bills || []).find((b) => b.to.slice(0, 7) === ym) || null;
+  const billFor = (ym) => (state.data.bills || []).find((b) => !b.preSolar && b.to.slice(0, 7) === ym) || null;
   const lineSum = (lines) => Object.values(lines).reduce((a, [k, r]) => a + Math.round(k * r * 100) / 100, 0);
   const billParts = (b) => {
     const buy = lineSum(b.buy), credit = lineSum(b.credit), k = Object.values(b.buy).reduce((a, [x]) => a + x, 0);
@@ -680,7 +680,7 @@
       if (connected != null) sol.push(["Optimizers", `${connected}${models.length ? " · " + esc(models.join(", ")) : ""}`]);
     }
     if (ok && s.alertsChecked) sol.push(["Alerts checked", esc(timeOf(s.alertsChecked))]);
-    const bills = d.bills || [];
+    const bills = (d.bills || []).filter((b) => !b.preSolar);
     return `<div class="top"><div><h1>Settings</h1></div><button type="button" class="done" data-back>Done</button></div>
       <section class="first"><div class="group-label">SolarEdge</div>${rows(sol)}
         ${ok ? `<p class="sub">Refreshes every hour during the day.${s.error ? " The last refresh failed, so these are the previous numbers." : ""}</p>` : connectBtn() + `<p class="sub">${d.connectUrl ? "You'll sign in with SolarEdge, then paste a one-time code into GitHub." : "Add SOLAREDGE_CLIENT_ID, SOLAREDGE_CLIENT_SECRET, SOLAREDGE_SITE_ID and GH_PAT under Settings, Secrets and variables, Actions in your GitHub repository."}</p>`}
