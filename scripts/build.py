@@ -186,15 +186,17 @@ def token_request(data):
                                headers={**headers, "Content-Type": "application/x-www-form-urlencoded",
                                         "Authorization": "Basic " + base64.b64encode(f"{cid}:{secret}".encode()).decode()}),
     ]
-    last = None
+    seen = []
     for req in attempts:
         status, body = _http(req)
         if status < 400 and isinstance(body, dict) and body.get("access_token"):
             return body
-        last = last or f"HTTP {status}: {(body or {}).get('error_description') or (body or {}).get('detail') or (body or {}).get('error') or ''}".strip()
-        if status >= 500 or status == 0:
-            break
-    raise AuthError(f"token request refused ({last})")
+        b = body if isinstance(body, dict) else {}
+        seen.append((status, f"HTTP {status}: {b.get('error_description') or b.get('detail') or b.get('error') or ''}".strip()))
+    err = AuthError(f"token request refused ({'; '.join(m for _, m in seen)})")
+    # a server error or no answer on every attempt is SolarEdge having trouble, not a dead sign-in
+    err.temporary = all(st >= 500 or st == 0 for st, _ in seen)
+    raise err
 
 
 def save_refresh_token(token):
@@ -484,8 +486,13 @@ def read_solaredge(prev):
     try:
         tok = token_request({"grant_type": "refresh_token", "refresh_token": refresh})
     except AuthError as e:
+        # SolarEdge's own servers failing: keep the last data and retry next run, for up to 12 hours
+        since = prev.get("authTroubleSince") or now.isoformat(timespec="minutes")
+        if getattr(e, "temporary", False) and now - dt.datetime.fromisoformat(since) < dt.timedelta(hours=12):
+            log(f"solaredge: {e}. SolarEdge seems to be having trouble; keeping the last data and trying again next run")
+            return {**prev, "connected": bool(prev.get("daily")), "needsConnect": False, "authTroubleSince": since, "error": "SolarEdge isn't responding right now"}, False
         log(f"solaredge: {e}. Access has expired, run the Connect SolarEdge workflow again")
-        return {**prev, "connected": False, "needsConnect": True, "error": "SolarEdge access expired"}, False
+        return {**prev, "connected": False, "needsConnect": True, "authTroubleSince": None, "error": "SolarEdge access expired"}, False
     if tok.get("refresh_token"):
         try:
             save_refresh_token(tok["refresh_token"])
@@ -495,7 +502,7 @@ def read_solaredge(prev):
     access = tok["access_token"]
 
     solar = dict(prev) if prev.get("connected") or prev.get("daily") else {}
-    solar.update({"connected": True, "needsConnect": False, "error": None})
+    solar.update({"connected": True, "needsConnect": False, "error": None, "authTroubleSince": None})
     stamp = now.isoformat(timespec="minutes")
     try:
         if need["history"]:

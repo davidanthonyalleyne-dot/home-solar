@@ -323,7 +323,8 @@
     const todayKwh = fresh ? s.today : 0, nowKw = fresh && nowD < new Date(st.set.getTime() + 30 * 60000) ? s.nowKw : 0;
     const nowNote = nowKw > 0 ? `of ${fmt(s.peakKw, 2)} kW` : nowD < st.rise ? `sunrise ${clock(st.rise)}` : nowD > st.set ? `sun set at ${clock(st.set)}` : "not producing";
 
-    const stale = needsConnect() ? `<section class="notice"><b>SolarEdge needs you to sign in again.</b> These are the last numbers it sent.${connectBtn()}</section>` : "";
+    const stale = needsConnect() ? `<section class="notice"><b>SolarEdge needs you to sign in again.</b> These are the last numbers it sent.${connectBtn()}</section>`
+      : s.authTroubleSince ? `<section class="notice"><b>SolarEdge isn't responding.</b> These are the last numbers it sent. The app keeps trying every hour.</section>` : "";
     const a = alerts();
     const alertBox = a.length
       ? `<section class="alerts" id="alerts">${a.map((x) => `<div class="status bad"><i class="dot-s"></i><span><b>${esc(x.type || "Alert")}</b><span class="sub">${[x.component, x.impact != null && `impact ${x.impact} of 9`, x.first && `since ${timeOf(x.first)}`].filter(Boolean).map(esc).join(" · ")}</span></span></div>`).join("")}
