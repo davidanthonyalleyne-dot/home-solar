@@ -830,7 +830,7 @@ def main():
         "bills": _json_file("data/bills.json", "bills"),
         "money": _money(hydro, solar, weather),
         "gridMonthly": _json_file("data/grid_monthly.json", "months"),
-        "connectUrl": authorize_url() if solar and solar.get("needsConnect") else None,
+        "connectUrl": authorize_url() if solar and (solar.get("needsConnect") or solar.get("authTroubleSince")) else None,
         "repo": os.environ.get("GITHUB_REPOSITORY"),
     }
     if OUT.exists():
