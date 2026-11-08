@@ -321,7 +321,7 @@
     if (fresh && daylight && now - sun.rise > 3 * 3600000 && (s.today || 0) < 0.05 && !snowy) items.push({ level: "bad", title: "No production today", note: `Nothing since sunrise at ${clock(sun.rise)}. Check the inverter's light and the SolarEdge app.` });
     let connect = false;
     if (s.needsConnect) { connect = !!state.data.connectUrl; items.push({ level: "warn", title: "SolarEdge needs you to sign in again", note: `The app can't get new numbers until you do. Showing the last ones, from ${when(s.updated)}.` }); }
-    else if (s.authTroubleSince) items.push({ level: "warn", title: "Can't reach SolarEdge", note: `SolarEdge's servers haven't answered since ${when(s.authTroubleSince)}. Your system may be fine. Showing the last numbers, from ${when(s.updated)}, and trying again every hour.` });
+    else if (s.authTroubleSince) { connect = !!state.data.connectUrl; items.push({ level: "warn", title: "No live data from SolarEdge", note: `SolarEdge has refused to renew the app's access since ${when(s.authTroubleSince)}, so the numbers are from ${when(s.updated)}. Your panels are fine. Signing in again usually fixes it.` }); }
     if (!items.length) items.push(s.alertsChecked ? { level: "ok", title: "System normal", note: `SolarEdge reported no problems when it was checked at ${esc(timeOnly(s.alertsChecked))}.` } : { level: "unknown", title: "Alerts not checked yet", note: "" });
     const level = items.some((x) => x.level === "bad") ? "bad" : items.some((x) => x.level === "warn") ? "warn" : items[0].level;
     return { level, items, connect, label: items.map((x) => x.title).join(", ") };
@@ -756,9 +756,9 @@
 
   function settingsScreen() {
     const d = state.data, s = d.solar, h = Object.keys(hydro()).sort(), e = s && s.equipment;
-    const ok = s && s.connected && !s.needsConnect;
+    const ok = s && s.connected && !s.needsConnect && !s.authTroubleSince;
     const sol = [
-      ["Status", ok ? `<span class="okc">Connected</span>` : s && s.needsConnect && s.daily ? "Sign-in expired" : "Not connected"],
+      ["Status", ok ? `<span class="okc">Connected</span>` : s && s.authTroubleSince ? `<span class="bad">No data since ${esc(timeOf(s.updated))}</span>` : s && s.needsConnect && s.daily ? "Sign-in expired" : "Not connected"],
       ok && s.peakKw && ["System size", `${fmt(s.peakKw, 2)} kW`],
       ok && s.installed && ["Installed", esc(new Date(s.installed + "T12:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }))],
     ];

@@ -371,3 +371,5 @@ body.locked .tabs { display: none; }
 /* bill period under the sheet title */
 .period { margin: 0; font-size: 17px; font-weight: 600; color: var(--sun); }
 .period + .sub { margin-top: 2px; }
+.nowhead .eyebrow { display: flex; align-items: center; flex-wrap: wrap; line-height: 20px; }
+.wxnow { line-height: 20px; }
