@@ -115,6 +115,10 @@ def _fit_rates(bills):
     the nearest year that has them."""
     by = defaultdict(list)
     for b in bills:
+        # a short bill (the first one after a meter change, say) carries a prorated fixed
+        # charge, which would bend the fixed + per-kWh line
+        if (dt.date.fromisoformat(b["to"]) - dt.date.fromisoformat(b["from"])).days < 20:
+            continue
         by[b["to"][:4]].append(b)
     out = {}
     for y, bs in by.items():
