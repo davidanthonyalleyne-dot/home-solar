@@ -14,6 +14,7 @@
   --moon: #8E8E93;
   --ok: #2E9E5B;
   --bad: #D33A2C;
+  --warn: #E5B800;
   --tabbar: rgba(255, 255, 255, 0.92);
   --scrim: rgba(0, 0, 0, 0.32);
   --sheet: #FFFFFF;
@@ -21,7 +22,6 @@
   --card: var(--well);
   --accent: var(--text);
   --solar: var(--sun);
-  --warn: var(--bad);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -39,6 +39,7 @@
     --moon: #E5E5EA;
     --ok: #30D158;
     --bad: #FF6B5E;
+    --warn: #FFD60A;
     --tabbar: rgba(18, 18, 20, 0.92);
     --scrim: rgba(0, 0, 0, 0.6);
     --sheet: #1C1C1E;
@@ -329,3 +330,14 @@ body.locked .tabs { display: none; }
 .ledger .li.g { stroke: var(--grid); }
 .ledger .li.s { stroke: var(--sun); }
 .acc summary { white-space: nowrap; gap: 8px; }
+
+/* status: green normal, yellow when SolarEdge can't be reached, red for a system problem */
+.statusdot.warn i { background: var(--warn); }
+.status-pop { gap: 12px; width: 270px; }
+.status-pop .pi { display: flex; gap: 10px; align-items: flex-start; }
+.status-pop .pi > i { width: 8px; height: 8px; border-radius: 4px; margin-top: 6px; flex-shrink: 0; background: var(--ok); }
+.status-pop .pi.bad > i { background: var(--bad); }
+.status-pop .pi.warn > i { background: var(--warn); }
+.status-pop .pi.unknown > i { background: var(--faint); }
+.status-pop .pi > div { display: flex; flex-direction: column; gap: 2px; }
+.status-pop .btn { margin-top: 2px; min-height: 44px; font-size: 15px; }

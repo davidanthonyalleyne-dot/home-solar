@@ -302,13 +302,35 @@
     return { svg: `<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${g}</svg>`, exp, st };
   }
 
+  // what the status dot shows: red for a problem with the system itself (SolarEdge alerts, an
+  // inverter fault, no output on a clear day), yellow when the app can't get data from SolarEdge
+  function systemStatus() {
+    const s = state.data.solar;
+    if (!s) return null;
+    const items = [], when = (iso) => iso ? esc(timeOf(iso)) : "";
+    for (const x of (s.alerts || [])) items.push({ level: "bad", title: x.type || "SolarEdge alert",
+      note: [x.component, x.impact != null && `impact ${x.impact} of 9`, x.first && `since ${timeOf(x.first)}`].filter(Boolean).map(esc).join(" · ") + ". SolarEdge also opened an issue in your GitHub repo, which emails you." });
+    const m = (s.inverter && s.inverter.metrics) || {}, modeName = Object.keys(m).find((k) => /mode|status|state/i.test(k));
+    const mode = modeName ? String(m[modeName].latest || "").toUpperCase() : "";
+    const d = torontoToday(), sun = sunTimes(d), now = new Date(), wd = weatherDay(d);
+    const daylight = now > sun.rise && now < sun.set;
+    if (daylight && /FAULT|ERROR|SHUTDOWN|LOCKED/.test(mode)) items.push({ level: "bad", title: "Inverter fault", note: `The inverter reports ${esc(mode.toLowerCase().replace(/_/g, " "))}. Check its light and the SolarEdge app.` });
+    const fresh = s.todayDate === d && !s.needsConnect && !s.authTroubleSince;
+    const snowy = wd && ((wd[5] || 0) > 0 || [71, 73, 75, 77, 85, 86].includes(wd[2]));
+    if (fresh && daylight && now - sun.rise > 3 * 3600000 && (s.today || 0) < 0.05 && !snowy) items.push({ level: "bad", title: "No production today", note: `Nothing since sunrise at ${clock(sun.rise)}. Check the inverter's light and the SolarEdge app.` });
+    let connect = false;
+    if (s.needsConnect) { connect = !!state.data.connectUrl; items.push({ level: "warn", title: "SolarEdge needs you to sign in again", note: `The app can't get new numbers until you do. Showing the last ones, from ${when(s.updated)}.` }); }
+    else if (s.authTroubleSince) items.push({ level: "warn", title: "Can't reach SolarEdge", note: `SolarEdge's servers haven't answered since ${when(s.authTroubleSince)}. Your system may be fine. Showing the last numbers, from ${when(s.updated)}, and trying again every hour.` });
+    if (!items.length) items.push(s.alertsChecked ? { level: "ok", title: "System normal", note: `SolarEdge reported no problems when it was checked at ${esc(timeOnly(s.alertsChecked))}.` } : { level: "unknown", title: "Alerts not checked yet", note: "" });
+    const level = items.some((x) => x.level === "bad") ? "bad" : items.some((x) => x.level === "warn") ? "warn" : items[0].level;
+    return { level, items, connect, label: items.map((x) => x.title).join(", ") };
+  }
+
   function nowScreen() {
     const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: TZNAME });
-    const sx = solar(), al = alerts();
-    const stLabel = !sx ? "" : al.length ? `${al.length === 1 ? "1 alert" : al.length + " alerts"} from SolarEdge` : sx.alertsChecked ? "System normal" : "Alerts not checked yet";
-    const stNote = !sx ? "" : al.length ? "Details are at the top of this screen." : sx.alertsChecked ? `SolarEdge reported no problems when it was checked at ${esc(timeOnly(sx.alertsChecked))}.` : "";
-    const dot = sx ? `<div class="statuswrap"><button type="button" class="statusdot ${al.length ? "bad" : sx.alertsChecked ? "" : "unknown"}" data-pop aria-label="${esc(stLabel)}" aria-expanded="false"><i></i></button>
-      <div class="popover" role="status" hidden><b>${esc(stLabel)}</b>${stNote ? `<span>${stNote}</span>` : ""}</div></div>` : "";
+    const sys = systemStatus();
+    const dot = sys ? `<div class="statuswrap"><button type="button" class="statusdot ${sys.level}" data-pop aria-label="${esc(sys.label)}" aria-expanded="false"><i></i></button>
+      <div class="popover status-pop" role="status" hidden>${sys.items.map((x) => `<div class="pi ${x.level}"><i></i><div><b>${esc(x.title)}</b>${x.note ? `<span>${x.note}</span>` : ""}</div></div>`).join("")}${sys.connect ? connectBtn() : ""}</div></div>` : "";
     const head = `<div class="top nowhead"><div><div class="eyebrow">${esc(today)}</div><h1>Now</h1></div>
       <div class="topright">${dot}<a class="iconbtn" href="#settings" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.4"/><circle cx="15" cy="17" r="2.4"/></svg></a></div></div>`;
     const s = solar();
@@ -321,14 +343,12 @@
     const { svg, exp, st } = todayChart(s, fresh), nowD = new Date();
     // after dark the last reading is stale, so don't show it as power right now
     const todayKwh = fresh ? s.today : 0, nowKw = fresh && nowD < new Date(st.set.getTime() + 30 * 60000) ? s.nowKw : 0;
-    const nowNote = nowKw > 0 ? `of ${fmt(s.peakKw, 2)} kW` : nowD < st.rise ? `sunrise ${clock(st.rise)}` : nowD > st.set ? `sun set at ${clock(st.set)}` : "not producing";
-
-    const stale = needsConnect() ? `<section class="notice"><b>SolarEdge needs you to sign in again.</b> These are the last numbers it sent.${connectBtn()}</section>`
-      : s.authTroubleSince ? `<section class="notice"><b>SolarEdge isn't responding.</b> These are the last numbers it sent. The app keeps trying every hour.</section>` : "";
-    const a = alerts();
-    const alertBox = a.length
-      ? `<section class="alerts" id="alerts">${a.map((x) => `<div class="status bad"><i class="dot-s"></i><span><b>${esc(x.type || "Alert")}</b><span class="sub">${[x.component, x.impact != null && `impact ${x.impact} of 9`, x.first && `since ${timeOf(x.first)}`].filter(Boolean).map(esc).join(" · ")}</span></span></div>`).join("")}
-         <p class="sub">SolarEdge also opened an issue in your GitHub repo, which emails you.</p></section>` : "";
+    // without a working link to SolarEdge there is no live reading; say so rather than show an old one
+    const offline = !!(s.needsConnect || s.authTroubleSince);
+    const nowNote = offline && nowD > st.rise && nowD < st.set ? "no live reading" : nowKw > 0 ? `of ${fmt(s.peakKw, 2)} kW` : nowD < st.rise ? `sunrise ${clock(st.rise)}` : nowD > st.set ? `sun set at ${clock(st.set)}` : "not producing";
+    const nowBig = offline && nowD > st.rise && nowD < st.set ? "–" : fmt(nowKw, nowKw ? 2 : 0);
+    const todayBig = offline && !fresh ? "–" : fmt(todayKwh, 1);
+    const todayNote = offline ? (fresh ? `as of ${esc(timeOnly(s.updated))}` : "waiting for SolarEdge") : exp ? `${fmt(exp)} kWh expected` : "";
 
     const t = state.data.weather && state.data.weather.tomorrow;
     const w = currentWeather(), wrows = [];
@@ -336,11 +356,11 @@
     if (t) wrows.push([`<span class="wxrow">${wxIcon(t[3], 1)}Tomorrow, ${esc(wx(t[3]).toLowerCase())}</span>`, `H ${deg(t[1])} <span class="sub">L ${deg(t[2])}</span>`]);
 
     const since = s.installed ? s.installed.slice(0, 4) : "install";
-    return `${head}${stale}${alertBox}
+    return `${head}
       <section class="first nowtop">
         <div class="pair">
-          <div><div class="label">Generating now</div><div class="big num ${nowKw > 0 ? "sun" : "dim"}">${fmt(nowKw, nowKw ? 2 : 0)}<small> kW</small></div><div class="sub">${esc(nowNote)}</div></div>
-          <div><div class="label">So far today</div><div class="big num">${fmt(todayKwh, 1)}<small> kWh</small></div>${exp ? `<div class="sub">${fmt(exp)} kWh expected</div>` : ""}</div>
+          <div><div class="label">Generating now</div><div class="big num ${nowKw > 0 && !offline ? "sun" : "dim"}">${nowBig}<small> kW</small></div><div class="sub">${esc(nowNote)}</div></div>
+          <div><div class="label">So far today</div><div class="big num${offline ? " dim" : ""}">${todayBig}<small> kWh</small></div>${todayNote ? `<div class="sub">${todayNote}</div>` : ""}</div>
         </div>
         ${svg}
       </section>
