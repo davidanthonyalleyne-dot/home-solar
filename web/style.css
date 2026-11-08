@@ -373,3 +373,4 @@ body.locked .tabs { display: none; }
 .period + .sub { margin-top: 2px; }
 .nowhead .eyebrow { display: flex; align-items: center; flex-wrap: wrap; line-height: 20px; }
 .wxnow { line-height: 20px; }
+.copylink { font-size: 15px; color: var(--sun); justify-content: center; }

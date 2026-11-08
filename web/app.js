@@ -30,7 +30,9 @@
   const hydro = () => state.data.hydro || {};
   const solar = () => (state.data.solar && state.data.solar.daily && Object.keys(state.data.solar.daily).length) ? state.data.solar : null;
   const needsConnect = () => !!(state.data.solar && state.data.solar.needsConnect);
-  const connectBtn = () => state.data.connectUrl ? `<a class="btn" href="${esc(state.data.connectUrl)}">Connect SolarEdge</a>` : "";
+  // on iPhone the SolarEdge app can grab the sign-in link and never send you back; a link pasted
+  // into Safari's address bar always opens as a web page, so offer a copy of it too
+  const connectBtn = () => state.data.connectUrl ? `<a class="btn" href="${esc(state.data.connectUrl)}" target="_blank" rel="noopener">Connect SolarEdge</a><button type="button" class="linkline copylink" data-copy="${esc(state.data.connectUrl)}">Copy the sign-in link instead</button>` : "";
   const M = () => (state.data.money && state.data.money.months) || {};
 
   let _range = null;
@@ -819,6 +821,13 @@
     if (pop) {
       const box = pop.nextElementSibling, open = box.hidden;
       box.hidden = !open; pop.setAttribute("aria-expanded", String(open));
+      return;
+    }
+    const cp = e.target.closest("[data-copy]");
+    if (cp) {
+      const done = () => { cp.textContent = "Copied. Paste it into Safari's address bar."; };
+      if (navigator.clipboard) navigator.clipboard.writeText(cp.dataset.copy).then(done, () => prompt("Copy this link", cp.dataset.copy));
+      else prompt("Copy this link", cp.dataset.copy);
       return;
     }
     const hv = e.target.closest("[data-hview]");
