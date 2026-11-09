@@ -757,6 +757,132 @@
     return `<div class="group-label">Inverter readings</div>${rows(shown.map((n) => [esc(LABELS[n] || pretty(n)), val(m[n])]))}<p class="sub">Hourly from SolarEdge, last at ${esc(timeOf(inv.at))}.</p>`;
   }
 
+  // ---------- adding a bill or a meter export from the phone ----------
+  // The file is encrypted with this session's key and committed to data/inbox; the next
+  // build reads it (a bill into the bill list, a meter export into data/hydro) and drops it.
+  const repo = () => {
+    const owner = location.hostname.split(".")[0], name = location.pathname.split("/").filter(Boolean)[0];
+    return owner && name ? `${owner}/${name}` : null;
+  };
+  function uploadLog() {
+    const u = (state.data.uploads || []).slice(-4).reverse();
+    if (!u.length) return "";
+    const line = (x) => {
+      const what = x.kind === "bill" ? (x.to ? `${monthName(x.to.slice(0, 7))} bill` : "A bill") : x.kind === "meter" ? "Meter file" : "A file";
+      const res = x.result === "added" ? "added" : x.result === "duplicate" ? "already in the app" : `not added${x.note ? `: ${x.note}` : ""}`;
+      return [esc(what), `<span class="${x.result === "refused" ? "bad" : "sub"}">${esc(res)}</span>`];
+    };
+    return rows(u.map(line));
+  }
+  function uploadBlock() {
+    if (!state.encrypted) return `<p class="sub">Adding files from the app needs the data to be encrypted first.</p>`;
+    if (!state.data.uploadToken) return `<p class="sub">To add bills and meter files from here, add an UPLOAD_TOKEN secret in GitHub: a fine-grained token with read and write access to this repository's contents only.</p>`;
+    return `<label class="btn secondary filebtn"><input type="file" id="addfile" accept=".pdf,.xlsx,.csv,application/pdf" hidden>Add a bill or meter file</label>
+      <p class="sub" id="upstatus" role="status">A Toronto Hydro bill PDF, or a usage spreadsheet from MyTorontoHydro. It's encrypted before it leaves your phone.</p>
+      ${uploadLog()}`;
+  }
+  // commits one encrypted file (JSON text) to data/inbox
+  async function toInbox(text, kind, message) {
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:]/g, "");
+    // through the Git data API, which takes files of several MB (bill PDFs often are)
+    const gh = async (path, method = "GET", data) => {
+      const r = await fetch(`https://api.github.com/repos/${repo()}/${path}`, {
+        method, headers: { Authorization: `Bearer ${state.data.uploadToken}`, Accept: "application/vnd.github+json", ...(data ? { "Content-Type": "application/json" } : {}) },
+        body: data ? JSON.stringify(data) : undefined,
+      });
+      if (!r.ok) throw new Error(r.status === 401 || r.status === 403 || r.status === 404 ? "GitHub refused the upload token." : `GitHub said ${r.status}.`);
+      return r.json();
+    };
+    const blob = await gh("git/blobs", "POST", { content: b64OfText(text), encoding: "base64" });
+    for (let attempt = 0; ; attempt++) {
+      const head = await gh("git/ref/heads/main");
+      const parent = await gh(`git/commits/${head.object.sha}`);
+      const tree = await gh("git/trees", "POST", { base_tree: parent.tree.sha, tree: [{ path: `data/inbox/${stamp}-${kind}.json`, mode: "100644", type: "blob", sha: blob.sha }] });
+      const commit = await gh("git/commits", "POST", { message, tree: tree.sha, parents: [head.object.sha] });
+      try { await gh("git/refs/heads/main", "PATCH", { sha: commit.sha }); break; }
+      catch (err) { if (attempt >= 2) throw err; }  // someone else pushed in between: try on top of theirs
+    }
+  }
+  const b64OfText = (t) => { const bytes = new TextEncoder().encode(t); let b = ""; for (let i = 0; i < bytes.length; i += 0x8000) b += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(b); };
+  // ---------- phone alerts ----------
+  const ALERT_KINDS = [
+    ["production", "Production or inverter problems", "No output on a sunny day, a fault, a SolarEdge alert"],
+    ["connection", "No live data", "SolarEdge stops sending numbers for a couple of hours"],
+    ["files", "Bills and meter files", "When a file you added is in, or couldn't be read"],
+  ];
+  const lsGet = (k) => { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch { return null; } };
+  const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+  const pushCapable = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  async function deviceIdOf(endpoint) {
+    const h = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(endpoint)));
+    return [...h].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 12);
+  }
+  function alertsBlock() {
+    const p = state.data.push, mine = lsGet("alertsDevice");
+    const server = p && mine ? (p.devices || []).find((d) => d.id === mine.id) : null;
+    let body;
+    if (!state.data.uploadToken) body = `<p class="sub">Alerts use the same UPLOAD_TOKEN as adding files. Add it in GitHub to turn them on.</p>`;
+    else if (!p || !p.publicKey) body = `<p class="sub">Alerts will be ready after the next update.</p>`;
+    else if (!pushCapable()) body = `<p class="sub">On iPhone, alerts work when Solar runs from your Home Screen. In Safari tap Share, then Add to Home Screen, and open Solar from there.</p>`;
+    else {
+      const prefs = (server && server.prefs) || (mine && mine.prefs) || { production: true, connection: true, files: true };
+      const pending = mine && !server;
+      body = ALERT_KINDS.map(([k, t, d]) => `<label class="switchrow"><span><span class="t">${esc(t)}</span><span class="sub">${esc(d)}</span></span><input type="checkbox" class="switch" data-alert="${k}" ${prefs[k] ? "checked" : ""}></label>`).join("")
+        + `<button type="button" class="btn${mine ? " secondary" : ""}" id="alertsave">${mine ? "Save" : "Turn on alerts"}</button>
+        <p class="sub" id="alertstatus" role="status">${server ? "Alerts are on for this phone." : pending ? "Turning on. You'll get a confirmation alert within the hour." : "Solar checks in about once an hour, so an alert can take that long to arrive."}</p>
+        ${mine ? `<button type="button" class="linkline danger" id="alertoff">Turn off alerts on this phone</button>` : ""}`;
+    }
+    return `<section><div class="group-label">Alerts</div>${body}</section>`;
+  }
+  async function saveAlerts(off) {
+    const st = document.getElementById("alertstatus"), say = (t, bad) => { if (st) { st.textContent = t; st.classList.toggle("bad", !!bad); } };
+    try {
+      const prefs = {};
+      document.querySelectorAll("[data-alert]").forEach((c) => (prefs[c.dataset.alert] = !off && c.checked));
+      if (!off && !Object.values(prefs).some(Boolean)) return say("Pick at least one kind of alert.", true);
+      if (!off && Notification.permission !== "granted" && (await Notification.requestPermission()) !== "granted")
+        return say("Notifications are off for Solar. Turn them on in your phone's Settings, then try again.", true);
+      const reg = await navigator.serviceWorker.register("sw.js");
+      await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub && off) { lsSet("alertsDevice", null); render(); return; }
+      if (!sub) {
+        const k = Uint8Array.from(atob(state.data.push.publicKey.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+        sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: k });
+      }
+      say("Saving…");
+      const box = await HomeSolarLock.seal(new TextEncoder().encode(JSON.stringify({ subscription: sub.toJSON(), prefs })));
+      box.kind = "alerts";
+      await toInbox(JSON.stringify(box), "alerts", off ? "Turn off alerts on a phone" : "Update alert settings from the app");
+      if (off) { await sub.unsubscribe().catch(() => {}); lsSet("alertsDevice", null); }
+      else lsSet("alertsDevice", { id: await deviceIdOf(sub.endpoint), prefs });
+      render();
+      const st2 = document.getElementById("alertstatus");
+      if (st2) st2.textContent = off ? "Alerts are off for this phone." : "Saved. You'll get a confirmation alert within the hour.";
+    } catch (err) {
+      say(err && err.message === "unlock-again" ? "Lock the app and unlock it with your passphrase once, then try again." : (err && err.message) || "That didn't work.", true);
+    }
+  }
+
+  async function sendFile(file) {
+    const st = document.getElementById("upstatus"), say = (t, bad) => { if (st) { st.textContent = t; st.classList.toggle("bad", !!bad); } };
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    const kind = ext === "pdf" ? "bill" : ext === "xlsx" || ext === "csv" ? "meter" : null;
+    if (!kind) return say("That isn't a PDF bill or a spreadsheet.", true);
+    if (file.size > 20 * 1024 * 1024) return say("That file is too big.", true);
+    try {
+      say("Encrypting…");
+      const box = await HomeSolarLock.seal(new Uint8Array(await file.arrayBuffer()));
+      Object.assign(box, { kind, ext });
+      say("Sending…");
+      await toInbox(JSON.stringify(box), kind, `Add a ${kind === "bill" ? "bill" : "meter file"} from the app`);
+      say(kind === "bill" ? "Sent. The bill will be in the app in a few minutes." : "Sent. The new readings will be in the app in a few minutes.");
+    } catch (err) {
+      say(err && err.message === "unlock-again" ? "Lock the app and unlock it with your passphrase once, then try again."
+        : err && err.message === "locked" ? "Unlock the app first." : (err && err.message) || "That didn't work.", true);
+    }
+  }
+
   // the equipment as installed: what you'd need for a warranty claim, a service call or a sale
   function systemSection() {
     const y = state.data.system;
@@ -810,7 +936,8 @@
       <section><div class="group-label">Toronto Hydro</div>${rows([
         ["Meter data", h.length ? `${esc(shortDay(h[0]))}, ${h[0].slice(0, 4)} to ${esc(shortDay(h.at(-1)))}, ${h.at(-1).slice(0, 4)}` : "None yet"],
         bills.length && ["Bills", `${bills.length} · ${esc(monthName(bills[0].to.slice(0, 7), "short"))} to ${esc(monthName(bills.at(-1).to.slice(0, 7), "short"))}`],
-      ])}<p class="sub">To add meter data, download it from MyTorontoHydro and upload the file to the data/hydro folder in GitHub. The site rebuilds on its own.</p></section>
+      ])}${uploadBlock()}</section>
+      ${alertsBlock()}
       <section><div class="group-label">Security</div>${rows([
         ["Data", state.encrypted ? "Encrypted" : "Not encrypted"],
         state.encrypted && ["Unlock", esc(HomeSolarLock.status())],
@@ -841,6 +968,9 @@
     document.title = { now: "Now", month: mName(state.month || "2000-01"), history: "History", settings: "Settings" }[r] + " · Home Solar";
   }
 
+  view.addEventListener("change", (e) => {
+    if (e.target.id === "addfile" && e.target.files && e.target.files[0]) { sendFile(e.target.files[0]); e.target.value = ""; }
+  });
   view.addEventListener("click", (e) => {
     const pop = e.target.closest("[data-pop]");
     if (pop) {
@@ -855,6 +985,8 @@
       else prompt("Copy this link", cp.dataset.copy);
       return;
     }
+    if (e.target.closest("#alertsave")) { saveAlerts(false); return; }
+    if (e.target.closest("#alertoff")) { saveAlerts(true); return; }
     const hv = e.target.closest("[data-hview]");
     if (hv) { state.histView = hv.dataset.hview; try { localStorage.setItem("histView", state.histView); } catch (_) {} render(); return; }
     const sh = e.target.closest("[data-sheet]");

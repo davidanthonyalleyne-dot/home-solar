@@ -381,3 +381,16 @@ body.locked .tabs { display: none; }
 .nowhead .eyebrow { display: flex; align-items: center; flex-wrap: wrap; line-height: 20px; }
 .wxnow { line-height: 20px; }
 .copylink { font-size: 15px; color: var(--sun); justify-content: center; }
+.filebtn { margin-top: 14px; }
+.filebtn input { display: none; }
+
+/* alert switches */
+.switchrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 56px; padding: 8px 0; border-bottom: 1px solid var(--rule); cursor: pointer; }
+.switchrow > span { display: flex; flex-direction: column; gap: 2px; }
+.switchrow .t { font-size: 17px; }
+.switchrow .sub { font-size: 13px; margin: 0; }
+.switch { appearance: none; -webkit-appearance: none; flex-shrink: 0; width: 51px; height: 31px; border-radius: 16px; background: var(--well); position: relative; cursor: pointer; transition: background .2s; margin: 0; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0, 0, 0, .2); transition: transform .2s; }
+.switch:checked { background: var(--sun); }
+.switch:checked::after { transform: translateX(20px); }
+.switch:focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }

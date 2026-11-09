@@ -98,8 +98,18 @@ def read_hydro():
     """
     EST = dt.timezone(dt.timedelta(hours=-5))
     by_day, by_interval = {}, {}
-    files = sorted(glob.glob(str(ROOT / "data/hydro/*.xlsx")) + glob.glob(str(ROOT / "data/hydro/*.csv")))
-    for f in files:
+    files = sorted(glob.glob(str(ROOT / "data/hydro/*.xlsx")) + glob.glob(str(ROOT / "data/hydro/*.csv"))
+                   + glob.glob(str(ROOT / "data/hydro/*.enc")))
+    import tempfile
+    tmp = tempfile.TemporaryDirectory()
+    for i, f in enumerate(files):
+        if f.endswith(".enc"):
+            if not _passphrase():
+                continue
+            # an export added from the app: decrypt it to a scratch copy to read
+            plain = Path(tmp.name) / f"{i}{Path(f[:-4]).suffix}"
+            plain.write_bytes(unseal(json.loads(Path(f).read_text())))
+            f = str(plain)
         imp_cols = exp_cols = None
         step = None  # minutes per reading; None means one reading per day
         n = 0
@@ -796,6 +806,184 @@ def encrypt_data(data, salt=None):
     return {"v": 1, "kdf": "PBKDF2-SHA256", "iter": KDF_ITER, "salt": b64(salt), "iv": b64(iv), "ct": b64(ct)}
 
 
+def unseal(box):
+    """Bytes of a file the app encrypted with the session key (see seal() in lock.js)."""
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    d = lambda k: base64.b64decode(box[k])
+    key = hashlib.pbkdf2_hmac("sha256", _passphrase().encode(), d("salt"), int(box.get("iter") or KDF_ITER), 32)
+    return AESGCM(key).decrypt(d("iv"), d("ct"), None)
+
+
+
+# ---------- phone alerts (Web Push) ----------
+# The app subscribes the phone and sends the subscription, encrypted, through data/inbox.
+# It is kept encrypted in data/push.enc. The VAPID key that signs each alert is a
+# repository secret, made on the first run that needs it.
+PUSH_F = ROOT / "data/push.enc"
+ALERT_STATE_F = ROOT / "data/alert_state.json"
+UPLOAD_RESULTS = []  # what process_inbox did this run, for the "files" alert
+
+
+def vapid():
+    """(private key PEM, public key for the browser) or (None, None)."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    pem = os.environ.get("VAPID_PRIVATE", "").strip()
+    if not pem:
+        if not os.environ.get("GH_TOKEN") or not os.environ.get("GITHUB_REPOSITORY") or not _passphrase():
+            return None, None
+        key = ec.generate_private_key(ec.SECP256R1())
+        pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
+        try:
+            subprocess.run(["gh", "secret", "set", "VAPID_PRIVATE", "--repo", os.environ["GITHUB_REPOSITORY"]],
+                           input=pem.encode(), check=True, capture_output=True)
+            print("push: made a new VAPID key")
+        except (subprocess.CalledProcessError, OSError) as e:
+            print(f"push: couldn't save a VAPID key ({e})")
+            return None, None
+    key = serialization.load_pem_private_key(pem.encode(), None)
+    pub = key.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+    return pem, base64.urlsafe_b64encode(pub).rstrip(b"=").decode()
+
+
+def push_devices():
+    if not PUSH_F.exists() or not _passphrase():
+        return []
+    try:
+        return decrypt_data(json.loads(PUSH_F.read_text())).get("devices", [])
+    except Exception:
+        return []
+
+
+def save_push_devices(devices):
+    PUSH_F.write_text(json.dumps(encrypt_data({"devices": devices})))
+
+
+def device_id(sub):
+    return hashlib.sha256(sub.get("endpoint", "").encode()).hexdigest()[:12]
+
+
+def add_push_device(msg):
+    """msg: {subscription, prefs} from the app; prefs all off removes the phone."""
+    sub, prefs = msg.get("subscription") or {}, msg.get("prefs") or {}
+    devices = [d for d in push_devices() if device_id(d["subscription"]) != device_id(sub)]
+    if sub.get("endpoint") and any(prefs.values()):
+        devices.append({"subscription": sub, "prefs": prefs, "added": dt.datetime.now(TZ).isoformat(timespec="minutes"), "welcome": True})
+    save_push_devices(devices)
+    return bool(sub.get("endpoint") and any(prefs.values()))
+
+
+def send_alerts(problems, solar, pem):
+    """Sends each new problem once to every phone that asked for that kind of alert."""
+    devices = push_devices() if pem else []
+    state = json.loads(ALERT_STATE_F.read_text()) if ALERT_STATE_F.exists() else {"sent": []}
+    sent = set(state["sent"])
+    out = []
+    for p in problems:
+        out.append(("production", p["key"], p["title"], p.get("detail") or "Open Solar to see what happened."))
+    if solar and (solar.get("needsConnect") or solar.get("authTroubleSince")):
+        since = solar.get("authTroubleSince") or solar.get("updated") or ""
+        if solar.get("needsConnect") or (since and dt.datetime.now(TZ) - dt.datetime.fromisoformat(since) > dt.timedelta(hours=2)):
+            out.append(("connection", f"conn-{since[:13]}", "No live data from SolarEdge",
+                        "Your panels are probably fine. Open Solar to see what's wrong."))
+    for u in UPLOAD_RESULTS:
+        what = (f"{dt.date.fromisoformat(u['to']):%B %Y} bill" if u.get("to") else "Bill") if u.get("kind") == "bill" else "Meter file"
+        body = {"added": "is in the app now.", "duplicate": "was already in the app."}.get(u.get("result"), f"wasn't added: {u.get('note', '')}")
+        out.append(("files", f"file-{u['when']}-{what}", f"{what} {'added' if u.get('result') == 'added' else 'not added' if u.get('result') == 'refused' else 'already there'}", f"{what} {body}"))
+    keep, changed = [], False
+    if devices:
+        from pywebpush import webpush, WebPushException
+        from py_vapid import Vapid
+        signer = Vapid.from_pem(pem.encode())
+    for d in devices:
+        msgs = []
+        if d.pop("welcome", False):
+            msgs.append(("Alerts are on", "You'll hear from Solar here when something needs a look."))
+            changed = True
+        msgs += [(t, b) for kind, key, t, b in out if key not in sent and d.get("prefs", {}).get(kind)]
+        gone = False
+        for title, body in msgs:
+            try:
+                webpush(d["subscription"], json.dumps({"title": title, "body": body, "url": "./"}),
+                        vapid_private_key=signer, vapid_claims={"sub": "mailto:alerts@home-solar.invalid"}, ttl=6 * 3600)
+            except WebPushException as e:
+                code = getattr(e.response, "status_code", None)
+                print(f"push: {code or e}")
+                if code in (404, 410):  # the phone unsubscribed or the app was removed
+                    gone = changed = True
+                    break
+        if not gone:
+            keep.append(d)
+    if changed:
+        save_push_devices(keep)
+    new = [key for _, key, _, _ in out if key not in sent]
+    if new:
+        state["sent"] = (state["sent"] + new)[-300:]
+        ALERT_STATE_F.write_text(json.dumps(state, indent=1))
+    print(f"push: {len(devices)} phone(s), {len(new)} new alert(s)")
+
+
+def process_inbox():
+    """Files added from the app's Add file button arrive encrypted in data/inbox.
+
+    A bill PDF is read into data/bills.json (only the numbers; the PDF itself is dropped).
+    A meter export moves to data/hydro, still encrypted. Each result is logged in
+    data/uploads.json for the app to show. The workflow commits these changes."""
+    inbox = sorted((ROOT / "data/inbox").glob("*.json"))
+    if not inbox or not _passphrase():
+        return
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import parse_bill
+    import tempfile
+    log_f = ROOT / "data/uploads.json"
+    log = json.loads(log_f.read_text()) if log_f.exists() else []
+    bills_f = ROOT / "data/bills.json"
+    store = json.loads(bills_f.read_text())
+    now = dt.datetime.now(TZ).isoformat(timespec="minutes")
+    for f in inbox:
+        entry = {"when": now}
+        try:
+            box = json.loads(f.read_text())
+            kind = box.get("kind")
+            raw = unseal(box)
+            if kind == "bill":
+                with tempfile.NamedTemporaryFile(suffix=".pdf") as t:
+                    t.write(raw); t.flush()
+                    bill, problems = parse_bill.parse(parse_bill.text_of(t.name), store["bills"])
+                entry.update(kind="bill", statement=bill.get("statement"), to=bill.get("to"), due=bill.get("due"))
+                if problems:
+                    entry.update(result="refused", note="; ".join(problems))
+                elif any(b["statement"] == bill["statement"] for b in store["bills"]):
+                    entry.update(result="duplicate")
+                else:
+                    store["bills"].append(bill)
+                    store["bills"].sort(key=lambda b: b["statement"])
+                    bills_f.write_text(json.dumps(store, indent=1))
+                    entry.update(result="added")
+            elif kind == "alerts":
+                on = add_push_device(json.loads(raw))
+                entry.update(kind="alerts", result="on" if on else "off")
+            elif kind == "meter":
+                ext = ".csv" if str(box.get("ext", "")).lower() == "csv" else ".xlsx"
+                with tempfile.NamedTemporaryFile(suffix=ext) as t:
+                    t.write(raw); t.flush()
+                    rows = sum(1 for _ in _rows(Path(t.name)))
+                dest = ROOT / "data/hydro" / (f.stem + ext + ".enc")
+                dest.write_text(json.dumps({k: box[k] for k in ("v", "kdf", "iter", "salt", "iv", "ct")}))
+                entry.update(kind="meter", result="added", rows=rows)
+            else:
+                entry.update(result="refused", note="unknown file type")
+        except Exception as e:  # a wrong key, a damaged file: say so and drop it
+            entry.update(result="refused", note=f"couldn't read it ({type(e).__name__})")
+        print(f"inbox: {f.name}: {entry.get('result')} {entry.get('note', '')}")
+        if entry.get("kind") in ("bill", "meter") or entry.get("result") == "refused":
+            UPLOAD_RESULTS.append(entry)
+        if entry.get("kind") != "alerts":
+            log.append(entry)
+        f.unlink()
+    log_f.write_text(json.dumps(log[-50:], indent=1))
+
+
 def decrypt_data(box):
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     d = lambda k: base64.b64decode(box[k])
@@ -825,6 +1013,7 @@ def _json_file(path, key):
 # ---------- build ----------
 
 def main():
+    process_inbox()
     hydro = read_hydro()
     prev = previous_data()
     solar, token_lost = read_solaredge(prev.get("solar") or {})
@@ -836,12 +1025,21 @@ def main():
     checked = solar and solar.get("alertsChecked")
     fresh_check = bool(checked) and dt.datetime.now(TZ) - dt.datetime.fromisoformat(checked) < dt.timedelta(minutes=30)
     (ROOT / "problems.json").write_text(json.dumps({"alertsChecked": fresh_check, "problems": problems}, indent=1))
+    pem, push_pub = vapid()
+    try:
+        send_alerts(problems, solar, pem)
+    except Exception as e:  # an alert that can't be sent must never break the build
+        print(f"push: failed ({type(e).__name__}: {e})")
     data = {
         "generated": dt.datetime.now(TZ).isoformat(timespec="minutes"),
         "hydro": {d: [round(v[0], 2), round(v[1], 2)] for d, v in sorted(hydro.items())},
         "solar": solar,
         "weather": weather,
+        "push": {"publicKey": push_pub, "devices": [{"id": device_id(d["subscription"]), "prefs": d.get("prefs", {})} for d in push_devices()]} if push_pub else None,
         "bills": _json_file("data/bills.json", "bills"),
+        "uploads": (json.loads((ROOT / "data/uploads.json").read_text())[-10:] if (ROOT / "data/uploads.json").exists() else []),
+        # only ever published inside the encrypted data
+        "uploadToken": (os.environ.get("UPLOAD_TOKEN") or None) if _passphrase() else None,
         "system": system_info(),
         "money": _money(hydro, solar, weather),
         "gridMonthly": _json_file("data/grid_monthly.json", "months"),

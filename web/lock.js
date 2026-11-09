@@ -18,7 +18,7 @@ window.HomeSolarLock = (() => {
   const save = (v) => { try { localStorage.setItem(STORE, JSON.stringify(v)); } catch {} };
   const forget = () => { sessionKey = null; try { localStorage.removeItem(STORE); } catch {} idbDel(); };
   // the key that opened the data this session, kept in memory only, so a refresh needn't ask again
-  let sessionKey = null;
+  let sessionKey = null, sessionBox = null;
 
   async function keyFromPassphrase(pass, box) {
     const base = await crypto.subtle.importKey("raw", enc.encode(pass.normalize("NFKC")), "PBKDF2", false, ["deriveBits"]);
@@ -76,7 +76,7 @@ window.HomeSolarLock = (() => {
   async function idbGet() { const db = await idb(); return new Promise((res) => { const q = db.transaction("k").objectStore("k").get("key"); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); }); }
   function idbDel() { try { idb().then((db) => db.transaction("k", "readwrite").objectStore("k").delete("key")).catch(() => {}); } catch {} }
   async function keepOnDevice(rawKey) {
-    const k = await crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["decrypt"]);
+    const k = await crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["encrypt", "decrypt"]);
     await idbPut(k);
     save({ kind: "device" });
   }
@@ -96,7 +96,7 @@ window.HomeSolarLock = (() => {
   function unlock(view, box) {
     return new Promise((resolve) => {
       let rawKey = null;
-      const done = (data) => { if (rawKey) sessionKey = rawKey; document.body.classList.remove("locked"); resolve(data); };
+      const done = (data) => { if (rawKey) sessionKey = rawKey; sessionBox = { salt: box.salt, iter: box.iter }; document.body.classList.remove("locked"); resolve(data); };
 
       const offerFaceId = (data) => {
         if (!passkeysPossible()) return askKeep(data);
@@ -180,7 +180,21 @@ window.HomeSolarLock = (() => {
   }
 
   // decrypt a freshly fetched data.json with this session's key; rejects if it can't
-  const reopen = (box) => sessionKey ? decryptWith(sessionKey, box) : Promise.reject(new Error("locked"));
+  const reopen = (box) => sessionKey ? decryptWith(sessionKey, box).then((d) => { sessionBox = { salt: box.salt, iter: box.iter }; return d; }) : Promise.reject(new Error("locked"));
 
-  return { unlock, reopen, forget, status, isEncrypted: (d) => !!(d && d.ct && d.iv && d.salt) };
+  // Encrypts a file (a bill, a meter export) with this session's key, so it can sit in the
+  // public repo until the build, which knows the passphrase, reads it.
+  async function seal(bytes) {
+    if (!sessionKey || !sessionBox) throw new Error("locked");
+    let k = sessionKey;
+    if (!(k instanceof CryptoKey)) k = await crypto.subtle.importKey("raw", k, "AES-GCM", false, ["encrypt"]);
+    else if (!k.usages.includes("encrypt")) throw new Error("unlock-again");
+    const iv = rnd(12);
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, k, bytes));
+    let bin = "";
+    for (let i = 0; i < ct.length; i += 0x8000) bin += String.fromCharCode(...ct.subarray(i, i + 0x8000));
+    return { v: 1, kdf: "PBKDF2-SHA256", iter: sessionBox.iter, salt: sessionBox.salt, iv: b64e(iv), ct: btoa(bin) };
+  }
+
+  return { unlock, reopen, forget, status, seal, isEncrypted: (d) => !!(d && d.ct && d.iv && d.salt) };
 })();
