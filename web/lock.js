@@ -83,12 +83,13 @@ window.HomeSolarLock = (() => {
 
   // ---- screens ----
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  const lockIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+  // the app icon: the sun on the horizon
+  const appIcon = '<svg viewBox="0 0 100 100" aria-hidden="true"><path d="M27 63 A23 23 0 0 1 73 63 Z" class="sun"/><line x1="16" y1="63" x2="84" y2="63" class="hz"/></svg>';
   const faceIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M9 9v1.5M15 9v1.5M12 9v4h-1M9.5 16a4 4 0 0 0 5 0"/></svg>';
 
   function shell(view, inner) {
     document.body.classList.add("locked");
-    view.innerHTML = `<section class="lock"><span class="lock-ic">${lockIcon}</span><h1 style="font-size:28px">Home Solar</h1>${inner}</section>`;
+    view.innerHTML = `<section class="lock"><div class="lock-head"><span class="lock-ic">${appIcon}</span><h1>Solar</h1></div>${inner}</section>`;
   }
 
   // Resolves with the decrypted data, asking for Face ID or the passphrase as needed.
@@ -114,7 +115,7 @@ window.HomeSolarLock = (() => {
         };
       };
       const askKeep = (data, noPrf) => {
-        shell(view, `<p class="small" style="text-align:center;margin:0">${noPrf ? "This device can't use Face ID to unlock data. " : ""}Keep Home Solar unlocked on this device? Anyone holding it unlocked could open the app.</p>
+        shell(view, `<p class="small" style="text-align:center;margin:0">${noPrf ? "This device can't use Face ID to unlock data. " : ""}Keep Solar unlocked on this device? Anyone holding it unlocked could open the app.</p>
           <button class="btn" type="button" id="keep">Keep unlocked here</button>
           <button class="btn secondary" type="button" id="skip">Ask every time</button>`);
         view.querySelector("#skip").onclick = () => done(data);
@@ -124,8 +125,7 @@ window.HomeSolarLock = (() => {
       const askPassphrase = (msg) => {
         shell(view, `<form id="pf" class="lock-form" autocomplete="on">
             <input type="text" name="username" value="Home Solar" autocomplete="username" hidden>
-            <label class="small" for="pass" style="align-self:flex-start">Passphrase</label>
-            <input id="pass" name="password" type="password" autocomplete="current-password" required enterkeyhint="go">
+            <input id="pass" name="password" type="password" autocomplete="current-password" placeholder="Passphrase" aria-label="Passphrase" required enterkeyhint="go">
             <p class="small err" id="err" role="alert">${msg ? esc(msg) : ""}</p>
             <button class="btn" type="submit">Unlock</button>
           </form>`);
