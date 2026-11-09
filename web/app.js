@@ -271,7 +271,8 @@
     const X = (h) => ((h - x0) / (x1 - x0)) * W;
     // what today's forecast sunlight should give, spread over daylight hours, on the same kW scale
     const expPeak = exp ? exp * Math.PI / (2 * (set - rise)) : 0;
-    const ymax = Math.max(1, expPeak, ...pts.map((p) => p[1])) * 1.15;
+    const acMax = (state.data.system && state.data.system.inverter && state.data.system.inverter.acKw) || Infinity;
+    const ymax = Math.max(1, Math.min(expPeak, acMax), ...pts.map((p) => p[1])) * 1.15;
     const Y = (v) => top + (H - top - bot) * (1 - v / ymax);
     let g = "";
     const step = ymax > 5 ? 2 : 1;
@@ -279,7 +280,7 @@
     g += `<line x1="0" x2="${W}" y1="${Y(0)}" y2="${Y(0)}" class="axisline"/>`;
     if (expPeak) {
       let p = "";
-      for (let i = 0; i <= 48; i++) p += `${i ? "L" : "M"}${X(rise + (set - rise) * i / 48).toFixed(1)},${Y(expPeak * Math.sin(Math.PI * i / 48)).toFixed(1)}`;
+      for (let i = 0; i <= 48; i++) p += `${i ? "L" : "M"}${X(rise + (set - rise) * i / 48).toFixed(1)},${Y(Math.min(acMax, expPeak * Math.sin(Math.PI * i / 48))).toFixed(1)}`;
       g += `<path d="${p}" class="ghost"/>`;
     }
     const isDay = nowH >= rise && nowH <= set;
@@ -756,6 +757,29 @@
     return `<div class="group-label">Inverter readings</div>${rows(shown.map((n) => [esc(LABELS[n] || pretty(n)), val(m[n])]))}<p class="sub">Hourly from SolarEdge, last at ${esc(timeOf(inv.at))}.</p>`;
   }
 
+  // the equipment as installed: what you'd need for a warranty claim, a service call or a sale
+  function systemSection() {
+    const y = state.data.system;
+    if (!y) return "";
+    const pv = y.private || {}, p = y.panels || {}, inv = y.inverter || {};
+    const strings = (p.strings || []).length > 1 ? `${p.strings.length} strings, ${p.strings.slice(0, -1).join(", ")} and ${p.strings.at(-1)} panels` : "";
+    const r = [
+      p.count && ["Panels", `${p.count} × ${esc(p.model)}, ${p.watts} W`],
+      strings && ["Wiring", strings],
+      inv.dcKw && ["Size", `${fmt(inv.dcKw, 2)} kW of panels, ${fmt(inv.acKw, 0)} kW inverter`],
+      y.optimizers && ["Optimizers", `${y.optimizers.count} × ${esc(y.optimizers.model)}, one per panel`],
+      ["Inverter", esc(inv.model || "–")],
+      pv.inverterSerial && ["Inverter serial", `<span class="num">${esc(pv.inverterSerial)}</span>`],
+      y.shutdown && ["Shutdown", esc(y.shutdown.model)],
+      pv.switchSerial && ["Switch serial", `<span class="num">${esc(pv.switchSerial)}</span>`],
+      y.meter && ["Meter", `${esc(y.meter.model)}${pv.meter ? ` · <span class="num">${esc(pv.meter)}</span>` : ""}`],
+      y.installer && ["Installed by", esc(y.installer)],
+    ];
+    return `<section><div class="group-label">Your system</div>${rows(r)}
+      <p class="sub">In an emergency, turn ${esc(y.shutdown ? y.shutdown.where : "the rapid shutdown switch")} to Off. That shuts the panels down to a safe voltage.</p>
+      ${inv.dcKw && inv.acKw && inv.dcKw > inv.acKw ? `<p class="sub">The panels can make ${fmt(inv.dcKw, 1)} kW but the inverter tops out at ${fmt(inv.acKw, 0)} kW, so on the brightest days output levels off at about ${fmt(inv.acKw, 0)} kW. That's by design, not a fault.</p>` : ""}</section>`;
+  }
+
   function settingsScreen() {
     const d = state.data, s = d.solar, h = Object.keys(hydro()).sort(), e = s && s.equipment;
     const ok = s && s.connected && !s.needsConnect && !s.authTroubleSince;
@@ -782,6 +806,7 @@
         ${ok ? `<p class="sub">Refreshes every hour during the day.${s.error ? " The last refresh failed, so these are the previous numbers." : ""}</p>` : connectBtn() + `<p class="sub">${d.connectUrl ? "You'll sign in with SolarEdge, then paste a one-time code into GitHub." : "Add SOLAREDGE_CLIENT_ID, SOLAREDGE_CLIENT_SECRET, SOLAREDGE_SITE_ID and GH_PAT under Settings, Secrets and variables, Actions in your GitHub repository."}</p>`}
         ${inverterRows()}
       </section>
+      ${systemSection()}
       <section><div class="group-label">Toronto Hydro</div>${rows([
         ["Meter data", h.length ? `${esc(shortDay(h[0]))}, ${h[0].slice(0, 4)} to ${esc(shortDay(h.at(-1)))}, ${h.at(-1).slice(0, 4)}` : "None yet"],
         bills.length && ["Bills", `${bills.length} · ${esc(monthName(bills[0].to.slice(0, 7), "short"))} to ${esc(monthName(bills.at(-1).to.slice(0, 7), "short"))}`],

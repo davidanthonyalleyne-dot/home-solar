@@ -45,6 +45,7 @@ jobs:
           SOLAREDGE_REFRESH_TOKEN: ${{ secrets.SOLAREDGE_REFRESH_TOKEN }}
           GH_TOKEN: ${{ secrets.GH_PAT }}
           SITE_PASSPHRASE: ${{ secrets.SITE_PASSPHRASE }}
+          SYSTEM_PRIVATE: ${{ secrets.SYSTEM_PRIVATE }}
       - name: Report problems as GitHub issues
         if: always() && steps.build.outcome == 'success'
         continue-on-error: true

@@ -306,6 +306,20 @@ def fetch_daily(token, start, end, monthly=False):
         return out
 
 
+def system_info():
+    """The equipment list, plus serial and meter numbers from a secret so they never sit in the public repo."""
+    try:
+        info = json.loads((ROOT / "data/system.json").read_text())
+    except (OSError, ValueError):
+        return None
+    info.pop("note", None)
+    try:
+        info["private"] = json.loads(os.environ.get("SYSTEM_PRIVATE") or "{}")
+    except ValueError:
+        info["private"] = {}
+    return info
+
+
 def authorize_url():
     cid, base = os.environ.get("SOLAREDGE_CLIENT_ID", "").strip(), os.environ.get("PAGES_URL", "").rstrip("/")
     if not cid or not base:
@@ -828,6 +842,7 @@ def main():
         "solar": solar,
         "weather": weather,
         "bills": _json_file("data/bills.json", "bills"),
+        "system": system_info(),
         "money": _money(hydro, solar, weather),
         "gridMonthly": _json_file("data/grid_monthly.json", "months"),
         "connectUrl": authorize_url() if solar and (solar.get("needsConnect") or solar.get("authTroubleSince")) else None,

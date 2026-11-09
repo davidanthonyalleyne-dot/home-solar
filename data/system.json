@@ -1,0 +1,9 @@
+{
+ "note": "The equipment as installed, from the labels and Solify's single-line diagram. Serial and meter numbers are kept out of this public file; they come from the SYSTEM_PRIVATE secret and are encrypted with the rest of the data.",
+ "panels": {"count": 17, "model": "LONGi LR4-72HPH-455M", "watts": 455, "strings": [9, 8]},
+ "optimizers": {"count": 17, "model": "SolarEdge S500B"},
+ "inverter": {"model": "SolarEdge SE6000H-US", "acKw": 6.0, "dcKw": 7.735},
+ "shutdown": {"model": "SolarEdge DC Safety Switch", "where": "the switch on the box under the inverter"},
+ "meter": {"model": "Itron OpenWay", "kind": "two-way"},
+ "installer": "Solify"
+}
