@@ -1030,7 +1030,7 @@
     const bar = key ? `<div class="askdock"><form class="askbar" id="askform">
         <label class="askfield"><span class="vh">Your question</span><input id="askin" type="text" autocomplete="off" enterkeyhint="send" placeholder="${ask.msgs.length ? "Ask a follow-up" : "Ask about your energy"}" value="${esc(ask.draft)}"${ask.listening ? " disabled" : ""}></label>
         ${mic}<button type="submit" class="vh">Ask</button>
-      </form>${ask.listening ? `<div class="asklisten" role="status"><span class="wave" aria-hidden="true">${"<i></i>".repeat(9)}</span>Listening. Tap the button to stop and ask.</div>` : `<p class="askby">Answers by Claude, from your app's data</p>`}</div><div class="askspacer"></div>` : "";
+      </form>${ask.listening ? `<div class="asklisten" role="status"><span class="wave" aria-hidden="true">${"<i></i>".repeat(9)}</span>Listening. Pause or tap to send.</div>` : `<p class="askby">Answers by Claude, from your app's data</p>`}</div><div class="askspacer"></div>` : "";
     const head = `<div class="top"><div><div class="eyebrow">About your home's energy</div><h1>Ask</h1></div>${ask.msgs.length ? `<button type="button" class="textbtn" id="asknew">New</button>` : ""}</div>`;
     if (!key) return head + `<section class="first"><p>Ask needs a Claude API key. Create one in the Anthropic Console and add it to the repository as a GitHub secret named ANTHROPIC_API_KEY. It's kept inside the encrypted data, so only your unlocked app can use it.</p></section>`;
     if (!ask.msgs.length && !ask.listening) {
@@ -1081,24 +1081,57 @@
     u.onend = u.onerror = () => { ask.speaking = false; if (route() === "ask") render(); };
     speechSynthesis.cancel(); ask.speaking = true; speechSynthesis.speak(u);
   }
-  let rec = null;
-  function askListen() {
-    if (ask.listening) { if (rec) rec.stop(); return; }
-    if (!SpeechRec) return;
-    if ("speechSynthesis" in window) speechSynthesis.cancel();
-    rec = new SpeechRec();
-    rec.lang = "en-CA"; rec.interimResults = true; rec.continuous = false;
-    let final = "";
-    rec.onresult = (e) => {
-      let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) { const t = e.results[i][0].transcript; if (e.results[i].isFinal) final += t; else interim += t; }
-      ask.interim = (final + interim).trim(); render();
-    };
-    rec.onerror = (e) => { ask.listening = false; ask.interim = ""; render(); if (e.error === "not-allowed") alertLine("Microphone access is off for Solar. Turn it on in Settings."); };
-    rec.onend = () => { const q = (final || ask.interim).trim(); ask.listening = false; ask.interim = ""; rec = null; if (q) askSend(q, true); else render(); };
-    ask.listening = true; ask.interim = ""; render();
-    rec.start();
+  // Voice. iPhone's speech recognition is temperamental: results often never turn "final",
+  // the end event can go missing, and the mic can't open while speech is still playing.
+  // So the app keeps its own transcript, sends after a short pause, and never waits on
+  // the browser to say it has finished.
+  let rec = null, voice = null;
+  const SILENCE_MS = 1600, NO_SPEECH_MS = 8000;
+  function voiceFinish(send) {
+    const v = voice;
+    if (!v || v.done) return;
+    v.done = true; voice = null;
+    clearTimeout(v.silence); clearTimeout(v.idle);
+    const r = rec; rec = null;
+    if (r) { r.onresult = r.onerror = r.onend = null; try { r.abort(); } catch (_) {} }
+    const q = v.text.trim();
+    ask.listening = false; ask.interim = "";
+    if (send && q) askSend(q, true);
+    else { render(); if (v.note) alertLine(v.note); }
   }
+  function askListen() {
+    if (ask.listening) { voiceFinish(true); return; }   // tapping again sends what was heard
+    if (!SpeechRec || ask.busy) return;
+    if ("speechSynthesis" in window) speechSynthesis.cancel();
+    ask.speaking = false;
+    const v = (voice = { text: "", done: false, heard: false, note: "" });
+    const r = (rec = new SpeechRec());
+    r.lang = "en-CA"; r.interimResults = true; r.continuous = true; r.maxAlternatives = 1;
+    r.onresult = (e) => {
+      if (voice !== v) return;
+      // rebuild from every result each time; iPhone repeats and revises earlier ones
+      let t = "";
+      for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+      v.text = t.replace(/\s+/g, " "); v.heard = true;
+      ask.interim = v.text.trim(); render();
+      clearTimeout(v.idle); clearTimeout(v.silence);
+      v.silence = setTimeout(() => voiceFinish(true), SILENCE_MS);
+    };
+    r.onerror = (e) => {
+      if (voice !== v) return;
+      v.note = e.error === "not-allowed" || e.error === "service-not-allowed"
+        ? "Solar can't use the microphone. Allow it in Settings, or tap the text box and use the keyboard's mic."
+        : e.error === "no-speech" ? "Didn't catch that. Tap the mic and try again." : e.error === "aborted" ? "" : "The mic stopped. Tap it to try again.";
+      voiceFinish(v.heard);
+    };
+    r.onend = () => { if (voice === v) voiceFinish(true); };
+    v.idle = setTimeout(() => { if (voice === v && !v.heard) { v.note = "Didn't hear anything. Tap the mic and try again."; voiceFinish(false); } }, NO_SPEECH_MS);
+    try { r.start(); }   // must run inside the tap, before anything async
+    catch (_) { v.note = "The mic is busy. Tap it again in a moment."; voiceFinish(false); return; }
+    ask.listening = true; ask.interim = ""; render();
+  }
+  document.addEventListener("visibilitychange", () => { if (document.hidden && voice) voiceFinish(false); });
+  window.addEventListener("hashchange", () => { if (voice && route() !== "ask") voiceFinish(false); });
   function alertLine(t) { const p = document.querySelector(".askby, .asklisten"); if (p) { p.textContent = t; p.classList.add("bad"); } }
 
   // ---------- routing ----------
