@@ -820,6 +820,8 @@ def unseal(box):
 # It is kept encrypted in data/push.enc. The VAPID key that signs each alert is a
 # repository secret, made on the first run that needs it.
 PUSH_F = ROOT / "data/push.enc"
+# Apple refuses alerts whose contact isn't a real address, or whose token lives 24 hours or more
+PUSH_CONTACT = "https://davidanthonyalleyne-dot.github.io"
 ALERT_STATE_F = ROOT / "data/alert_state.json"
 UPLOAD_RESULTS = []  # what process_inbox did this run, for the "files" alert
 
@@ -890,34 +892,39 @@ def send_alerts(problems, solar, pem):
         what = (f"{dt.date.fromisoformat(u['to']):%B %Y} bill" if u.get("to") else "Bill") if u.get("kind") == "bill" else "Meter file"
         body = {"added": "is in the app now.", "duplicate": "was already in the app."}.get(u.get("result"), f"wasn't added: {u.get('note', '')}")
         out.append(("files", f"file-{u['when']}-{what}", f"{what} {'added' if u.get('result') == 'added' else 'not added' if u.get('result') == 'refused' else 'already there'}", f"{what} {body}"))
-    keep, changed = [], False
+    keep, changed, failed = [], False, False
     if devices:
         from pywebpush import webpush, WebPushException
         from py_vapid import Vapid
         signer = Vapid.from_pem(pem.encode())
     for d in devices:
         msgs = []
-        if d.pop("welcome", False):
+        welcome = d.pop("welcome", False) or not d.get("welcomed")
+        if welcome:
             msgs.append(("Alerts are on", "You'll hear from Solar here when something needs a look."))
-            changed = True
         msgs += [(t, b) for kind, key, t, b in out if key not in sent and d.get("prefs", {}).get(kind)]
         gone = False
-        for title, body in msgs:
+        for i, (title, body) in enumerate(msgs):
             try:
                 webpush(d["subscription"], json.dumps({"title": title, "body": body, "url": "./"}),
-                        vapid_private_key=signer, vapid_claims={"sub": "mailto:alerts@home-solar.invalid"}, ttl=6 * 3600)
+                        vapid_private_key=signer, vapid_claims={"sub": PUSH_CONTACT, "exp": int(time.time()) + 12 * 3600}, ttl=6 * 3600)
+                if i == 0 and welcome:
+                    d["welcomed"] = dt.datetime.now(TZ).isoformat(timespec="minutes")
+                    changed = True
             except WebPushException as e:
                 code = getattr(e.response, "status_code", None)
-                print(f"push: {code or e}")
+                print(f"push: {code or e} {(getattr(e.response, 'text', '') or '')[:200]}")
                 if code in (404, 410):  # the phone unsubscribed or the app was removed
                     gone = changed = True
-                    break
+                else:
+                    failed = True  # try these again next time
+                break
         if not gone:
             keep.append(d)
     if changed:
         save_push_devices(keep)
     new = [key for _, key, _, _ in out if key not in sent]
-    if new:
+    if new and not failed:
         state["sent"] = (state["sent"] + new)[-300:]
         ALERT_STATE_F.write_text(json.dumps(state, indent=1))
     print(f"push: {len(devices)} phone(s), {len(new)} new alert(s)")
