@@ -1143,7 +1143,10 @@
     }
     const msgs = ask.msgs.map((m) => m.role === "user" ? `<div class="askq">${esc(m.text)}</div>`
       : `<div class="aska${m.error ? " err" : ""}">${m.error ? `<p>${esc(m.text)}</p>` : askAnswer(m.text)}${m.spoken && ask.speaking ? `<button type="button" class="askspeak" id="askstop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg>Reading aloud</button>` : ""}</div>`).join("");
-    const pending = ask.listening && ask.interim ? `<div class="askq live">${esc(ask.interim)}…</div>` : ask.busy ? `<div class="aska thinking" role="status"><span></span><span></span><span></span></div>` : "";
+    const last = ask.msgs[ask.msgs.length - 1];
+    const lost = !ask.busy && last && last.role === "user"
+      ? `<div class="aska err"><p>No answer came back, probably because Solar was closed while Claude was answering.</p><button type="button" class="askspeak" data-askretry>Ask again</button></div>` : "";
+    const pending = lost || (ask.listening && ask.interim ? `<div class="askq live">${esc(ask.interim)}…</div>` : ask.busy ? `<div class="aska thinking" role="status"><span></span><span></span><span></span></div>` : "");
     return head + `<div class="askmsgs" id="askmsgs">${msgs}${pending}</div>${bar}`;
   }
   function askAfterRender() {
@@ -1156,11 +1159,15 @@
   async function askSend(q, voice) {
     q = (q || "").trim();
     if (!q || ask.busy) return;
+    const ae = document.activeElement; if (ae && ae.id === "askin") { ae.value = ""; ae.blur(); }
     ask.msgs.push({ role: "user", text: q }); ask.draft = ""; ask.busy = true; ask.fromVoice = !!voice; saveAsk();
     render();
     try {
       const wx = await askWeather();
-      const history = ask.msgs.filter((m) => !m.error).slice(-12).map((m) => ({ role: m.role, content: m.text }));
+      const clean = ask.msgs.filter((m) => !m.error && m.text && m.text.trim())
+        .filter((m, i, a) => !(m.role === "user" && a[i + 1] && a[i + 1].role === "user"));   // drop questions that never got an answer
+      while (clean.length && clean[0].role !== "user") clean.shift();
+      const history = clean.slice(-12).map((m) => ({ role: m.role, content: m.text }));
       const r = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "content-type": "application/json", "x-api-key": state.data.askKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
@@ -1172,12 +1179,13 @@
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(r.status === 401 ? "The Claude API key was refused. Check the ANTHROPIC_API_KEY secret." : r.status === 400 && /credit/i.test(JSON.stringify(j)) ? "The Anthropic account is out of credit." : (j.error && j.error.message) || `Claude said ${r.status}.`);
       const text = (j.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n").trim();
+      if (!text) throw new Error("Claude sent back an empty answer. Try asking again.");
       ask.msgs.push({ role: "assistant", text, spoken: !!voice });
       if (voice) askSpeak(text);
     } catch (err) {
       ask.msgs.push({ role: "assistant", text: (err && err.message) || "That didn't work. Try again in a moment.", error: true });
     }
-    ask.busy = false; saveAsk(); render();
+    ask.busy = false; ask.draft = ""; saveAsk(); render();
   }
   function askSpeak(text) {
     if (!("speechSynthesis" in window)) return;
@@ -1295,6 +1303,7 @@
     if (e.target.closest("[data-moon]")) { state.moonOpen = !state.moonOpen; render(); return; }
     const aq = e.target.closest("[data-askq]");
     if (aq) { askSend(aq.dataset.askq); return; }
+    if (e.target.closest("[data-askretry]")) { const q = ask.msgs.pop().text; askSend(q); return; }
     if (e.target.closest("#askmic")) { askListen(); return; }
     if (e.target.closest("#asknew")) { newChat(); render(); return; }
     if (e.target.closest("#askpast")) { openSheet("Past conversations", chatsSheet()); return; }
