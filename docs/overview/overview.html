@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Solar: what the app does</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* Two US Letter pages, styled like the app: white, graphite, one orange. */
+  :root {
+    --text: #1C1C1E; --muted: #6C6C70; --rule: #E6E6E9; --well: #F2F2F4;
+    --grid: #3A3A3C; --sun: #E8830C; --sun-text: #B35F00;
+  }
+  @page { size: letter; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #FFFFFF; color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Helvetica Neue", Arial, sans-serif;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { width: 8.5in; height: 11in; padding: 0.6in 0.65in 0.5in; display: flex; flex-direction: column; gap: 22px;
+    page-break-after: always; break-after: page; position: relative; overflow: hidden; }
+  .page:last-child { page-break-after: auto; break-after: auto; }
+  @media screen { body { background: #F2F2F4; padding: 24px 0; } .page { margin: 0 auto 24px; box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.06); }
+    @media (max-width: 860px) { body { padding: 0; } .page { width: 100%; height: auto; padding: 28px 16px; margin: 0 0 12px; } .shots { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } .cols { grid-template-columns: 1fr !important; } } }
+
+  header { display: flex; align-items: center; gap: 16px; }
+  header svg { width: 56px; height: 56px; border-radius: 14px; box-shadow: 0 0 0 1px var(--rule); flex-shrink: 0; }
+  h1 { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+  .lede { margin: 2px 0 0; font-size: 15px; color: var(--muted); }
+  .intro { margin: 0; font-size: 14px; line-height: 1.5; max-width: 6.6in; }
+  .intro b { font-weight: 600; }
+
+  .shots { display: grid; gap: 18px; }
+  figure { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+  figure img { width: 100%; border-radius: 18px; box-shadow: 0 0 0 1px var(--rule), 0 4px 14px rgba(0,0,0,.06); display: block; }
+  figcaption { font-size: 11.5px; line-height: 1.4; color: var(--muted); }
+  figcaption b { color: var(--text); font-weight: 600; display: block; font-size: 12.5px; }
+
+  .label { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+  .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; row-gap: 16px; }
+  section h2 { margin: 0 0 4px; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  section h2::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--sun); flex-shrink: 0; }
+  section p { margin: 0; font-size: 12.5px; line-height: 1.5; }
+  section p + p { margin-top: 4px; }
+  .rule { border-top: 1px solid var(--rule); }
+  footer { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); }
+  .num { font-variant-numeric: tabular-nums; }
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .stats > div { display: flex; flex-direction: column; gap: 4px; padding: 0 14px; }
+  .stats > div:first-child { padding-left: 0; }
+  .stats > div + div { border-left: 1px solid var(--rule); }
+  .stats .v { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+  .stats .v.sun { color: var(--sun); }
+  .stats .u { font-size: 11.5px; line-height: 1.35; color: var(--muted); }
+  @media screen and (max-width: 860px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 14px; } .stats > div:nth-child(3) { padding-left: 0; border-left: 0; } }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <svg viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" fill="#FFFFFF"/><path d="M27 63 A23 23 0 0 1 73 63 Z" fill="#E8830C"/><line x1="16" y1="63" x2="84" y2="63" stroke="#1C1C1E" stroke-width="5" stroke-linecap="round"/></svg>
+    <div>
+      <h1>Solar</h1>
+      <p class="lede">A private app for one home: what the panels make, what power costs, and what solar saves.</p>
+    </div>
+  </header>
+
+  <p class="intro">Solar joins two sources that never talk to each other: the <b>SolarEdge inverter</b> on the house (17 panels, 7.7 kW) and <b>Toronto Hydro's</b> meter readings and bills. It works out Ontario's net metering rules the way the bills do, so the savings are real dollars, checked against every bill on file. It opens to three tabs, Now, Month and History, and runs from the iPhone Home Screen.</p>
+
+  <div class="shots" style="grid-template-columns: repeat(3, minmax(0, 1fr))">
+    <figure>
+      <img src="shots/now.png" alt="The Now screen">
+      <figcaption><b>Now</b>What the panels are making, today so far against the expected curve, sunrise and sunset, weather and the totals since 2023. A dot shows the system's health.</figcaption>
+    </figure>
+    <figure>
+      <img src="shots/month.png" alt="The Month screen">
+      <figcaption><b>Month</b>What you paid and what solar saved, with what the month would have cost without it. Every day split into grid and solar. Tap a day or open the bill.</figcaption>
+    </figure>
+    <figure>
+      <img src="shots/history.png" alt="The History screen">
+      <figcaption><b>History</b>Every month since the panels went in, one row per year on one scale. Switch between cost and energy. Paler bars are estimates.</figcaption>
+    </figure>
+  </div>
+
+  <div class="rule"></div>
+  <div>
+    <p class="label">At a glance (sample figures)</p>
+    <div class="stats">
+      <div><span class="v sun">14,828</span><span class="u">kWh generated since August 2023</span></div>
+      <div><span class="v sun">$2,219</span><span class="u">saved by solar, about 22% off the power bill</span></div>
+      <div><span class="v">Every</span><span class="u">Toronto Hydro bill checked line by line against the meter</span></div>
+      <div><span class="v">1 hr</span><span class="u">between updates, with alerts when something's wrong</span></div>
+    </div>
+  </div>
+
+  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span>Page 1 of 2</span></footer>
+</div>
+
+<div class="page">
+  <div class="cols" style="grid-template-columns: 1.15fr 1fr; align-items: start">
+    <div class="cols" style="grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 18px">
+      <figure>
+        <img src="shots/energy.png" alt="History, Energy view">
+        <figcaption><b>Energy</b>What the panels generated, with an EV comparison and the CO₂ avoided.</figcaption>
+      </figure>
+      <figure>
+        <img src="shots/settings.png" alt="Settings: adding files and alerts">
+        <figcaption><b>Settings</b>Add a bill or meter file from the phone, and choose which alerts to get.</figcaption>
+      </figure>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 16px">
+      <section><h2>Live from the inverter</h2><p>Power now, today's output and the expected curve, which levels off at the inverter's 6 kW limit. At night a small moon shows the real phase; tap it for its name.</p></section>
+      <section><h2>Costs that match the bills</h2><p>Credits for power sent back are valued at the time-of-use price when it went out, delivery is charged on net use, and HST and the Ontario rebate are applied as Toronto Hydro does. Months without a bill are estimated from the meter, usually within a few percent.</p></section>
+      <section><h2>Bills and meter data</h2><p>Add a bill PDF or a MyTorontoHydro spreadsheet from Settings. It's encrypted on the phone, read by the next update, and a bill is only added if its lines add up to the printed total. The PDF itself is never kept.</p></section>
+      <section><h2>Alerts</h2><p>Phone notifications when production stops on a sunny day or the inverter reports a fault, when SolarEdge stops sending data, when a file is added, a summary on the 1st of each month, and in winter, days of unusually heavy use with the temperature.</p></section>
+    </div>
+  </div>
+
+  <div class="rule"></div>
+
+  <div class="cols">
+    <section><h2>Private by design</h2><p>All data is encrypted with a passphrase before it's published. Unlock with the passphrase, or with Face ID on a trusted phone. Serial numbers and tokens live only inside the encrypted data.</p></section>
+    <section><h2>Your system</h2><p>Panels, optimizers, inverter, rapid shutdown switch, meter and installer, with serial numbers for warranty or service, and what to do in an emergency.</p></section>
+    <section><h2>How it runs</h2><p>A scheduled job on GitHub fetches SolarEdge and the weather about every hour, reads any new files, rebuilds the site on GitHub Pages and sends alerts. There's no server to maintain.</p></section>
+    <section><h2>Good to know</h2><p>Toronto Hydro meter data comes from exported files, so costs trail by however long it's been since the last one. SolarEdge has no per-panel data in its public API, and live house use would need a consumption meter.</p></section>
+  </div>
+
+  <div class="rule"></div>
+  <section><h2>Coming next</h2><p>Ask: a tab for questions about the house's energy and bills in plain words, by typing or by voice, answered from the app's own data.</p></section>
+
+  <footer><span class="num">Updated November 9, 2026</span><span>Page 2 of 2</span></footer>
+</div>
+
+</body>
+</html>
