@@ -875,7 +875,66 @@ def add_push_device(msg):
     return bool(sub.get("endpoint") and any(prefs.values()))
 
 
-def send_alerts(problems, solar, pem):
+def _deg(v):
+    return f"{round(v)}°C".replace("-", "−")
+
+
+def insight_alerts(money, solar, hydro, weather, today):
+    """The monthly summary, and in winter, days when the house used far more than usual.
+    Returns (kind, key, title, body) like the other alerts."""
+    out = []
+    months = (money or {}).get("months") or {}
+    wx = (weather or {}).get("daily") or {}
+    sd = (solar or {}).get("daily") or {}
+    first = today.replace(day=1)
+    last_end = first - dt.timedelta(days=1)
+    ym = last_end.strftime("%Y-%m")
+    days = [(last_end.replace(day=1) + dt.timedelta(days=i)).isoformat() for i in range(last_end.day)]
+    have_meter = all(d in hydro for d in days)
+    if have_meter or today.day >= 7:
+        name = last_end.strftime("%B")
+        prod = sum(sd.get(d) or 0 for d in days)
+        m = months.get(ym) or {}
+        parts = [f"Solar made {prod:,.0f} kWh."] if prod else []
+        if have_meter and m.get("grid") is not None:
+            parts.append(f"You paid about ${m['grid']:,.0f}" + (f" and solar saved ${m['saved']:,.0f}." if m.get("saved") else "."))
+            if last_end.month in (11, 12, 1, 2, 3):
+                imp = sum(hydro[d][0] for d in days)
+                ly = [d.replace(str(last_end.year), str(last_end.year - 1), 1) for d in days]
+                if all(d in hydro for d in ly):
+                    before = sum(hydro[d][0] for d in ly)
+                    ch = (imp - before) / before * 100 if before else 0
+                    parts.append(f"The house drew {imp:,.0f} kWh from the grid, {abs(ch):.0f}% {'more' if ch > 0 else 'less'} than last {name}." if abs(ch) >= 3
+                                 else f"The house drew {imp:,.0f} kWh from the grid, about the same as last {name}.")
+                big = max(days, key=lambda d: hydro[d][0])
+                lo = wx.get(big, [None, None])[1]
+                parts.append(f"The heaviest day was {dt.date.fromisoformat(big):%b} {dt.date.fromisoformat(big).day} at {hydro[big][0]:.0f} kWh" + (f", with a low of {_deg(lo)}." if lo is not None else "."))
+        elif not have_meter:
+            parts.append(f"Add {name}'s meter data to see what it cost.")
+        if parts:
+            out.append(("summary", f"summary-{ym}", f"Your {name}", " ".join(parts)))
+    # winter: a day well above the usual, from recent meter data (it arrives in batches)
+    if today.month in (11, 12, 1, 2, 3, 4):
+        recent = sorted(d for d in hydro if 0 < (today - dt.date.fromisoformat(d)).days <= 21
+                        and dt.date.fromisoformat(d).month in (11, 12, 1, 2, 3))
+        spikes = []
+        for d in recent:
+            prior = [hydro[x][0] for x in sorted(hydro) if 0 < (dt.date.fromisoformat(d) - dt.date.fromisoformat(x)).days <= 28]
+            if len(prior) < 14:
+                continue
+            usual = sorted(prior)[len(prior) // 2]
+            if hydro[d][0] >= 60 and usual and hydro[d][0] >= usual * 1.4:
+                spikes.append((hydro[d][0] / usual, d, usual))
+        for ratio, d, usual in sorted(spikes, reverse=True)[:2]:
+            day = dt.date.fromisoformat(d)
+            w = wx.get(d)
+            why = f" It got down to {_deg(w[1])}." if w and w[1] is not None and w[1] <= -5 else (" It wasn't especially cold, so something else was running." if w else "")
+            out.append(("winter", f"winter-{d}", f"Heavy use on {day:%b} {day.day}",
+                        f"The house used {hydro[d][0]:.0f} kWh, {round((ratio - 1) * 100)}% more than a usual day lately ({usual:.0f} kWh).{why}"))
+    return out
+
+
+def send_alerts(problems, solar, pem, extra=()):
     """Sends each new problem once to every phone that asked for that kind of alert."""
     devices = push_devices() if pem else []
     state = json.loads(ALERT_STATE_F.read_text()) if ALERT_STATE_F.exists() else {"sent": []}
@@ -888,6 +947,7 @@ def send_alerts(problems, solar, pem):
         if solar.get("needsConnect") or (since and dt.datetime.now(TZ) - dt.datetime.fromisoformat(since) > dt.timedelta(hours=2)):
             out.append(("connection", f"conn-{since[:13]}", "No live data from SolarEdge",
                         "Your panels are probably fine. Open Solar to see what's wrong."))
+    out += list(extra)
     for u in UPLOAD_RESULTS:
         what = (f"{dt.date.fromisoformat(u['to']):%B %Y} bill" if u.get("to") else "Bill") if u.get("kind") == "bill" else "Meter file"
         body = {"added": "is in the app now.", "duplicate": "was already in the app."}.get(u.get("result"), f"wasn't added: {u.get('note', '')}")
@@ -1033,8 +1093,12 @@ def main():
     fresh_check = bool(checked) and dt.datetime.now(TZ) - dt.datetime.fromisoformat(checked) < dt.timedelta(minutes=30)
     (ROOT / "problems.json").write_text(json.dumps({"alertsChecked": fresh_check, "problems": problems}, indent=1))
     pem, push_pub = vapid()
+    money_out = _money(hydro, solar, weather)
     try:
-        send_alerts(problems, solar, pem)
+        extra = insight_alerts(money_out, solar, hydro, weather, dt.datetime.now(TZ).date())
+        for _, _, t, b in extra:
+            print(f"push: insight: {t}: {b}")
+        send_alerts(problems, solar, pem, extra)
     except Exception as e:  # an alert that can't be sent must never break the build
         print(f"push: failed ({type(e).__name__}: {e})")
     data = {
@@ -1048,7 +1112,7 @@ def main():
         # only ever published inside the encrypted data
         "uploadToken": (os.environ.get("UPLOAD_TOKEN") or None) if _passphrase() else None,
         "system": system_info(),
-        "money": _money(hydro, solar, weather),
+        "money": money_out,
         "gridMonthly": _json_file("data/grid_monthly.json", "months"),
         "connectUrl": authorize_url() if solar and (solar.get("needsConnect") or solar.get("authTroubleSince")) else None,
         "repo": os.environ.get("GITHUB_REPOSITORY"),

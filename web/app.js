@@ -814,6 +814,8 @@
     ["production", "Production or inverter problems", "No output on a sunny day, a fault, a SolarEdge alert"],
     ["connection", "No live data", "SolarEdge stops sending numbers for a couple of hours"],
     ["files", "Bills and meter files", "When a file you added is in, or couldn't be read"],
+    ["summary", "Monthly summary", "On the 1st: what solar made, what you paid and saved. In winter, how use compared with last year"],
+    ["winter", "Winter use", "A day when the house used far more than usual, and how cold it was"],
   ];
   const lsGet = (k) => { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch { return null; } };
   const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch {} };
@@ -830,7 +832,7 @@
     else if (!p || !p.publicKey) body = `<p class="sub">Alerts will be ready after the next update.</p>`;
     else if (!pushCapable()) body = `<p class="sub">On iPhone, alerts work when Solar runs from your Home Screen. In Safari tap Share, then Add to Home Screen, and open Solar from there.</p>`;
     else {
-      const prefs = (server && server.prefs) || (mine && mine.prefs) || { production: true, connection: true, files: true };
+      const prefs = (server && server.prefs) || (mine && mine.prefs) || { production: true, connection: true, files: true, summary: true, winter: true };
       const pending = mine && !server;
       body = ALERT_KINDS.map(([k, t, d]) => `<label class="switchrow"><span><span class="t">${esc(t)}</span><span class="sub">${esc(d)}</span></span><input type="checkbox" class="switch" data-alert="${k}" ${prefs[k] ? "checked" : ""}></label>`).join("")
         + `<button type="button" class="btn${mine ? " secondary" : ""}" id="alertsave">${mine ? "Save" : "Turn on alerts"}</button>
