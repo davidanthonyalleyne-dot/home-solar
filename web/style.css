@@ -394,3 +394,8 @@ body.locked .tabs { display: none; }
 .switch:checked { background: var(--sun); }
 .switch:checked::after { transform: translateX(20px); }
 .switch:focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
+
+/* tap the moon to see its phase */
+.moonbtn { cursor: pointer; outline: none; }
+.moonbtn:focus-visible .moondark { stroke: var(--sun); stroke-width: 2; }
+.chart .moonname { font-size: 11px; fill: var(--muted); }

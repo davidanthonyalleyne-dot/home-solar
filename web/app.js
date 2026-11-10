@@ -284,7 +284,12 @@
       g += `<path d="${p}" class="ghost"/>`;
     }
     const isDay = nowH >= rise && nowH <= set;
-    if (!isDay) g += moonIcon(new Date(), W - 14, 14, 10);
+    if (!isDay) {
+      // tap the moon to show its phase underneath; tap again to hide it
+      const m = moonPhase(new Date());
+      g += `<g class="moonbtn" data-moon role="button" tabindex="0" aria-expanded="${!!state.moonOpen}" aria-label="Moon: ${esc(m.name)}"><circle cx="${W - 14}" cy="14" r="22" class="hit"/>${moonIcon(new Date(), W - 14, 14, 10)}</g>`;
+      if (state.moonOpen) g += svgText(W, 40, m.name, "moonname", "end");
+    }
     if (pts.some((p) => p[1] > 0)) {
       const line = pts.map((p) => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`);
       g += `<path d="M${X(pts[0][0]).toFixed(1)},${Y(0)}L${line.join("L")}L${X(pts.at(-1)[0]).toFixed(1)},${Y(0)}Z" class="sunfill"/>`;
@@ -985,6 +990,7 @@
       else prompt("Copy this link", cp.dataset.copy);
       return;
     }
+    if (e.target.closest("[data-moon]")) { state.moonOpen = !state.moonOpen; render(); return; }
     if (e.target.closest("#alertsave")) { saveAlerts(false); return; }
     if (e.target.closest("#alertoff")) { saveAlerts(true); return; }
     const hv = e.target.closest("[data-hview]");
