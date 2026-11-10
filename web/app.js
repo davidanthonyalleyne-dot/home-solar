@@ -1031,7 +1031,7 @@
       return `- ${chatWhen(x.updated)}: asked "${chatTitle(x)}"; answer began: ${first}`;
     }).join("\n");
   }
-  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder && (window.AudioContext || window.webkitAudioContext));
 
   function askContext() {
     const r2 = (x) => (x == null ? null : Math.round(x * 100) / 100);
@@ -1129,7 +1129,7 @@
 
   function askScreen() {
     const key = state.data.askKey;
-    const mic = SpeechRec ? `<button type="button" class="askmic${ask.listening ? " on" : ""}" id="askmic" aria-label="${ask.listening ? "Stop and ask" : "Ask out loud"}">${ask.listening ? '<span class="stop"></span>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>'}</button>` : "";
+    const mic = canRecord ? `<button type="button" class="askmic${ask.listening ? " on" : ""}" id="askmic" aria-label="${ask.listening ? "Stop and ask" : "Ask out loud"}">${ask.listening ? '<span class="stop"></span>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>'}</button>` : "";
     const bar = key ? `<div class="askdock"><form class="askbar" id="askform">
         <label class="askfield"><span class="vh">Your question</span><input id="askin" type="text" autocomplete="off" enterkeyhint="send" placeholder="${ask.msgs.length ? "Ask a follow-up" : "Ask about your energy"}" value="${esc(ask.draft)}"${ask.listening ? " disabled" : ""}></label>
         ${mic}<button type="submit" class="vh">Ask</button>
@@ -1146,7 +1146,7 @@
     const last = ask.msgs[ask.msgs.length - 1];
     const lost = !ask.busy && last && last.role === "user"
       ? `<div class="aska err"><p>No answer came back, probably because Solar was closed while Claude was answering.</p><button type="button" class="askspeak" data-askretry>Ask again</button></div>` : "";
-    const pending = lost || (ask.listening && ask.interim ? `<div class="askq live">${esc(ask.interim)}…</div>` : ask.busy ? `<div class="aska thinking" role="status"><span></span><span></span><span></span></div>` : "");
+    const pending = lost || (ask.transcribing ? `<div class="askq live" role="status">${esc(ask.voiceStatus || "Listening back")}…</div>` : ask.busy ? `<div class="aska thinking" role="status"><span></span><span></span><span></span></div>` : "");
     return head + `<div class="askmsgs" id="askmsgs">${msgs}${pending}</div>${bar}`;
   }
   function askAfterRender() {
@@ -1195,56 +1195,98 @@
     u.onend = u.onerror = () => { ask.speaking = false; if (route() === "ask") render(); };
     speechSynthesis.cancel(); ask.speaking = true; speechSynthesis.speak(u);
   }
-  // Voice. iPhone's speech recognition is temperamental: results often never turn "final",
-  // the end event can go missing, and the mic can't open while speech is still playing.
-  // So the app keeps its own transcript, sends after a short pause, and never waits on
-  // the browser to say it has finished.
-  let rec = null, voice = null;
-  const SILENCE_MS = 1600, NO_SPEECH_MS = 8000;
+  // Voice. iPhone blocks the browser's own speech recognizer in Home Screen apps, so Solar
+  // records the question itself and turns it into text on the phone with Whisper (whisper.js).
+  // Recording stops after a short pause once you've spoken, or when you tap again.
+  let worker = null, workerReady = false, voice = null, jobN = 0;
+  const jobs = {};
+  function whisper() {
+    if (worker) return worker;
+    worker = new Worker("whisper.js", { type: "module" });
+    worker.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === "ready") { workerReady = true; return; }
+      if (m.type === "progress") {
+        if (ask.transcribing && !workerReady) { const pc = Math.min(99, Math.round(100 * m.loaded / m.total)); ask.voiceStatus = `Getting voice ready, first time only, ${pc}%`; render(); }
+        return;
+      }
+      const j = jobs[m.id]; delete jobs[m.id];
+      if (j) m.type === "text" ? j.ok(m.text) : j.fail(new Error(m.message));
+      else if (m.type === "error") { worker.terminate(); worker = null; workerReady = false; }
+    };
+    worker.onerror = () => { for (const k in jobs) { jobs[k].fail(new Error("Voice couldn't start.")); delete jobs[k]; } worker = null; workerReady = false; };
+    return worker;
+  }
+  function transcribe(audio) {
+    const id = ++jobN;
+    return new Promise((ok, fail) => { jobs[id] = { ok, fail }; whisper().postMessage({ type: "transcribe", id, audio }, [audio.buffer]); });
+  }
+  async function to16k(blob, ctx) {
+    const buf = await new Promise((ok, no) => { const p = ctx.decodeAudioData(blob, ok, no); if (p && p.then) p.then(ok, no); });
+    const len = Math.max(1, Math.ceil(buf.duration * 16000));
+    const off = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, len, 16000);
+    const src = off.createBufferSource(); src.buffer = buf; src.connect(off.destination); src.start();
+    return (await off.startRendering()).getChannelData(0).slice();
+  }
   function voiceFinish(send) {
     const v = voice;
     if (!v || v.done) return;
-    v.done = true; voice = null;
-    clearTimeout(v.silence); clearTimeout(v.idle);
-    const r = rec; rec = null;
-    if (r) { r.onresult = r.onerror = r.onend = null; try { r.abort(); } catch (_) {} }
-    const q = v.text.trim();
-    ask.listening = false; ask.interim = "";
-    if (send && q) askSend(q, true);
-    else { render(); if (v.note) alertLine(v.note); }
+    v.done = true; voice = null; v.send = send;
+    clearInterval(v.tick);
+    try { v.rec.state !== "inactive" ? v.rec.stop() : v.after(); } catch (_) { v.after(); }
   }
-  function askListen() {
-    if (ask.listening) { voiceFinish(true); return; }   // tapping again sends what was heard
-    if (!SpeechRec || ask.busy) return;
+  function voiceNote(t) { ask.listening = false; ask.transcribing = false; render(); if (t) alertLine(t); }
+  async function askListen() {
+    if (ask.listening) { voiceFinish(true); return; }   // tapping again sends now
+    if (!canRecord || ask.busy || ask.transcribing) return;
     if ("speechSynthesis" in window) speechSynthesis.cancel();
     ask.speaking = false;
-    const v = (voice = { text: "", done: false, heard: false, note: "" });
-    const r = (rec = new SpeechRec());
-    r.lang = "en-CA"; r.interimResults = true; r.continuous = true; r.maxAlternatives = 1;
-    r.onresult = (e) => {
-      if (voice !== v) return;
-      // rebuild from every result each time; iPhone repeats and revises earlier ones
-      let t = "";
-      for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
-      v.text = t.replace(/\s+/g, " "); v.heard = true;
-      ask.interim = v.text.trim(); render();
-      clearTimeout(v.idle); clearTimeout(v.silence);
-      v.silence = setTimeout(() => voiceFinish(true), SILENCE_MS);
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();   // made inside the tap so iPhone allows it
+    whisper().postMessage({ type: "load" });                               // fetch the model while you talk
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+    catch (err) { ctx.close(); return voiceNote(err && err.name === "NotAllowedError" ? "Solar can't use the microphone. Allow it in Settings, Safari, Microphone." : "The microphone isn't available right now."); }
+    const rec = new MediaRecorder(stream), chunks = [];
+    const v = (voice = { rec, done: false, heard: false, started: Date.now(), quietSince: 0, floor: null });
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    v.after = async () => {
+      if (v.finished) return; v.finished = true;
+      stream.getTracks().forEach((t) => t.stop());
+      if (!v.send || !v.heard) { ctx.close(); return voiceNote(v.send && !v.heard ? "Didn't hear anything. Tap the mic and try again." : ""); }
+      ask.listening = false; ask.transcribing = true; ask.voiceStatus = workerReady ? "Listening back" : "Getting voice ready, first time only"; render();
+      try {
+        const blob = await new Blob(chunks, { type: rec.mimeType || "audio/mp4" }).arrayBuffer();
+        const pcm = await to16k(blob, ctx); ctx.close();
+        const text = await transcribe(pcm);
+        ask.transcribing = false;
+        if (!text || text.length < 2) return voiceNote("Didn't catch that. Tap the mic and try again.");
+        askSend(text, true);
+      } catch (err) { try { ctx.close(); } catch (_) {} voiceNote("Voice didn't work that time. Try again, or type the question."); }
     };
-    r.onerror = (e) => {
-      if (voice !== v) return;
-      v.note = e.error === "not-allowed" || e.error === "service-not-allowed"
-        ? "Solar can't use the microphone. Allow it in Settings, or tap the text box and use the keyboard's mic."
-        : e.error === "no-speech" ? "Didn't catch that. Tap the mic and try again." : e.error === "aborted" ? "" : "The mic stopped. Tap it to try again.";
-      voiceFinish(v.heard);
-    };
-    r.onend = () => { if (voice === v) voiceFinish(true); };
-    v.idle = setTimeout(() => { if (voice === v && !v.heard) { v.note = "Didn't hear anything. Tap the mic and try again."; voiceFinish(false); } }, NO_SPEECH_MS);
-    try { r.start(); }   // must run inside the tap, before anything async
-    catch (_) { v.note = "The mic is busy. Tap it again in a moment."; voiceFinish(false); return; }
-    ask.listening = true; ask.interim = ""; render();
+    rec.onstop = () => v.after();
+    // listen for the end of the question: quiet for 1.4 s after speaking, or 8 s of nothing
+    try { if (ctx.state === "suspended") ctx.resume(); } catch (_) {}
+    const an = ctx.createAnalyser(); an.fftSize = 1024; ctx.createMediaStreamSource(stream).connect(an);
+    const data = new Float32Array(an.fftSize);
+    v.tick = setInterval(() => {
+      an.getFloatTimeDomainData(data);
+      let sum = 0; for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+      const rms = Math.sqrt(sum / data.length), t = Date.now() - v.started;
+      if (t < 400) { v.floor = v.floor == null ? rms : Math.min(v.floor, rms); return; }
+      const loud = rms > Math.max(0.012, (v.floor || 0) * 3);
+      if (loud) { v.heard = true; v.quietSince = 0; } else if (!v.quietSince) v.quietSince = Date.now();
+      const bars = document.querySelectorAll(".wave i");
+      bars.forEach((b, i) => { b.style.height = `${Math.max(4, Math.min(18, 4 + rms * 300 * (0.6 + ((i * 7) % 5) / 6)))}px`; });
+      if (v.heard && v.quietSince && Date.now() - v.quietSince > 1400) voiceFinish(true);
+      else if (!v.heard && t > 8000) voiceFinish(true);
+      else if (t > 30000) voiceFinish(true);
+    }, 80);
+    rec.start(250);
+    ask.listening = true; render();
   }
   document.addEventListener("visibilitychange", () => { if (document.hidden && voice) voiceFinish(false); });
+  // start fetching the voice model in the background the first time Ask is opened on Wi-Fi-ish connections
+  function warmVoice() { if (canRecord && !worker && !(navigator.connection && navigator.connection.saveData)) setTimeout(() => { if (route() === "ask" && !worker) whisper().postMessage({ type: "load" }); }, 1500); }
   window.addEventListener("hashchange", () => { if (voice && route() !== "ask") voiceFinish(false); });
   document.addEventListener("click", (e) => {
     const o = e.target.closest("[data-chat]"), d = e.target.closest("[data-chatdel]"), all = e.target.closest("[data-chatclear]");
@@ -1277,7 +1319,7 @@
       if (Math.abs(next - (state.nowH || 200)) > 4) { state.nowH = next; fitting = true; view.innerHTML = screens.now(); fitting = false; }
     }
     document.title = { now: "Now", month: mName(state.month || "2000-01"), history: "History", ask: "Ask", settings: "Settings" }[r] + " · Solar";
-    if (r === "ask") askAfterRender();
+    if (r === "ask") { askAfterRender(); warmVoice(); }
   }
 
   view.addEventListener("submit", (e) => {
