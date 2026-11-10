@@ -1183,15 +1183,35 @@
       ask.msgs.push({ role: "assistant", text, spoken: !!voice });
       if (voice) askSpeak(text);
     } catch (err) {
-      ask.msgs.push({ role: "assistant", text: (err && err.message) || "That didn't work. Try again in a moment.", error: true });
+      // leaving Solar mid-answer kills the request; say nothing and ask again on return
+      if (ask.leftWhileBusy) { ask.cutVoice = !!voice; }
+      else ask.msgs.push({ role: "assistant", text: (err && err.message) || "That didn't work. Try again in a moment.", error: true });
     }
+    ask.leftWhileBusy = false;
     ask.busy = false; ask.draft = ""; saveAsk(); render();
   }
+  // Nathan if he's on the phone (Settings, Accessibility, Spoken Content, Voices), otherwise
+  // the best-sounding English voice there is.
+  let askVoice = null;
+  function pickVoice() {
+    if (!("speechSynthesis" in window)) return null;
+    const vs = speechSynthesis.getVoices().filter((v) => /^en[-_]/i.test(v.lang));
+    if (!vs.length) return null;
+    const q = (v) => (/premium/i.test(v.name + v.voiceURI) ? 3 : /enhanced/i.test(v.name + v.voiceURI) ? 2 : 0);
+    const score = (v) => (/nathan/i.test(v.name) ? 100 : 0) + q(v) * 10 + (/^(ava|zoe|evan|samantha|joelle|noelle)\b/i.test(v.name) ? 4 : 0)
+      + (/en[-_](US|CA)/i.test(v.lang) ? 2 : 0) + (v.localService ? 1 : 0) - (/compact|eloquence|novelty|bad news|bells|bubbles|cellos|whisper|zarvox|organ|trinoids|jester|superstar|wobble|boing|albert|fred|junior|ralph|kathy|grandma|grandpa|rocko|shelley|sandy|flo|reed/i.test(v.name) ? 50 : 0);
+    askVoice = vs.sort((a, b) => score(b) - score(a))[0];
+    return askVoice;
+  }
+  if ("speechSynthesis" in window) { pickVoice(); speechSynthesis.addEventListener && speechSynthesis.addEventListener("voiceschanged", pickVoice); }
+
   function askSpeak(text) {
     if (!("speechSynthesis" in window)) return;
     const plain = text.replace(/```chart[\s\S]*?```/g, "").replace(/\*\*/g, "").split("\n").filter((l) => !/^from /i.test(l.trim())).join(" ");
     const u = new SpeechSynthesisUtterance(plain);
-    u.lang = "en-CA"; u.rate = 1.02;
+    const v = askVoice || pickVoice();
+    if (v) { u.voice = v; u.lang = v.lang; } else u.lang = "en-CA";
+    u.rate = 1.0;
     u.onend = u.onerror = () => { ask.speaking = false; if (route() === "ask") render(); };
     setAudioSession("playback");   // after the mic, iPhone can leave sound on the quiet earpiece
     ask.speaking = true;
@@ -1297,7 +1317,21 @@
     rec.start(250);
     ask.listening = true; render();
   }
-  document.addEventListener("visibilitychange", () => { if (document.hidden && voice) voiceFinish(false); });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { if (voice) voiceFinish(false); if (ask.busy) ask.leftWhileBusy = true; }
+    else setTimeout(resumeCutOff, 400);
+  });
+  // a question without an answer (Solar was closed or put away mid-answer): ask it again
+  // by itself when you come back, if it was asked in the last 15 minutes
+  function resumeCutOff() {
+    const last = ask.msgs[ask.msgs.length - 1];
+    if (ask.busy || !state.data || !state.data.askKey || !last || last.role !== "user" || document.hidden) return;
+    const cur = loadChats().find((c) => c.id === ask.id);
+    if (!cur || Date.now() - Date.parse(cur.updated) > 15 * 60000) return;
+    ask.msgs.pop();
+    askSend(last.text, ask.cutVoice);
+    ask.cutVoice = false;
+  }
   // start fetching the voice model in the background the first time Ask is opened on Wi-Fi-ish connections
   function warmVoice() { if (canRecord && !worker && !(navigator.connection && navigator.connection.saveData)) setTimeout(() => { if (route() === "ask" && !worker) whisper().postMessage({ type: "load" }); }, 1500); }
   window.addEventListener("hashchange", () => { if (voice && route() !== "ask") voiceFinish(false); });
@@ -1332,7 +1366,7 @@
       if (Math.abs(next - (state.nowH || 200)) > 4) { state.nowH = next; fitting = true; view.innerHTML = screens.now(); fitting = false; }
     }
     document.title = { now: "Now", month: mName(state.month || "2000-01"), history: "History", ask: "Ask", settings: "Settings" }[r] + " · Solar";
-    if (r === "ask") { askAfterRender(); warmVoice(); }
+    if (r === "ask") { askAfterRender(); warmVoice(); if (!ask.resumed) { ask.resumed = true; setTimeout(resumeCutOff, 300); } }
   }
 
   view.addEventListener("submit", (e) => {
