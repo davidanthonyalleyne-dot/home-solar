@@ -16,6 +16,16 @@ const server = http.createServer((q, r) => {
   const b = await chromium.launch();
   const p = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
   await p.clock.install({ time: new Date(when) });
+  // a sample Ask conversation (made-up figures), kept where the app keeps conversations
+  await p.addInitScript(() => {
+    const msgs = [
+      { role: "user", text: "Why was October more expensive than September?" },
+      { role: "assistant", text: "**October cost $186, $41 more than September.** The house drew 23% more from the grid once the first cold week arrived, and the panels made less, 410 kWh against 540.\n\n```chart\n{\"series\":[\"Grid\",\"Solar\"],\"rows\":[[\"Sep\",1150,540],[\"Oct\",1420,410]]}\n```\n\nThe 17th was the heaviest day, at 64 kWh, with a low of −4°C.\nFrom your September and October bills and meter data" },
+      { role: "user", text: "Will tomorrow be a good day for solar?" },
+      { role: "assistant", text: "**Fairly good, about 9 kWh.** Mostly sunny until mid-afternoon, when cloud moves in, with a high of 7°C. That's a forecast, so it could shift.\nFrom the forecast for tomorrow" },
+    ];
+    try { localStorage.setItem("askCurrent", JSON.stringify("sample")); localStorage.setItem("askChats", JSON.stringify([{ id: "sample", started: "2026-11-06T15:20:00Z", updated: "2026-11-06T15:30:00Z", msgs }])); } catch (_) {}
+  });
   // a sample data.json may be encrypted with the passphrase "sample", to show the parts that need it
   await p.goto(url); await p.waitForTimeout(700);
   if (await p.locator("#pass").count()) {
@@ -35,6 +45,7 @@ const server = http.createServer((q, r) => {
   await shot("energy", "history", async () => p.click('[data-hview="energy"]'));
   await shot("bill", "month", async () => { await lastMonth(); await p.waitForTimeout(300); const l = p.locator('[data-sheet="bill"]'); if (await l.count()) await l.first().click(); });
   await shot("settings", "settings", async () => p.evaluate(() => { const s = [...document.querySelectorAll(".group-label")].find((x) => x.textContent === "Toronto Hydro"); if (s) s.scrollIntoView(); }));
+  await shot("ask", "ask");
   await b.close(); server.close();
   console.log("shots saved in", out);
 });

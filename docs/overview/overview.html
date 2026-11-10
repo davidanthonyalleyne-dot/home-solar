@@ -5,7 +5,7 @@
 <title>Solar: what the app does</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  /* Two US Letter pages, styled like the app: white, graphite, one orange. */
+  /* Three US Letter pages (two of features, one technical), styled like the app: white, graphite, one orange. */
   :root {
     --text: #1C1C1E; --muted: #6C6C70; --rule: #E6E6E9; --well: #F2F2F4;
     --grid: #3A3A3C; --sun: #E8830C; --sun-text: #B35F00;
@@ -50,6 +50,15 @@
   .stats .v { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
   .stats .v.sun { color: var(--sun); }
   .stats .u { font-size: 11.5px; line-height: 1.35; color: var(--muted); }
+  .ver { display: flex; gap: 14px; }
+  .tech h1 { font-size: 26px; }
+  table { width: 100%; border-collapse: collapse; font-size: 10.5px; line-height: 1.35; }
+  th { text-align: left; font-weight: 600; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); padding: 0 8px 5px 0; border-bottom: 1px solid var(--rule); }
+  td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  td:first-child { font-weight: 600; white-space: nowrap; }
+  td code, p code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 9.5px; background: var(--well); padding: 0 3px; border-radius: 3px; }
+  .tech section p { font-size: 11px; line-height: 1.45; }
+  @media screen and (max-width: 860px) { table { display: block; overflow-x: auto; } }
   @media screen and (max-width: 860px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 14px; } .stats > div:nth-child(3) { padding-left: 0; border-left: 0; } }
 </style>
 </head>
@@ -64,7 +73,7 @@
     </div>
   </header>
 
-  <p class="intro">Solar joins two sources that never talk to each other: the <b>SolarEdge inverter</b> on the house (17 panels, 7.7 kW) and <b>Toronto Hydro's</b> meter readings and bills. It works out Ontario's net metering rules the way the bills do, so the savings are real dollars, checked against every bill on file. It opens to three tabs, Now, Month and History, and runs from the iPhone Home Screen.</p>
+  <p class="intro">Solar joins two sources that never talk to each other: the <b>SolarEdge inverter</b> on the house (17 panels, 7.7 kW) and <b>Toronto Hydro's</b> meter readings and bills. It works out Ontario's net metering rules the way the bills do, so the savings are real dollars, checked against every bill on file. It opens to four tabs, Now, Month, History and <b>Ask</b>, where you can ask about your energy by typing or by voice, and it runs from the iPhone Home Screen.</p>
 
   <div class="shots" style="grid-template-columns: repeat(3, minmax(0, 1fr))">
     <figure>
@@ -77,7 +86,7 @@
     </figure>
     <figure>
       <img src="shots/history.png" alt="The History screen">
-      <figcaption><b>History</b>Every month since the panels went in, one row per year on one scale. Switch between cost and energy. Paler bars are estimates.</figcaption>
+      <figcaption><b>History</b>Every month since January 2023, one row per year on one scale. Months before the panels show the bill only. Switch to Energy for what the panels made.</figcaption>
     </figure>
   </div>
 
@@ -92,15 +101,15 @@
     </div>
   </div>
 
-  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span>Page 1 of 2</span></footer>
+  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.0 · App 1.53</span><span>Page 1 of 3</span></span></footer>
 </div>
 
 <div class="page">
   <div class="cols" style="grid-template-columns: 1.15fr 1fr; align-items: start">
     <div class="cols" style="grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 18px">
       <figure>
-        <img src="shots/energy.png" alt="History, Energy view">
-        <figcaption><b>Energy</b>What the panels generated, with an EV comparison and the CO₂ avoided.</figcaption>
+        <img src="shots/ask.png" alt="The Ask tab">
+        <figcaption><b>Ask</b>Questions in plain words, answered from the app's own data, with a small chart when it helps.</figcaption>
       </figure>
       <figure>
         <img src="shots/settings.png" alt="Settings: adding files and alerts">
@@ -109,6 +118,7 @@
     </div>
 
     <div style="display: flex; flex-direction: column; gap: 16px">
+      <section><h2>Ask</h2><p>Type a question or tap the mic and say it. Claude answers in a few plain sentences with the key number first, from your months, bills, the last 120 days and the live forecast, and names the data it used. Spoken questions are answered aloud. Conversations are kept on the phone under Past.</p></section>
       <section><h2>Live from the inverter</h2><p>Power now, today's output and the expected curve, which levels off at the inverter's 6 kW limit. At night a small moon shows the real phase; tap it for its name.</p></section>
       <section><h2>Costs that match the bills</h2><p>Credits for power sent back are valued at the time-of-use price when it went out, delivery is charged on net use, and HST and the Ontario rebate are applied as Toronto Hydro does. Months without a bill are estimated from the meter, usually within a few percent.</p></section>
       <section><h2>Bills and meter data</h2><p>Add a bill PDF or a MyTorontoHydro spreadsheet from Settings. It's encrypted on the phone, read by the next update, and a bill is only added if its lines add up to the printed total. The PDF itself is never kept.</p></section>
@@ -122,13 +132,52 @@
     <section><h2>Private by design</h2><p>All data is encrypted with a passphrase before it's published. Unlock with the passphrase, or with Face ID on a trusted phone. Serial numbers and tokens live only inside the encrypted data.</p></section>
     <section><h2>Your system</h2><p>Panels, optimizers, inverter, rapid shutdown switch, meter and installer, with serial numbers for warranty or service, and what to do in an emergency.</p></section>
     <section><h2>How it runs</h2><p>A scheduled job on GitHub fetches SolarEdge and the weather about every hour, reads any new files, rebuilds the site on GitHub Pages and sends alerts. There's no server to maintain.</p></section>
-    <section><h2>Good to know</h2><p>Toronto Hydro meter data comes from exported files, so costs trail by however long it's been since the last one. SolarEdge has no per-panel data in its public API, and live house use would need a consumption meter.</p></section>
+    <section><h2>Good to know</h2><p>Meter data comes from exported files, so costs trail by however long it's been since the last one. SolarEdge's API has no per-panel data. An answer in Ask is lost if you leave Solar mid-answer; it's asked again when you come back.</p></section>
   </div>
 
-  <div class="rule"></div>
-  <section><h2>Coming next</h2><p>Ask: a tab for questions about the house's energy and bills in plain words, by typing or by voice, answered from the app's own data.</p></section>
+  <footer><span class="num">Updated November 10, 2026</span><span class="ver"><span>Document 2.0 · App 1.53</span><span>Page 2 of 3</span></span></footer>
+</div>
 
-  <footer><span class="num">Updated November 9, 2026</span><span>Page 2 of 2</span></footer>
+<div class="page tech" style="gap: 16px">
+  <header style="gap: 12px">
+    <div><p class="label" style="margin: 0">Solar</p><h1>Technical setup</h1></div>
+  </header>
+
+  <div>
+    <p class="label">Sources and libraries</p>
+    <table>
+      <tr><th>Piece</th><th>Version</th><th>What it does</th><th>Loaded from</th><th>Licence</th></tr>
+      <tr><td>App code</td><td>App 1.53</td><td>The four tabs, charts, net metering maths, encryption and Ask (<code>app.js</code>, <code>lock.js</code>, <code>style.css</code>, <code>sw.js</code>). No framework; charts are hand-drawn SVG</td><td>GitHub Pages, this repo's <code>web/</code></td><td>Written for the app</td></tr>
+      <tr><td>Build job</td><td>Python 3</td><td>Fetches data, reads bills and meter files, models costs, encrypts, sends alerts (<code>scripts/build.py</code>, <code>money.py</code>, <code>parse_bill.py</code>)</td><td>GitHub Actions</td><td>Written for the app</td></tr>
+      <tr><td>Transformers.js</td><td>3.5.1</td><td>Runs the speech model in the browser, with ONNX Runtime Web inside</td><td>cdn.jsdelivr.net</td><td>Apache-2.0</td></tr>
+      <tr><td>Whisper tiny.en</td><td>Xenova, 8-bit</td><td>Turns a spoken question into text on the phone (about 40 MB, cached after first use)</td><td>huggingface.co</td><td>MIT</td></tr>
+      <tr><td>Python libraries</td><td>latest</td><td>cryptography (AES-GCM), openpyxl (meter spreadsheets), pywebpush (notifications)</td><td>PyPI</td><td>Apache-2.0, MIT, MPL-2.0</td></tr>
+      <tr><td>Poppler pdftotext</td><td>Ubuntu package</td><td>Reads the text of bill PDFs</td><td>apt</td><td>GPL-2.0</td></tr>
+      <tr><td>Type and icons</td><td>n/a</td><td>System font; icons drawn as SVG for the app</td><td>The device</td><td>Written for the app</td></tr>
+    </table>
+  </div>
+
+  <div>
+    <p class="label">Integrations</p>
+    <table>
+      <tr><th>Service</th><th>Used for</th><th>Details</th></tr>
+      <tr><td>SolarEdge Monitoring API v2</td><td>Production, power now, inverter status and alerts</td><td><code>monitoringapi.solaredge.com/v2</code>, OAuth through <code>connect.solaredge.com</code>; the refresh token rotates and is saved back as a GitHub secret. Free tier, 2,000 calls a month</td></tr>
+      <tr><td>Toronto Hydro</td><td>Bills and hourly meter readings</td><td>No API. Bill PDFs and MyTorontoHydro spreadsheets are added from Settings and read by the build; the PDF isn't kept</td></tr>
+      <tr><td>Open-Meteo</td><td>Weather now, the forecast, and past weather</td><td><code>api.open-meteo.com</code> and <code>archive-api.open-meteo.com</code>, no key. Called by the build, the Now screen, and Ask for each question</td></tr>
+      <tr><td>Anthropic Claude API</td><td>Answers in Ask</td><td><code>api.anthropic.com/v1/messages</code>, model <code>claude-haiku-5-5</code>, called from the phone. Sends the question, recent conversation and a summary of months, bills, 120 days and the forecast. Key in the <code>ANTHROPIC_API_KEY</code> secret, carried inside the encrypted data</td></tr>
+      <tr><td>GitHub</td><td>Hosting, the hourly job, uploads</td><td>Pages serves the site; Actions runs the build hourly; files from the phone are committed encrypted to <code>data/inbox/</code> through the Git Data API with a fine-grained token (<code>UPLOAD_TOKEN</code>)</td></tr>
+      <tr><td>Web Push (Apple)</td><td>Alerts on the phone</td><td>VAPID-signed pushes from the build; subscriptions kept encrypted in <code>data/push.enc</code></td></tr>
+      <tr><td>Browser features</td><td>Unlock, voice, offline</td><td>Web Crypto (PBKDF2-SHA256, AES-GCM), passkeys for Face ID unlock, microphone and Web Audio for recording, speech synthesis to read answers, a service worker, and local storage for Ask conversations</td></tr>
+    </table>
+  </div>
+
+  <section><h2>What runs where</h2>
+    <p>On the phone: unlocking and decrypting the data, every screen and chart, recording and transcribing questions, reading answers aloud, and the calls to Claude and Open-Meteo. Nothing else leaves the phone except files you add, which are encrypted first.</p>
+    <p>On GitHub, about every hour: the build fetches SolarEdge and the weather, reads new files, rebuilds the site and sends alerts. The site's data is published encrypted with a key from the passphrase (PBKDF2-SHA256, 600,000 rounds); serial numbers and tokens exist only inside it.</p>
+    <p>This document: <code>docs/overview/</code>. Make sample data with <code>fake_data.py</code>, take screenshots with <code>shoot.js</code>, print with <code>pdf.js</code>.</p>
+  </section>
+
+  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.0 · App 1.53</span><span>Page 3 of 3</span></span></footer>
 </div>
 
 </body>
