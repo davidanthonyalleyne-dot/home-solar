@@ -44,7 +44,7 @@
   function months() {
     const s = new Set(Object.keys(hydro()).map((d) => d.slice(0, 7)));
     if (solar()) Object.keys(solar().daily || {}).forEach((d) => s.add(d.slice(0, 7)));
-    Object.keys(M()).forEach((m) => s.add(m));
+    Object.entries(M()).forEach(([m, x]) => { if (!x.preSolar) s.add(m); });
     return [...s].sort();
   }
 
@@ -583,6 +583,19 @@
     return rows(p) + `<div class="gap"></div>` + rows(w);
   }
 
+  // a month from before the panels: just the bill (or bills) that ended in it
+  function preSolarSheet(ym) {
+    const bs = (state.data.bills || []).filter((b) => b.preSolar && b.to.slice(0, 7) === ym);
+    const short = (d) => parseDay(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return bs.map((b) => {
+      const days = Math.round((parseDay(b.to) - parseDay(b.from)) / 864e5);
+      return `<p class="sub">${esc(short(b.from))} to ${esc(short(b.to))} · ${days} days</p>` + rows([
+        ["Electricity used", `${fmt(b.used)} kWh`],
+        ["Charges", money(b.electricity)], ["HST", money(b.hst)], b.rebate ? ["Ontario Electricity Rebate", money(-b.rebate)] : null,
+        ["This bill", `<b>${money(b.due - (b.previous || 0))}</b>`]]);
+    }).join(`<div class="gap"></div>`) + `<p class="sub">Before the panels were switched on, so there's no solar or meter detail for this month.</p>`;
+  }
+
   function billSheet(ym) {
     const b = billFor(ym), p = billParts(b), name = mName(ym);
     const tou = ["on", "mid", "off"].filter((k) => b.buy[k]).map((k) => [`<span class="indent">${{ on: "On-peak", mid: "Mid-peak", off: "Off-peak" }[k]} <span class="sub">${fmt(b.buy[k][0])} kWh at ${fmt(b.buy[k][1] * 100, 1)}¢</span></span>`, money(b.buy[k][0] * b.buy[k][1]), "minor"]);
@@ -633,13 +646,13 @@
         if (ym === state.month) g += `<circle cx="${(x + w / 2).toFixed(1)}" cy="${base + 5}" r="2.2" class="seldot"/>`;
         if (gh) g += `<rect x="${x.toFixed(1)}" y="${(base - gh).toFixed(1)}" width="${w.toFixed(1)}" height="${gh.toFixed(1)}" class="b-grid${m.gridSource === "estimate" ? " est" : ""}"/>`;
         if (sh) g += `<rect x="${x.toFixed(1)}" y="${(base - gh - sh).toFixed(1)}" width="${w.toFixed(1)}" height="${sh.toFixed(1)}" class="b-sun"/>`;
-        g += `<rect x="${(x - 2).toFixed(1)}" y="${base - rowH + 10}" width="${bw.toFixed(1)}" height="${rowH}" class="hit" data-ym="${ym}" data-go="month" role="button" aria-label="${esc(monthName(ym))}: paid ${m.grid != null ? dollars(m.grid) : "unknown"}, saved ${m.saved != null ? dollars(m.saved) : "unknown"}"/>`;
+        g += `<rect x="${(x - 2).toFixed(1)}" y="${base - rowH + 10}" width="${bw.toFixed(1)}" height="${rowH}" class="hit" ${m.preSolar ? `data-presolar="${ym}"` : `data-ym="${ym}" data-go="month"`} role="button" aria-label="${esc(monthName(ym))}: paid ${m.grid != null ? dollars(m.grid) : "unknown"}, saved ${m.saved != null ? dollars(m.saved) : "unknown"}"/>`;
       }
     });
     "JFMAMJJASOND".split("").forEach((c, i) => { g += svgText(lab + i * bw + bw / 2, H - 2, c); });
     return `<section><div class="label">Cost each month, from the <b class="ink">grid</b> and saved by <b class="sun">solar</b>. Same scale every year.</div>
       <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Monthly cost by year">${g}</svg>
-      <p class="sub">Paler bars are estimates. Tap a month to open it.</p></section>`;
+      <p class="sub">Paler bars are estimates. Tap a month to open it.${Object.values(M()).some((m) => m.preSolar) ? " Months before the panels show the bill only." : ""}</p></section>`;
   }
 
   // what the panels made each month, one row per year on one scale
@@ -696,7 +709,7 @@
     if (state.histView === "energy" && solar()) {
       return `<div class="top"><div><div class="eyebrow">Since ${esc(monthName(solar().installed ? solar().installed.slice(0, 7) : Object.keys(solar().daily).sort()[0].slice(0, 7)))}</div><h1>History</h1></div></div>${histSwitch()}${energyView()}`;
     }
-    const ms = Object.entries(M());
+    const ms = Object.entries(M()).filter(([, m]) => !m.preSolar);   // totals are for the solar years
     if (!ms.length) return `<div class="top"><div><h1>History</h1></div></div><section class="first"><p class="lead">No cost history yet.</p></section>`;
     const grid = ms.reduce((a, [, m]) => a + (m.grid || 0), 0), saved = ms.reduce((a, [, m]) => a + (m.saved || 0), 0);
     const first = ms.map(([k]) => k).sort()[0], missing = ms.filter(([, m]) => m.grid == null && m.complete !== false).length;
@@ -1290,6 +1303,8 @@
     if (e.target.closest("#alertoff")) { saveAlerts(true); return; }
     const hv = e.target.closest("[data-hview]");
     if (hv) { state.histView = hv.dataset.hview; try { localStorage.setItem("histView", state.histView); } catch (_) {} render(); return; }
+    const ps = e.target.closest("[data-presolar]");
+    if (ps) { openSheet(`${monthName(ps.dataset.presolar)} bill`, preSolarSheet(ps.dataset.presolar)); return; }
     const sh = e.target.closest("[data-sheet]");
     if (sh) {
       if (sh.dataset.sheet === "bill") openSheet(`${mName(state.month)} bill`, billSheet(state.month));

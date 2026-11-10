@@ -163,7 +163,13 @@ def build_money(hydro, solar_daily, intervals, bills, grid_monthly, today):
     bills = bills or []
     grid_monthly = grid_monthly or {}
     solar_daily = solar_daily or {}
-    # bills from before the net meter (and solar) went in are kept for the record only
+    # bills from before the net meter (and solar) went in: no solar to model, but what was
+    # paid still counts toward its calendar year (each bill goes to the month it ends in)
+    before = defaultdict(lambda: {"grid": 0.0, "imp": 0.0})
+    for b in bills:
+        if b.get("preSolar"):
+            x = before[b["to"][:7]]
+            x["grid"] += b["due"] - b.get("previous", 0); x["imp"] += b["used"]
     bills = [b for b in bills if not b.get("preSolar")]
     fitted, rates = _fit_rates(bills)
     by_month_bill = {b["to"][:7]: b for b in bills}
@@ -308,6 +314,21 @@ def build_money(hydro, solar_daily, intervals, bills, grid_monthly, today):
             "deliveryCredit": line_credit, "carried": round(bank, 2) if bank else 0,
             "complete": complete, "estimated": est,
         }
+
+    # months paid for before the panels went on
+    for ym, x in before.items():
+        if ym in out:  # the month the panels were switched on: add the bills that ended before it
+            o_ = out[ym]
+            if o_["grid"] is not None:
+                o_["grid"] = round(o_["grid"] + x["grid"], 2)
+                if o_["imp"] is not None: o_["imp"] = round(o_["imp"] + x["imp"], 1)
+                if o_["without"] is not None: o_["without"] = round(o_["grid"] + o_["saved"], 2)
+                o_["beforeSolarGrid"] = round(x["grid"], 2)
+        else:
+            out[ym] = {"grid": round(x["grid"], 2), "gridSource": "bill", "preSolar": True, "saved": None, "credits": None, "selfValue": None,
+                       "without": round(x["grid"], 2), "imp": round(x["imp"], 1), "exp": 0.0, "selfUsed": None, "prod": None,
+                       "complete": True, "estimated": []}
+    out = dict(sorted(out.items()))
 
     # backtest: estimate the billed months from meter data alone, to show how close estimates are
     backtest = []
