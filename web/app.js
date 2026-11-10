@@ -987,7 +987,40 @@
       months, bills, dailyColumns: ["date", "gridKwh", "sentBackKwh", "solarKwh", "highC", "lowC"], daily: days,
     });
   }
-  const ASK_SYSTEM = `You are Ask, part of Solar, a private app for one home in Toronto with rooftop solar. Answer the owner's questions using only the data provided. Lead with the answer, with the key figure in bold using **double asterisks**. Write two to four short, plain sentences; no headings, no bullet lists, no em dashes. Money in dollars, energy in kWh, temperatures in °C. If something is estimated or missing, say so in a few words. If the data can't answer the question, say what's missing. When comparing two to six values would help, add one chart block:
+  // Live weather for Ask: conditions now, the next 24 hours, and seven days ahead, with the
+  // solar each day should make, from the forecast sunlight and what the roof makes per unit
+  // of sunlight on recent days. Fetched when a question is asked, kept for ten minutes.
+  let askWx = null, askWxAt = 0;
+  const WX_WORDS = { sun: "clear", moon: "clear", partly: "partly cloudy", cloud: "cloudy", fog: "fog", drizzle: "drizzle", rain: "rain", snow: "snow", storm: "thunderstorms" };
+  async function askWeather() {
+    if (askWx && Date.now() - askWxAt < 10 * 60000) return askWx;
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 5000);
+    try {
+      const q = new URLSearchParams({ latitude: LAT(), longitude: LON(), timezone: TZNAME, forecast_days: 7,
+        current: "temperature_2m,apparent_temperature,weather_code,is_day,cloud_cover,wind_speed_10m,precipitation,snowfall",
+        hourly: "temperature_2m,weather_code,cloud_cover,shortwave_radiation,precipitation_probability",
+        daily: "temperature_2m_max,temperature_2m_min,weather_code,sunshine_duration,shortwave_radiation_sum,precipitation_probability_max,precipitation_sum,snowfall_sum,sunrise,sunset" });
+      const b = await (await fetch(`https://api.open-meteo.com/v1/forecast?${q}`, { signal: ctl.signal })).json();
+      const r1 = (x) => (x == null ? null : Math.round(x * 10) / 10), words = (c, day = 1) => WX_WORDS[wxKind(c, day)];
+      const c = b.current, h = b.hourly, d = b.daily, k = factorAround(torontoToday());
+      const nowIdx = Math.max(0, h.time.findIndex((x) => x >= (c.time || "").slice(0, 13)));
+      askWx = {
+        source: "Open-Meteo forecast for the house, fetched just now",
+        now: { at: c.time, conditions: words(c.weather_code, c.is_day), tempC: c.temperature_2m, feelsLikeC: c.apparent_temperature, cloudPct: c.cloud_cover, windKmh: c.wind_speed_10m, precipMm: c.precipitation, snowCm: c.snowfall },
+        next24h: { columns: ["hour", "conditions", "tempC", "cloudPct", "sunlightWm2", "chanceOfPrecipPct"],
+          rows: h.time.slice(nowIdx, nowIdx + 24).map((tm, i) => { const j = nowIdx + i; return [tm.slice(11, 16), words(h.weather_code[j]), r1(h.temperature_2m[j]), h.cloud_cover[j], Math.round(h.shortwave_radiation[j]), h.precipitation_probability[j]]; }) },
+        days: { columns: ["date", "conditions", "highC", "lowC", "sunshineHours", "chanceOfPrecipPct", "rainMm", "snowCm", "expectedSolarKwh", "sunrise", "sunset"],
+          rows: d.time.map((dd, i) => [dd, words(d.weather_code[i]), d.temperature_2m_max[i], d.temperature_2m_min[i], r1(d.sunshine_duration[i] / 3600), d.precipitation_probability_max[i],
+            d.precipitation_sum[i], d.snowfall_sum[i], k && d.shortwave_radiation_sum[i] != null ? r1(k * d.shortwave_radiation_sum[i]) : null, d.sunrise[i].slice(11), d.sunset[i].slice(11)]) },
+        expectedSolarNote: "expectedSolarKwh is an estimate from forecast sunlight and what the panels made on recent days with similar light. Snow on the panels would lower it.",
+      };
+      askWxAt = Date.now();
+    } catch (_) { /* answer without it; the context says so */ }
+    clearTimeout(t);
+    return askWx;
+  }
+
+  const ASK_SYSTEM = `You are Ask, part of Solar, a private app for one home in Toronto with rooftop solar. Answer the owner's questions using only the data provided. Lead with the answer, with the key figure in bold using **double asterisks**. Write two to four short, plain sentences; no headings, no bullet lists, no em dashes. Money in dollars, energy in kWh, temperatures in °C. The data includes live weather and a seven day forecast with expected solar per day; when you use it, say it's a forecast. If live weather is missing, say you couldn't get it right now. If something is estimated or missing, say so in a few words. If the data can't answer the question, say what's missing. When comparing two to six values would help, add one chart block:
 \`\`\`chart
 {"series":["Grid","Solar"],"rows":[["Sep",1150,540],["Oct",1420,410]]}
 \`\`\`
@@ -1020,7 +1053,7 @@
     if (a && b && M()[a].grid != null && M()[b].grid != null) out.push(`Why was ${monthName(b).split(" ")[0]} ${M()[b].grid > M()[a].grid ? "more" : "less"} expensive than ${monthName(a).split(" ")[0]}?`);
     out.push("How much has solar saved this year?");
     out.push(`Is this ${new Date().toLocaleDateString("en-US", { month: "long", timeZone: TZNAME })} colder than last year?`);
-    out.push("What was my heaviest day this month, and why?");
+    out.push("Will tomorrow be a good day for solar?");
     return out;
   }
 
@@ -1055,12 +1088,14 @@
     ask.msgs.push({ role: "user", text: q }); ask.draft = ""; ask.busy = true; ask.fromVoice = !!voice;
     render();
     try {
+      const wx = await askWeather();
       const history = ask.msgs.filter((m) => !m.error).slice(-12).map((m) => ({ role: m.role, content: m.text }));
       const r = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "content-type": "application/json", "x-api-key": state.data.askKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
         body: JSON.stringify({ model: ASK_MODEL, max_tokens: 700,
-          system: [{ type: "text", text: ASK_SYSTEM }, { type: "text", text: "The app's data:\n" + askContext(), cache_control: { type: "ephemeral" } }],
+          system: [{ type: "text", text: ASK_SYSTEM }, { type: "text", text: "The app's data:\n" + askContext(), cache_control: { type: "ephemeral" } },
+            { type: "text", text: "Live weather:\n" + (wx ? JSON.stringify(wx) : "not available right now") }],
           messages: history }),
       });
       const j = await r.json().catch(() => ({}));
