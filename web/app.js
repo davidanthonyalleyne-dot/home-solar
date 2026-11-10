@@ -1141,8 +1141,8 @@
         <section><div class="label">Try asking</div>${askSuggestions().map((q) => `<button type="button" class="asksug" data-askq="${esc(q)}"><span>${esc(q)}</span>${chev}</button>`).join("")}</section>
         ${loadChats().length ? `<section><div class="label">Recent</div><div class="chatlist">${loadChats().slice(0, 3).map(chatRow).join("")}</div></section>` : ""}${bar}`;
     }
-    const msgs = ask.msgs.map((m) => m.role === "user" ? `<div class="askq">${esc(m.text)}</div>`
-      : `<div class="aska${m.error ? " err" : ""}">${m.error ? `<p>${esc(m.text)}</p>` : askAnswer(m.text)}${m.spoken && ask.speaking ? `<button type="button" class="askspeak" id="askstop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg>Reading aloud</button>` : ""}</div>`).join("");
+    const msgs = ask.msgs.map((m, i) => m.role === "user" ? `<div class="askq">${esc(m.text)}</div>`
+      : `<div class="aska${m.error ? " err" : ""}">${m.error ? `<p>${esc(m.text)}</p>` : askAnswer(m.text)}${m.spoken && ask.speaking ? `<button type="button" class="askspeak" id="askstop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg>Reading aloud</button>` : m.spoken && i === ask.msgs.length - 1 ? `<button type="button" class="askspeak" data-askplay="${i}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg>Read again</button>` : ""}</div>`).join("");
     const last = ask.msgs[ask.msgs.length - 1];
     const lost = !ask.busy && last && last.role === "user"
       ? `<div class="aska err"><p>No answer came back, probably because Solar was closed while Claude was answering.</p><button type="button" class="askspeak" data-askretry>Ask again</button></div>` : "";
@@ -1193,7 +1193,10 @@
     const u = new SpeechSynthesisUtterance(plain);
     u.lang = "en-CA"; u.rate = 1.02;
     u.onend = u.onerror = () => { ask.speaking = false; if (route() === "ask") render(); };
-    speechSynthesis.cancel(); ask.speaking = true; speechSynthesis.speak(u);
+    setAudioSession("playback");   // after the mic, iPhone can leave sound on the quiet earpiece
+    ask.speaking = true;
+    if (speechSynthesis.speaking || speechSynthesis.pending) { speechSynthesis.cancel(); setTimeout(() => speechSynthesis.speak(u), 60); }   // iPhone drops a speak() right after cancel()
+    else speechSynthesis.speak(u);
   }
   // Voice. iPhone blocks the browser's own speech recognizer in Home Screen apps, so Solar
   // records the question itself and turns it into text on the phone with Whisper (whisper.js).
@@ -1236,10 +1239,19 @@
     try { v.rec.state !== "inactive" ? v.rec.stop() : v.after(); } catch (_) { v.after(); }
   }
   function voiceNote(t) { ask.listening = false; ask.transcribing = false; render(); if (t) alertLine(t); }
+  function setAudioSession(type) { try { if (navigator.audioSession) navigator.audioSession.type = type; } catch (_) {} }
+  // iPhone only lets a page start speaking from a tap. The answer arrives seconds after the
+  // tap, so speak a silent word during the tap itself; after that, speech is allowed.
+  function unlockSpeech() {
+    if (!("speechSynthesis" in window)) return;
+    try { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; u.rate = 2; speechSynthesis.speak(u); } catch (_) {}
+  }
   async function askListen() {
     if (ask.listening) { voiceFinish(true); return; }   // tapping again sends now
     if (!canRecord || ask.busy || ask.transcribing) return;
     if ("speechSynthesis" in window) speechSynthesis.cancel();
+    unlockSpeech();
+    setAudioSession("play-and-record");
     ask.speaking = false;
     const ctx = new (window.AudioContext || window.webkitAudioContext)();   // made inside the tap so iPhone allows it
     whisper().postMessage({ type: "load" });                               // fetch the model while you talk
@@ -1252,6 +1264,7 @@
     v.after = async () => {
       if (v.finished) return; v.finished = true;
       stream.getTracks().forEach((t) => t.stop());
+      setAudioSession("playback");
       if (!v.send || !v.heard) { ctx.close(); return voiceNote(v.send && !v.heard ? "Didn't hear anything. Tap the mic and try again." : ""); }
       ask.listening = false; ask.transcribing = true; ask.voiceStatus = workerReady ? "Listening back" : "Getting voice ready, first time only"; render();
       try {
@@ -1349,6 +1362,8 @@
     if (e.target.closest("#askmic")) { askListen(); return; }
     if (e.target.closest("#asknew")) { newChat(); render(); return; }
     if (e.target.closest("#askpast")) { openSheet("Past conversations", chatsSheet()); return; }
+    const pl = e.target.closest("[data-askplay]");
+    if (pl) { const m = ask.msgs[+pl.dataset.askplay]; if (m) { askSpeak(m.text); render(); } return; }
     if (e.target.closest("#askstop")) { if ("speechSynthesis" in window) speechSynthesis.cancel(); ask.speaking = false; render(); return; }
     if (e.target.closest("#alertsave")) { saveAlerts(false); return; }
     if (e.target.closest("#alertoff")) { saveAlerts(true); return; }
