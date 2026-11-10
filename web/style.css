@@ -450,3 +450,14 @@ body.locked .tabs { display: none; }
 @keyframes askwave { 0%, 100% { height: 5px; } 50% { height: 18px; } }
 @media (prefers-reduced-motion: reduce) { .wave i, .aska.thinking span { animation: none; } .wave i { height: 12px; } }
 .label + .asksug { margin-top: 6px; }
+.askhead { display: flex; gap: 18px; }
+.chatlist { display: flex; flex-direction: column; margin-bottom: 12px; }
+.chatrow { display: flex; align-items: center; gap: 4px; border-top: 1px solid var(--rule); }
+.chatrow:last-child { border-bottom: 1px solid var(--rule); }
+.chatopen { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; min-height: 56px; justify-content: center; border: 0; background: transparent; padding: 8px 0; font: inherit; text-align: left; color: var(--text); cursor: pointer; }
+.chatopen .t { font-size: 16px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatopen .w { font-size: 13px; color: var(--muted); }
+.chatopen:active { opacity: .5; }
+.chatdel { width: 44px; height: 44px; flex-shrink: 0; border: 0; background: transparent; color: var(--faint); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.chatdel svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.chatdel:active { color: var(--bad); }

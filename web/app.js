@@ -959,8 +959,65 @@
   // Each question sends Claude a compact summary of the app's own data; nothing else.
   const ASK_MODEL = "claude-haiku-5-5";
   const ask = { msgs: [], busy: false, draft: "", listening: false, interim: "", speaking: false, fromVoice: false };
-  try { ask.msgs = JSON.parse(sessionStorage.getItem("askMsgs") || "[]"); } catch (_) {}
-  const saveAsk = () => { try { sessionStorage.setItem("askMsgs", JSON.stringify(ask.msgs.slice(-20))); } catch (_) {} };
+  // Conversations are kept on this phone (never in the repository), newest first, up to 60.
+  // The one you were in reopens when you come back; New starts another and keeps the old one.
+  const CHATS_KEY = "askChats", CHATS_MAX = 60;
+  const loadChats = () => { try { const c = JSON.parse(localStorage.getItem(CHATS_KEY) || "[]"); return Array.isArray(c) ? c : []; } catch (_) { return []; } };
+  const storeChats = (c) => { try { localStorage.setItem(CHATS_KEY, JSON.stringify(c.slice(0, CHATS_MAX))); } catch (_) {} };
+  ask.id = null;
+  (function resume() {
+    const cur = lsGet("askCurrent"), c = loadChats();
+    const hit = cur && c.find((x) => x.id === cur);
+    if (hit) { ask.id = hit.id; ask.msgs = hit.msgs; }
+    try { sessionStorage.removeItem("askMsgs"); } catch (_) {}
+  })();
+  function saveAsk() {
+    const msgs = ask.msgs.filter((m) => !m.error);
+    if (!msgs.length) return;
+    const c = loadChats(), now = new Date().toISOString();
+    if (!ask.id) { ask.id = now.replace(/\D/g, "").slice(0, 14) + Math.random().toString(36).slice(2, 6); lsSet("askCurrent", ask.id); }
+    const i = c.findIndex((x) => x.id === ask.id), prev = i >= 0 ? c.splice(i, 1)[0] : null;
+    c.unshift({ id: ask.id, started: prev ? prev.started : now, updated: now, msgs: msgs.slice(-40).map(({ role, text }) => ({ role, text })) });
+    storeChats(c);
+  }
+  function newChat() { ask.msgs = []; ask.id = null; lsSet("askCurrent", ""); if ("speechSynthesis" in window) speechSynthesis.cancel(); ask.speaking = false; }
+  function openChat(id) {
+    const hit = loadChats().find((x) => x.id === id);
+    if (!hit) return;
+    newChat(); ask.id = hit.id; ask.msgs = hit.msgs; lsSet("askCurrent", hit.id);
+  }
+  function deleteChat(id) {
+    storeChats(loadChats().filter((x) => x.id !== id));
+    if (ask.id === id) newChat();
+  }
+  const chatTitle = (c) => { const q = (c.msgs.find((m) => m.role === "user") || {}).text || "Conversation"; return q.length > 70 ? q.slice(0, 68).trim() + "…" : q; };
+  function chatWhen(iso) {
+    const d = new Date(iso), day = d.toLocaleDateString("en-CA", { timeZone: TZNAME }), today = torontoToday();
+    const yest = new Date(Date.parse(today + "T12:00:00Z") - 864e5).toISOString().slice(0, 10);
+    if (day === today) return `Today, ${clock(d)}`;
+    if (day === yest) return `Yesterday, ${clock(d)}`;
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: day.slice(0, 4) === today.slice(0, 4) ? undefined : "numeric", timeZone: TZNAME });
+  }
+  const chatRow = (c) => { const n = c.msgs.filter((m) => m.role === "user").length;
+    return `<div class="chatrow"><button type="button" class="chatopen" data-chat="${esc(c.id)}"><span class="t">${esc(chatTitle(c))}</span><span class="w">${esc(chatWhen(c.updated))}${n > 1 ? ` · ${n} questions` : ""}</span></button>
+      <button type="button" class="chatdel" data-chatdel="${esc(c.id)}" aria-label="Delete “${esc(chatTitle(c))}”"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/></svg></button></div>`; };
+  function chatsSheet() {
+    const c = loadChats();
+    if (!c.length) return `<p class="sub">No saved conversations yet.</p>`;
+    return `<div class="chatlist">${c.map(chatRow).join("")}</div>
+      <p class="sub">Kept on this phone only, up to ${CHATS_MAX}. Claude also sees your last few questions, so you can pick up where you left off.</p>
+      <button type="button" class="linkline danger" data-chatclear>Delete all conversations</button>`;
+  }
+  // a short memory of earlier conversations, so "like I asked yesterday" makes sense
+  function pastChatsNote() {
+    const c = loadChats().filter((x) => x.id !== ask.id).slice(0, 6);
+    if (!c.length) return "";
+    return "Earlier conversations (most recent first):\n" + c.map((x) => {
+      const a = (x.msgs.find((m) => m.role === "assistant") || {}).text || "";
+      const first = a.replace(/```[\s\S]*?```/g, "").replace(/\*\*/g, "").split(/(?<=[.!?])\s/)[0].slice(0, 220);
+      return `- ${chatWhen(x.updated)}: asked "${chatTitle(x)}"; answer began: ${first}`;
+    }).join("\n");
+  }
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   function askContext() {
@@ -1064,11 +1121,12 @@
         <label class="askfield"><span class="vh">Your question</span><input id="askin" type="text" autocomplete="off" enterkeyhint="send" placeholder="${ask.msgs.length ? "Ask a follow-up" : "Ask about your energy"}" value="${esc(ask.draft)}"${ask.listening ? " disabled" : ""}></label>
         ${mic}<button type="submit" class="vh">Ask</button>
       </form>${ask.listening ? `<div class="asklisten" role="status"><span class="wave" aria-hidden="true">${"<i></i>".repeat(9)}</span>Listening. Pause or tap to send.</div>` : `<p class="askby">Answers by Claude, from your app's data</p>`}</div><div class="askspacer"></div>` : "";
-    const head = `<div class="top"><div><div class="eyebrow">About your home's energy</div><h1>Ask</h1></div>${ask.msgs.length ? `<button type="button" class="textbtn" id="asknew">New</button>` : ""}</div>`;
+    const head = `<div class="top"><div><div class="eyebrow">About your home's energy</div><h1>Ask</h1></div><div class="askhead">${loadChats().length ? `<button type="button" class="textbtn" id="askpast">Past</button>` : ""}${ask.msgs.length ? `<button type="button" class="textbtn" id="asknew">New</button>` : ""}</div></div>`;
     if (!key) return head + `<section class="first"><p>Ask needs a Claude API key. Create one in the Anthropic Console and add it to the repository as a GitHub secret named ANTHROPIC_API_KEY. It's kept inside the encrypted data, so only your unlocked app can use it.</p></section>`;
     if (!ask.msgs.length && !ask.listening) {
       return head + `<section class="first"><p class="asklede">Ask anything about what the panels make, what you pay, and why. Answers come from the app's own data: every day of production, your meter readings and your bills.</p></section>
-        <section><div class="label">Try asking</div>${askSuggestions().map((q) => `<button type="button" class="asksug" data-askq="${esc(q)}"><span>${esc(q)}</span>${chev}</button>`).join("")}</section>${bar}`;
+        <section><div class="label">Try asking</div>${askSuggestions().map((q) => `<button type="button" class="asksug" data-askq="${esc(q)}"><span>${esc(q)}</span>${chev}</button>`).join("")}</section>
+        ${loadChats().length ? `<section><div class="label">Recent</div><div class="chatlist">${loadChats().slice(0, 3).map(chatRow).join("")}</div></section>` : ""}${bar}`;
     }
     const msgs = ask.msgs.map((m) => m.role === "user" ? `<div class="askq">${esc(m.text)}</div>`
       : `<div class="aska${m.error ? " err" : ""}">${m.error ? `<p>${esc(m.text)}</p>` : askAnswer(m.text)}${m.spoken && ask.speaking ? `<button type="button" class="askspeak" id="askstop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg>Reading aloud</button>` : ""}</div>`).join("");
@@ -1085,7 +1143,7 @@
   async function askSend(q, voice) {
     q = (q || "").trim();
     if (!q || ask.busy) return;
-    ask.msgs.push({ role: "user", text: q }); ask.draft = ""; ask.busy = true; ask.fromVoice = !!voice;
+    ask.msgs.push({ role: "user", text: q }); ask.draft = ""; ask.busy = true; ask.fromVoice = !!voice; saveAsk();
     render();
     try {
       const wx = await askWeather();
@@ -1095,7 +1153,7 @@
         headers: { "content-type": "application/json", "x-api-key": state.data.askKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
         body: JSON.stringify({ model: ASK_MODEL, max_tokens: 700,
           system: [{ type: "text", text: ASK_SYSTEM }, { type: "text", text: "The app's data:\n" + askContext(), cache_control: { type: "ephemeral" } },
-            { type: "text", text: "Live weather:\n" + (wx ? JSON.stringify(wx) : "not available right now") }],
+            { type: "text", text: "Live weather:\n" + (wx ? JSON.stringify(wx) : "not available right now") + (pastChatsNote() ? "\n\n" + pastChatsNote() : "") }],
           messages: history }),
       });
       const j = await r.json().catch(() => ({}));
@@ -1167,6 +1225,16 @@
   }
   document.addEventListener("visibilitychange", () => { if (document.hidden && voice) voiceFinish(false); });
   window.addEventListener("hashchange", () => { if (voice && route() !== "ask") voiceFinish(false); });
+  document.addEventListener("click", (e) => {
+    const o = e.target.closest("[data-chat]"), d = e.target.closest("[data-chatdel]"), all = e.target.closest("[data-chatclear]");
+    if (!o && !d && !all) return;
+    e.stopPropagation();
+    if (o) { openChat(o.dataset.chat); closeSheet(); if (route() !== "ask") location.hash = "#ask"; render(); return; }
+    if (d) { const row = d.closest(".chatrow"); deleteChat(d.dataset.chatdel); if (row) row.remove(); }
+    if (all) { if (all.dataset.armed) { storeChats([]); newChat(); closeSheet(); } else { all.dataset.armed = "1"; all.textContent = "Tap again to delete all"; return; } }
+    if (document.querySelector(".sheet-wrap") && !loadChats().length) closeSheet();
+    render();
+  }, true);
   function alertLine(t) { const p = document.querySelector(".askby, .asklisten"); if (p) { p.textContent = t; p.classList.add("bad"); } }
 
   // ---------- routing ----------
@@ -1215,7 +1283,8 @@
     const aq = e.target.closest("[data-askq]");
     if (aq) { askSend(aq.dataset.askq); return; }
     if (e.target.closest("#askmic")) { askListen(); return; }
-    if (e.target.closest("#asknew")) { ask.msgs = []; saveAsk(); if ("speechSynthesis" in window) speechSynthesis.cancel(); render(); return; }
+    if (e.target.closest("#asknew")) { newChat(); render(); return; }
+    if (e.target.closest("#askpast")) { openSheet("Past conversations", chatsSheet()); return; }
     if (e.target.closest("#askstop")) { if ("speechSynthesis" in window) speechSynthesis.cancel(); ask.speaking = false; render(); return; }
     if (e.target.closest("#alertsave")) { saveAlerts(false); return; }
     if (e.target.closest("#alertoff")) { saveAlerts(true); return; }
