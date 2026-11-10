@@ -983,7 +983,9 @@ def send_alerts(problems, solar, pem, extra=()):
             keep.append(d)
     if changed:
         save_push_devices(keep)
-    new = [key for _, key, _, _ in out if key not in sent]
+    # a summary nobody has asked for yet is kept back, so switching it on later still brings this month's
+    wanted = lambda kind: any(d.get("prefs", {}).get(kind) for d in devices)
+    new = [key for kind, key, _, _ in out if key not in sent and (kind != "summary" or wanted("summary"))]
     if new and not failed:
         state["sent"] = (state["sent"] + new)[-300:]
         ALERT_STATE_F.write_text(json.dumps(state, indent=1))
