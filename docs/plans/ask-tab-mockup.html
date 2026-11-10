@@ -1,0 +1,63 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="style.css">
+<style>
+main{padding-top:56px}
+.sub{color:var(--muted);font-size:15px;margin-top:6px}
+.hello{margin-top:120px;text-align:center;color:var(--muted);font-size:15px}
+.hello .orb{width:64px;height:64px;border-radius:50%;margin:0 auto 14px;background:var(--sunwash);display:grid;place-items:center}
+.hello .orb svg{width:30px;height:30px;stroke:var(--sun);fill:none;stroke-width:2;stroke-linecap:round}
+.chips{display:flex;flex-direction:column;gap:8px;margin-top:26px}
+.chip{background:var(--well);border-radius:14px;padding:13px 16px;font-size:16px;text-align:left}
+.bar{position:fixed;left:0;right:0;bottom:83px;padding:10px 20px;display:flex;gap:10px;align-items:center;background:var(--bg)}
+.field{flex:1;height:46px;border-radius:23px;background:var(--well);display:flex;align-items:center;padding:0 16px;color:var(--faint);font-size:16px}
+.mic{width:46px;height:46px;border-radius:50%;background:var(--sun);display:grid;place-items:center}
+.mic svg{width:22px;height:22px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round}
+.me{margin:22px 0 0 auto;max-width:80%;background:var(--well);border-radius:18px 18px 4px 18px;padding:11px 15px;font-size:16px;width:fit-content}
+.ai{margin-top:18px;font-size:17px;line-height:1.45}
+.ai b{font-weight:600}
+.mini{margin-top:14px;border-top:1px solid var(--rule);padding-top:12px}
+.mini .row{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--muted);margin:7px 0}
+.mini .row span:first-child{width:38px}
+.mini .b{height:10px;border-radius:5px;background:var(--sun)}
+.mini .row b{color:var(--text);font-weight:600;margin-left:auto}
+.speak{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:14px;color:var(--muted)}
+.speak svg{width:18px;height:18px;stroke:var(--sun);fill:none;stroke-width:2;stroke-linecap:round}
+.src{font-size:12.5px;color:var(--faint);margin-top:10px}
+.listen{margin-top:150px;text-align:center}
+.listen .q{font-size:24px;font-weight:600;line-height:1.3;margin-top:22px}
+.listen .q i{color:var(--faint);font-style:normal}
+.wave{display:flex;gap:5px;justify-content:center;align-items:center;height:60px}
+.wave span{width:6px;border-radius:3px;background:var(--sun)}
+.stop{position:fixed;left:50%;transform:translateX(-50%);bottom:120px;width:76px;height:76px;border-radius:50%;background:var(--sun);display:grid;place-items:center;box-shadow:0 0 0 10px var(--sunwash)}
+.stop i{width:22px;height:22px;border-radius:5px;background:#fff}
+.hint{position:fixed;left:0;right:0;bottom:212px;text-align:center;font-size:14px;color:var(--muted)}
+</style></head><body>
+<main id="view"></main>
+<nav class="tabs">
+  <a><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>Now</a>
+  <a><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8.5 3v4M15.5 3v4"/></svg>Month</a>
+  <a><svg viewBox="0 0 24 24"><path d="M5 20v-8M10 20V6M15 20v-6M20 20V9"/></svg>History</a>
+  <a aria-current="page"><svg viewBox="0 0 24 24"><path d="M4.5 18.5V7a3 3 0 0 1 3-3h9a3 3 0 0 1 3 3v6.5a3 3 0 0 1-3 3H9l-4.5 2z"/><path d="M9 10.3h.01M12 10.3h.01M15 10.3h.01" stroke-width="2.6"/></svg>Ask</a>
+</nav>
+<script>
+const MIC='<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>';
+const S={
+start:`<h1>Ask</h1><div class="sub">About your production, meter and bills</div>
+ <div class="hello"><div class="orb">${MIC}</div>Tap the mic or pick a question</div>
+ <div class="chips"><div class="chip">How much did solar save me this year?</div><div class="chip">Is this November worse than last year?</div><div class="chip">Which month made the most?</div><div class="chip">Why was my last bill higher?</div></div>
+ <div class="bar"><div class="field">Ask about your solar</div><div class="mic">${MIC}</div></div>`,
+listen:`<h1>Ask</h1><div class="listen"><div class="wave">${[14,30,48,26,56,34,20,40,16].map(h=>`<span style="height:${h}px"></span>`).join('')}</div>
+ <div class="q">Is this November worse <i>than last year…</i></div></div>
+ <div class="hint">Listening. Tap to stop.</div><div class="stop"><i></i></div>`,
+answer:`<h1>Ask</h1>
+ <div class="me">Is this November worse than last year?</div>
+ <div class="ai">A little. You've made <b>35.8 kWh</b> in the first 9 days, against <b>41.2 kWh</b> by this date last year, about <b>13% lower</b>. It's been cloudier: 6 grey days so far, versus 4. Your panels are performing normally on the sunny days.
+  <div class="mini">
+   <div class="row"><span>2026</span><div class="b" style="width:52%"></div><b>35.8 kWh</b></div>
+   <div class="row"><span>2025</span><div class="b" style="width:60%;opacity:.45"></div><b>41.2 kWh</b></div>
+  </div>
+  <div class="speak">${'<svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>'}Reading aloud · Tap to stop</div>
+  <div class="src">From SolarEdge production and Open-Meteo weather</div></div>
+ <div class="bar"><div class="field">Ask a follow-up</div><div class="mic">${MIC}</div></div>`};
+document.getElementById('view').innerHTML=S[location.hash.slice(1)||'start'];
+</script></body></html>
