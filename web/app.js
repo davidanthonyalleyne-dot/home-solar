@@ -1027,7 +1027,7 @@
       months[ym] = { paid: r2(m.grid), paidFrom: m.gridSource, savedBySolar: r2(m.saved), costWithoutSolar: r2(m.without),
         gridKwh: r2(m.imp), sentBackKwh: r2(m.exp), solarKwh: r2(m.prod), solarUsedInHouseKwh: r2(m.selfUsed), monthComplete: m.complete };
     }
-    const bills = (state.data.bills || []).filter((b) => !b.preSolar).map((b) => ({ from: b.from, to: b.to, issued: b.statement,
+    const bills = (state.data.bills || []).map((b) => ({ ...(b.preSolar ? { beforeSolar: true } : {}), from: b.from, to: b.to, issued: b.statement,
       usedKwh: b.used, sentBackKwh: b.generated, electricity: b.electricity, hst: b.hst, rebate: b.rebate, amountDue: b.due }));
     const today = torontoToday(), days = [];
     for (let i = 120; i >= 0; i--) {
@@ -1040,7 +1040,7 @@
       today, place: "Toronto, Ontario", currency: "CAD",
       system: { panels: y.panels, inverter: y.inverter && y.inverter.model, inverterLimitKw: y.inverter && y.inverter.acKw, installer: y.installer, firstProduction: s.installed },
       live: { generatingNowKw: s.nowKw, todaySoFarKwh: s.today, updated: s.updated, solarThisMonthKwh: s.month, solarThisYearKwh: s.year, solarLifetimeKwh: s.lifetime },
-      notes: "Net metered on Toronto Hydro time-of-use. paid is what the household paid for electricity that month (from the bill when paidFrom is 'bill', otherwise estimated from meter readings). savedBySolar is costWithoutSolar minus paid. Meter data arrives in batches, so recent days may be missing.",
+      notes: "Net metered on Toronto Hydro time-of-use. paid is what the household paid for electricity that month (from the bill when paidFrom is 'bill', otherwise estimated from meter readings). savedBySolar is costWithoutSolar minus paid. Meter data arrives in batches, so recent days may be missing. Bills marked beforeSolar are from before the panels were switched on, useful for before and after comparisons.",
       months, bills, dailyColumns: ["date", "gridKwh", "sentBackKwh", "solarKwh", "highC", "lowC"], daily: days,
     });
   }
