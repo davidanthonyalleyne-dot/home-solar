@@ -1113,6 +1113,7 @@ def main():
         "uploads": (json.loads((ROOT / "data/uploads.json").read_text())[-10:] if (ROOT / "data/uploads.json").exists() else []),
         # only ever published inside the encrypted data
         "uploadToken": (os.environ.get("UPLOAD_TOKEN") or None) if _passphrase() else None,
+        "askKey": (os.environ.get("ANTHROPIC_API_KEY") or None) if _passphrase() else None,
         "system": system_info(),
         "money": money_out,
         "gridMonthly": _json_file("data/grid_monthly.json", "months"),

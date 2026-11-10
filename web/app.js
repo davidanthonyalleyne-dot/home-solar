@@ -954,8 +954,155 @@
       <section><p class="sub">Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a>. Sunrise and sunset are calculated for Parkdale. Built ${esc(timeOf(d.generated))}${state.version ? `. Version ${esc(state.version)}` : ""}.</p></section>`;
   }
 
+  // ---------- Ask: questions about the house's energy, answered by Claude ----------
+  // The API key arrives inside the encrypted data, so only an unlocked app can use it.
+  // Each question sends Claude a compact summary of the app's own data; nothing else.
+  const ASK_MODEL = "claude-haiku-5-5";
+  const ask = { msgs: [], busy: false, draft: "", listening: false, interim: "", speaking: false, fromVoice: false };
+  try { ask.msgs = JSON.parse(sessionStorage.getItem("askMsgs") || "[]"); } catch (_) {}
+  const saveAsk = () => { try { sessionStorage.setItem("askMsgs", JSON.stringify(ask.msgs.slice(-20))); } catch (_) {} };
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function askContext() {
+    const r2 = (x) => (x == null ? null : Math.round(x * 100) / 100);
+    const months = {};
+    for (const [ym, m] of Object.entries(M())) {
+      months[ym] = { paid: r2(m.grid), paidFrom: m.gridSource, savedBySolar: r2(m.saved), costWithoutSolar: r2(m.without),
+        gridKwh: r2(m.imp), sentBackKwh: r2(m.exp), solarKwh: r2(m.prod), solarUsedInHouseKwh: r2(m.selfUsed), monthComplete: m.complete };
+    }
+    const bills = (state.data.bills || []).filter((b) => !b.preSolar).map((b) => ({ from: b.from, to: b.to, issued: b.statement,
+      usedKwh: b.used, sentBackKwh: b.generated, electricity: b.electricity, hst: b.hst, rebate: b.rebate, amountDue: b.due }));
+    const today = torontoToday(), days = [];
+    for (let i = 120; i >= 0; i--) {
+      const d = new Date(Date.parse(today + "T12:00:00Z") - i * 864e5).toISOString().slice(0, 10);
+      const h = state.data.hydro && state.data.hydro[d], w = weatherDay(d), p = solar() && solar().daily[d];
+      if (h || p != null || w) days.push([d, h ? r2(h[0]) : null, h ? r2(h[1]) : null, p != null ? r2(p) : null, w ? w[0] : null, w ? w[1] : null]);
+    }
+    const s = solar() || {}, y = state.data.system || {};
+    return JSON.stringify({
+      today, place: "Toronto, Ontario", currency: "CAD",
+      system: { panels: y.panels, inverter: y.inverter && y.inverter.model, inverterLimitKw: y.inverter && y.inverter.acKw, installer: y.installer, firstProduction: s.installed },
+      live: { generatingNowKw: s.nowKw, todaySoFarKwh: s.today, updated: s.updated, solarThisMonthKwh: s.month, solarThisYearKwh: s.year, solarLifetimeKwh: s.lifetime },
+      notes: "Net metered on Toronto Hydro time-of-use. paid is what the household paid for electricity that month (from the bill when paidFrom is 'bill', otherwise estimated from meter readings). savedBySolar is costWithoutSolar minus paid. Meter data arrives in batches, so recent days may be missing.",
+      months, bills, dailyColumns: ["date", "gridKwh", "sentBackKwh", "solarKwh", "highC", "lowC"], daily: days,
+    });
+  }
+  const ASK_SYSTEM = `You are Ask, part of Solar, a private app for one home in Toronto with rooftop solar. Answer the owner's questions using only the data provided. Lead with the answer, with the key figure in bold using **double asterisks**. Write two to four short, plain sentences; no headings, no bullet lists, no em dashes. Money in dollars, energy in kWh, temperatures in °C. If something is estimated or missing, say so in a few words. If the data can't answer the question, say what's missing. When comparing two to six values would help, add one chart block:
+\`\`\`chart
+{"series":["Grid","Solar"],"rows":[["Sep",1150,540],["Oct",1420,410]]}
+\`\`\`
+(one or two series, kWh or dollars, short row labels). End with a final line that begins "From " and names the data used, like "From your October bill and meter data".`;
+
+  function mdLite(t) { return esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>"); }
+  function askAnswer(text) {
+    let chart = "", source = "";
+    text = text.replace(/```chart\s*([\s\S]*?)```/, (_, j) => {
+      try {
+        const c = JSON.parse(j), rows = (c.rows || []).slice(0, 6), ser = (c.series || []).slice(0, 2);
+        const max = Math.max(1, ...rows.map((r) => (r[1] || 0) + (ser.length > 1 ? r[2] || 0 : 0)));
+        chart = `<div class="askchart" role="img" aria-label="${esc(ser.join(" and "))}: ${esc(rows.map((r) => r.join(" ")).join(", "))}">${rows.map((r) =>
+          `<div class="r"><span class="l">${esc(String(r[0]))}</span><span class="bars"><span class="a" style="flex:${r[1] || 0} 1 0"></span>${ser.length > 1 ? `<span class="b" style="flex:${r[2] || 0} 1 0"></span>` : ""}<span style="flex:${max - (r[1] || 0) - (ser.length > 1 ? r[2] || 0 : 0)} 1 0"></span></span></div>`).join("")}
+          <div class="k">${ser.map((n, i) => `<span><i class="${i ? "b" : "a"}"></i>${esc(n)}</span>`).join("")}</div></div>`;
+      } catch (_) {}
+      return "\n\n[[chart]]\n\n";
+    });
+    const lines = text.trim().split("\n");
+    if (/^from /i.test(lines[lines.length - 1].trim())) source = lines.pop().trim();
+    const paras = lines.join("\n").split(/\n\s*\n/).map((x) => x.trim()).filter(Boolean)
+      .map((x) => (x === "[[chart]]" ? chart : `<p>${mdLite(x)}</p>`)).join("");
+    return paras + (source ? `<div class="asksrc">${esc(source)}</div>` : "");
+  }
+
+  function askSuggestions() {
+    const all = Object.keys(M()).filter((k) => M()[k].complete !== false).sort();
+    const out = [];
+    const [a, b] = all.slice(-2);
+    if (a && b && M()[a].grid != null && M()[b].grid != null) out.push(`Why was ${monthName(b).split(" ")[0]} ${M()[b].grid > M()[a].grid ? "more" : "less"} expensive than ${monthName(a).split(" ")[0]}?`);
+    out.push("How much has solar saved this year?");
+    out.push(`Is this ${new Date().toLocaleDateString("en-US", { month: "long", timeZone: TZNAME })} colder than last year?`);
+    out.push("What was my heaviest day this month, and why?");
+    return out;
+  }
+
+  function askScreen() {
+    const key = state.data.askKey;
+    const mic = SpeechRec ? `<button type="button" class="askmic${ask.listening ? " on" : ""}" id="askmic" aria-label="${ask.listening ? "Stop and ask" : "Ask out loud"}">${ask.listening ? '<span class="stop"></span>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>'}</button>` : "";
+    const bar = key ? `<div class="askdock"><form class="askbar" id="askform">
+        <label class="askfield"><span class="vh">Your question</span><input id="askin" type="text" autocomplete="off" enterkeyhint="send" placeholder="${ask.msgs.length ? "Ask a follow-up" : "Ask about your energy"}" value="${esc(ask.draft)}"${ask.listening ? " disabled" : ""}></label>
+        ${mic}<button type="submit" class="vh">Ask</button>
+      </form>${ask.listening ? `<div class="asklisten" role="status"><span class="wave" aria-hidden="true">${"<i></i>".repeat(9)}</span>Listening. Tap the button to stop and ask.</div>` : `<p class="askby">Answers by Claude, from your app's data</p>`}</div><div class="askspacer"></div>` : "";
+    const head = `<div class="top"><div><div class="eyebrow">About your home's energy</div><h1>Ask</h1></div>${ask.msgs.length ? `<button type="button" class="textbtn" id="asknew">New</button>` : ""}</div>`;
+    if (!key) return head + `<section class="first"><p>Ask needs a Claude API key. Create one in the Anthropic Console and add it to the repository as a GitHub secret named ANTHROPIC_API_KEY. It's kept inside the encrypted data, so only your unlocked app can use it.</p></section>`;
+    if (!ask.msgs.length && !ask.listening) {
+      return head + `<section class="first"><p class="asklede">Ask anything about what the panels make, what you pay, and why. Answers come from the app's own data: every day of production, your meter readings and your bills.</p></section>
+        <section><div class="label">Try asking</div>${askSuggestions().map((q) => `<button type="button" class="asksug" data-askq="${esc(q)}"><span>${esc(q)}</span>${chev}</button>`).join("")}</section>${bar}`;
+    }
+    const msgs = ask.msgs.map((m) => m.role === "user" ? `<div class="askq">${esc(m.text)}</div>`
+      : `<div class="aska${m.error ? " err" : ""}">${m.error ? `<p>${esc(m.text)}</p>` : askAnswer(m.text)}${m.spoken && ask.speaking ? `<button type="button" class="askspeak" id="askstop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg>Reading aloud</button>` : ""}</div>`).join("");
+    const pending = ask.listening && ask.interim ? `<div class="askq live">${esc(ask.interim)}…</div>` : ask.busy ? `<div class="aska thinking" role="status"><span></span><span></span><span></span></div>` : "";
+    return head + `<div class="askmsgs" id="askmsgs">${msgs}${pending}</div>${bar}`;
+  }
+  function askAfterRender() {
+    const box = document.getElementById("askmsgs");
+    if (box) view.scrollTop = view.scrollHeight;
+    const inp = document.getElementById("askin");
+    if (inp) inp.addEventListener("input", () => { ask.draft = inp.value; });
+  }
+
+  async function askSend(q, voice) {
+    q = (q || "").trim();
+    if (!q || ask.busy) return;
+    ask.msgs.push({ role: "user", text: q }); ask.draft = ""; ask.busy = true; ask.fromVoice = !!voice;
+    render();
+    try {
+      const history = ask.msgs.filter((m) => !m.error).slice(-12).map((m) => ({ role: m.role, content: m.text }));
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": state.data.askKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({ model: ASK_MODEL, max_tokens: 700,
+          system: [{ type: "text", text: ASK_SYSTEM }, { type: "text", text: "The app's data:\n" + askContext(), cache_control: { type: "ephemeral" } }],
+          messages: history }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(r.status === 401 ? "The Claude API key was refused. Check the ANTHROPIC_API_KEY secret." : r.status === 400 && /credit/i.test(JSON.stringify(j)) ? "The Anthropic account is out of credit." : (j.error && j.error.message) || `Claude said ${r.status}.`);
+      const text = (j.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n").trim();
+      ask.msgs.push({ role: "assistant", text, spoken: !!voice });
+      if (voice) askSpeak(text);
+    } catch (err) {
+      ask.msgs.push({ role: "assistant", text: (err && err.message) || "That didn't work. Try again in a moment.", error: true });
+    }
+    ask.busy = false; saveAsk(); render();
+  }
+  function askSpeak(text) {
+    if (!("speechSynthesis" in window)) return;
+    const plain = text.replace(/```chart[\s\S]*?```/g, "").replace(/\*\*/g, "").split("\n").filter((l) => !/^from /i.test(l.trim())).join(" ");
+    const u = new SpeechSynthesisUtterance(plain);
+    u.lang = "en-CA"; u.rate = 1.02;
+    u.onend = u.onerror = () => { ask.speaking = false; if (route() === "ask") render(); };
+    speechSynthesis.cancel(); ask.speaking = true; speechSynthesis.speak(u);
+  }
+  let rec = null;
+  function askListen() {
+    if (ask.listening) { if (rec) rec.stop(); return; }
+    if (!SpeechRec) return;
+    if ("speechSynthesis" in window) speechSynthesis.cancel();
+    rec = new SpeechRec();
+    rec.lang = "en-CA"; rec.interimResults = true; rec.continuous = false;
+    let final = "";
+    rec.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) { const t = e.results[i][0].transcript; if (e.results[i].isFinal) final += t; else interim += t; }
+      ask.interim = (final + interim).trim(); render();
+    };
+    rec.onerror = (e) => { ask.listening = false; ask.interim = ""; render(); if (e.error === "not-allowed") alertLine("Microphone access is off for Solar. Turn it on in Settings."); };
+    rec.onend = () => { const q = (final || ask.interim).trim(); ask.listening = false; ask.interim = ""; rec = null; if (q) askSend(q, true); else render(); };
+    ask.listening = true; ask.interim = ""; render();
+    rec.start();
+  }
+  function alertLine(t) { const p = document.querySelector(".askby, .asklisten"); if (p) { p.textContent = t; p.classList.add("bad"); } }
+
   // ---------- routing ----------
-  const screens = { now: nowScreen, month: monthScreen, history: historyScreen, settings: settingsScreen };
+  const screens = { now: nowScreen, month: monthScreen, history: historyScreen, ask: askScreen, settings: settingsScreen };
   const OLD = { overview: "month", days: "month", solar: "now", sources: "settings" };
   function route() { const r = location.hash.slice(1) || "now"; return screens[r] ? r : OLD[r] || "now"; }
 
@@ -972,9 +1119,13 @@
       const next = Math.max(130, Math.min(340, (state.nowH || 200) + innerHeight - used));
       if (Math.abs(next - (state.nowH || 200)) > 4) { state.nowH = next; fitting = true; view.innerHTML = screens.now(); fitting = false; }
     }
-    document.title = { now: "Now", month: mName(state.month || "2000-01"), history: "History", settings: "Settings" }[r] + " · Home Solar";
+    document.title = { now: "Now", month: mName(state.month || "2000-01"), history: "History", ask: "Ask", settings: "Settings" }[r] + " · Solar";
+    if (r === "ask") askAfterRender();
   }
 
+  view.addEventListener("submit", (e) => {
+    if (e.target.id === "askform") { e.preventDefault(); const i = document.getElementById("askin"); askSend(i ? i.value : ""); }
+  });
   view.addEventListener("change", (e) => {
     if (e.target.id === "addfile" && e.target.files && e.target.files[0]) { sendFile(e.target.files[0]); e.target.value = ""; }
   });
@@ -993,6 +1144,11 @@
       return;
     }
     if (e.target.closest("[data-moon]")) { state.moonOpen = !state.moonOpen; render(); return; }
+    const aq = e.target.closest("[data-askq]");
+    if (aq) { askSend(aq.dataset.askq); return; }
+    if (e.target.closest("#askmic")) { askListen(); return; }
+    if (e.target.closest("#asknew")) { ask.msgs = []; saveAsk(); if ("speechSynthesis" in window) speechSynthesis.cancel(); render(); return; }
+    if (e.target.closest("#askstop")) { if ("speechSynthesis" in window) speechSynthesis.cancel(); ask.speaking = false; render(); return; }
     if (e.target.closest("#alertsave")) { saveAlerts(false); return; }
     if (e.target.closest("#alertoff")) { saveAlerts(true); return; }
     const hv = e.target.closest("[data-hview]");
