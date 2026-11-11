@@ -1233,15 +1233,15 @@
       pv.airHandlerSerial && ["Air handler serial", `<span class="num">${esc(pv.airHandlerSerial)}</span>`],
     ].filter(Boolean);
     return grp("pump", "Heat pump", [
-        ["Make", "Bosch"], h.size && ["Size", esc(h.size)], h.thermostat && ["Thermostat", esc(String(h.thermostat).replace(/ smart thermostat$/, ""))],
+        ["Make", "Bosch"], h.size && ["Size", esc(h.size)], h.thermostat && ["Thermostat", `ecobee`],
         ah.refrigerant && ["Refrigerant", esc(ah.refrigerant)]])
       + grp("outdoor", "Outdoor unit", [
-        ["Model", ou.model ? short(ou.model) : `<span class="sub">Not added yet</span>`],
+        ["Make", "Bosch"], ["Model", ou.model ? short(ou.model) : `<span class="sub">Not added yet</span>`],
         ou.compressor && ["Compressor", esc(ou.compressor.replace(/ rotary, /, ", ").replace(/ to /, "–").replace(/ capacity$/, ""))],
         (ou.seer2 || ou.hspf2) && ["Rated", [ou.seer2 && `SEER2 ${esc(ou.seer2.replace(/ to /, "–"))}`, ou.hspf2 && `HSPF2 ${esc(ou.hspf2.replace(/ to /, "–"))}`].filter(Boolean).join(" · ")]],
         ou.heatingCapacity ? esc(ou.heatingCapacity) : "")
-      + grp("indoor", "Air handler", [ah.model && ["Model", short(ah.model)], ah.power && ["Blower", esc(String(ah.power).replace(/^.*?,\s*/, "").replace(/ blower$/, ""))]])
-      + grp("backup", "Backup heat", [["Kind", "Electric"], bk.kw && ["Size", `${bk.estimated ? "About " : ""}${fmt(bk.kw, 1)} kW`]],
+      + grp("indoor", "Air handler", [["Make", "Bosch"], ah.model && ["Model", short(ah.model)], ah.power && ["Blower", esc(String(ah.power).replace(/^.*?,\s*/, "").replace(/ blower$/, ""))]])
+      + grp("backup", "Backup heat", [["Make", "Bosch heater kit"], ["Kind", "Electric"], bk.kw && ["Size", `${bk.estimated ? "About " : ""}${fmt(bk.kw, 1)} kW`]],
         bk.note ? esc(bk.note) : "")
       + (ids.length ? `<details class="sgroup sdetails"><summary class="slabel">${heatLabel("tag", "Part and serial numbers")}<svg class="schev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></summary>${card(rows(ids))}</details>` : "");
   }
