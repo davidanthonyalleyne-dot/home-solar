@@ -546,3 +546,4 @@ body.locked main { padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
 .lock .btn svg { width: 24px; height: 24px; stroke-width: 1.8; }
 @media (prefers-reduced-motion: reduce) { .lock.animate .lock-ic .up, .lock-ic .halo, .lock.animate .lock-head h1, .lock.animate .lock-actions { animation: none; } }
 .lock [hidden] { display: none !important; }
+.lock-head h1 { font-weight: 400; letter-spacing: -0.01em; }
