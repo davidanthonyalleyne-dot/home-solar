@@ -547,3 +547,10 @@ body.locked main { padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
 @media (prefers-reduced-motion: reduce) { .lock.animate .lock-ic .up, .lock-ic .halo, .lock.animate .lock-head h1, .lock.animate .lock-actions { animation: none; } }
 .lock [hidden] { display: none !important; }
 .lock-head h1 { font-weight: 400; letter-spacing: -0.01em; }
+/* section labels with an icon (Settings detail pages) */
+.ilabel { display: inline-flex; align-items: center; gap: 7px; }
+.ilabel svg { width: 16px; height: 16px; fill: none; stroke: var(--sun); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.sdetails summary { list-style: none; display: flex; align-items: center; justify-content: space-between; min-height: 32px; cursor: pointer; }
+.sdetails summary::-webkit-details-marker { display: none; }
+.sdetails summary .schev { transition: transform .2s; }
+.sdetails[open] summary .schev { transform: rotate(90deg); }

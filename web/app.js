@@ -1210,6 +1210,42 @@
     return { ok, sol };
   }
 
+  // Heating and cooling, in short groups with an icon each; part and serial numbers fold away
+  const HEAT_ICONS = {
+    pump: '<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M12 17c-1.7 0-2.6-1.2-2.6-2.5 0-1.6 1.6-2.2 2.6-4 1 1.8 2.6 2.4 2.6 4 0 1.3-.9 2.5-2.6 2.5z"/>',
+    outdoor: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="10" cy="12" r="4"/><path d="M10 8v8M6 12h8M17 9h1.5M17 12h1.5M17 15h1.5"/>',
+    indoor: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 10h8M8 17h8"/>',
+    backup: '<path d="M7 20c-1-3 1-4.5 1-7.5 0-1.5-1-2.5-1-2.5 3 0 5 3 5 6 1-1 1.5-2.5 1.2-4 2.3 1.5 3.8 4 3.8 6.5 0 .5 0 1-.2 1.5"/><path d="M4 20h16"/>',
+    tag: '<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.4"/>',
+  };
+  const heatLabel = (k, t) => `<span class="ilabel"><svg viewBox="0 0 24 24" aria-hidden="true">${HEAT_ICONS[k]}</svg>${t}</span>`;
+  function heatingPage() {
+    const y = state.data.system || {}, h = y.heating;
+    if (!h) return `<p class="sfoot">No heating details yet.</p>`;
+    const pv = y.private || {}, ah = h.airHandler || {}, bk = h.backupHeat || {}, ou = h.outdoorUnit || {};
+    const card = (inner) => `<div class="scard pad">${inner}</div>`;
+    const grp = (k, t, r, foot) => `<div class="sgroup"><div class="slabel">${heatLabel(k, t)}</div>${card(rows(r))}${foot ? `<p class="sfoot">${foot}</p>` : ""}</div>`;
+    const short = (m) => esc(String(m || "").replace(/^Bosch\s+/, ""));
+    const ids = [
+      ou.part && ["Outdoor part", `<span class="num">${esc(ou.part)}</span>`],
+      pv.outdoorUnitSerial && ["Outdoor serial", `<span class="num">${esc(pv.outdoorUnitSerial)}</span>`],
+      ah.part && ["Air handler part", `<span class="num">${esc(ah.part)}</span>`],
+      pv.airHandlerSerial && ["Air handler serial", `<span class="num">${esc(pv.airHandlerSerial)}</span>`],
+    ].filter(Boolean);
+    return grp("pump", "Heat pump", [
+        ["Make", "Bosch"], h.size && ["Size", esc(h.size)], h.thermostat && ["Thermostat", esc(String(h.thermostat).replace(/ smart thermostat$/, ""))],
+        ah.refrigerant && ["Refrigerant", esc(ah.refrigerant)]])
+      + grp("outdoor", "Outdoor unit", [
+        ["Model", ou.model ? short(ou.model) : `<span class="sub">Not added yet</span>`],
+        ou.compressor && ["Compressor", esc(ou.compressor.replace(/ rotary, /, ", ").replace(/ to /, "–").replace(/ capacity$/, ""))],
+        (ou.seer2 || ou.hspf2) && ["Rated", [ou.seer2 && `SEER2 ${esc(ou.seer2.replace(/ to /, "–"))}`, ou.hspf2 && `HSPF2 ${esc(ou.hspf2.replace(/ to /, "–"))}`].filter(Boolean).join(" · ")]],
+        ou.heatingCapacity ? esc(ou.heatingCapacity) : "")
+      + grp("indoor", "Air handler", [ah.model && ["Model", short(ah.model)], ah.power && ["Blower", esc(String(ah.power).replace(/^.*?,\s*/, "").replace(/ blower$/, ""))]])
+      + grp("backup", "Backup heat", [["Kind", "Electric"], bk.kw && ["Size", `${bk.estimated ? "About " : ""}${fmt(bk.kw, 1)} kW`]],
+        bk.note ? esc(bk.note) : "")
+      + (ids.length ? `<details class="sgroup sdetails"><summary class="slabel">${heatLabel("tag", "Part and serial numbers")}<svg class="schev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></summary>${card(rows(ids))}</details>` : "");
+  }
+
   function settingsPage(k) {
     const d = state.data, s = d.solar, h = Object.keys(hydro()).sort();
     const bills = (d.bills || []).filter((b) => !b.preSolar);
@@ -1233,7 +1269,7 @@
     } else if (k === "system") {
       body = systemSection().replace(/^<section>/, '<div class="scard pad">').replace(/<\/section>$/, "</div>").replace('<div class="group-label">Your system</div>', "");
     } else if (k === "heating") {
-      body = heatingSection().replace(/^<section>/, '<div class="scard pad">').replace(/<\/section>$/, "</div>").replace('<div class="group-label">Heating and cooling</div>', "");
+      body = heatingPage();
     } else if (k === "alerts") {
       body = alertsBlock().replace(/^\s*<section[^>]*>/, '<div class="scard pad">').replace(/<\/section>\s*$/, "</div>").replace(/<div class="group-label">Alerts<\/div>/, "");
     } else if (k === "ask") {
