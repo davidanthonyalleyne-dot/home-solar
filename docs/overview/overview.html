@@ -101,7 +101,7 @@
     </div>
   </div>
 
-  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.0 · App 1.53</span><span>Page 1 of 3</span></span></footer>
+  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.1 · App 1.54</span><span>Page 1 of 3</span></span></footer>
 </div>
 
 <div class="page">
@@ -121,7 +121,7 @@
       <section><h2>Ask</h2><p>Type a question or tap the mic and say it. Claude answers in a few plain sentences with the key number first, from your months, bills, the last 120 days and the live forecast, and names the data it used. Spoken questions are answered aloud. Conversations are kept on the phone under Past.</p></section>
       <section><h2>Live from the inverter</h2><p>Power now, today's output and the expected curve, which levels off at the inverter's 6 kW limit. At night a small moon shows the real phase; tap it for its name.</p></section>
       <section><h2>Costs that match the bills</h2><p>Credits for power sent back are valued at the time-of-use price when it went out, delivery is charged on net use, and HST and the Ontario rebate are applied as Toronto Hydro does. Months without a bill are estimated from the meter, usually within a few percent.</p></section>
-      <section><h2>Bills and meter data</h2><p>Add a bill PDF or a MyTorontoHydro spreadsheet from Settings. It's encrypted on the phone, read by the next update, and a bill is only added if its lines add up to the printed total. The PDF itself is never kept.</p></section>
+      <section><h2>Bills, meter and thermostat data</h2><p>Add a bill PDF, a MyTorontoHydro spreadsheet or the ecobee's history from Settings, encrypted on the phone first. A bill is only added if it adds up. The ecobee file adds Heating to Month.</p></section>
       <section><h2>Alerts</h2><p>Phone notifications when production stops on a sunny day or the inverter reports a fault, when SolarEdge stops sending data, when a file is added, a summary on the 1st of each month, and in winter, days of unusually heavy use with the temperature.</p></section>
     </div>
   </div>
@@ -135,10 +135,10 @@
     <section><h2>Good to know</h2><p>Meter data comes from exported files, so costs trail by however long it's been since the last one. SolarEdge's API has no per-panel data. An answer in Ask is lost if you leave Solar mid-answer; it's asked again when you come back.</p></section>
   </div>
 
-  <footer><span class="num">Updated November 10, 2026</span><span class="ver"><span>Document 2.0 · App 1.53</span><span>Page 2 of 3</span></span></footer>
+  <footer><span class="num">Updated November 11, 2026</span><span class="ver"><span>Document 2.1 · App 1.54</span><span>Page 2 of 3</span></span></footer>
 </div>
 
-<div class="page tech" style="gap: 16px">
+<div class="page tech" style="gap: 12px">
   <header style="gap: 12px">
     <div><p class="label" style="margin: 0">Solar</p><h1>Technical setup</h1></div>
   </header>
@@ -147,13 +147,12 @@
     <p class="label">Sources and libraries</p>
     <table>
       <tr><th>Piece</th><th>Version</th><th>What it does</th><th>Loaded from</th><th>Licence</th></tr>
-      <tr><td>App code</td><td>App 1.53</td><td>The four tabs, charts, net metering maths, encryption and Ask (<code>app.js</code>, <code>lock.js</code>, <code>style.css</code>, <code>sw.js</code>). No framework; charts are hand-drawn SVG</td><td>GitHub Pages, this repo's <code>web/</code></td><td>Written for the app</td></tr>
+      <tr><td>App code</td><td>App 1.54</td><td>The four tabs, charts, net metering maths, encryption and Ask (<code>app.js</code>, <code>lock.js</code>, <code>style.css</code>, <code>sw.js</code>). No framework; charts and icons are SVG drawn for the app, text in the system font</td><td>GitHub Pages, this repo's <code>web/</code></td><td>Written for the app</td></tr>
       <tr><td>Build job</td><td>Python 3</td><td>Fetches data, reads bills and meter files, models costs, encrypts, sends alerts (<code>scripts/build.py</code>, <code>money.py</code>, <code>parse_bill.py</code>)</td><td>GitHub Actions</td><td>Written for the app</td></tr>
       <tr><td>Transformers.js</td><td>3.5.1</td><td>Runs the speech model in the browser, with ONNX Runtime Web inside</td><td>cdn.jsdelivr.net</td><td>Apache-2.0</td></tr>
       <tr><td>Whisper tiny.en</td><td>Xenova, 8-bit</td><td>Turns a spoken question into text on the phone (about 40 MB, cached after first use)</td><td>huggingface.co</td><td>MIT</td></tr>
       <tr><td>Python libraries</td><td>latest</td><td>cryptography (AES-GCM), openpyxl (meter spreadsheets), pywebpush (notifications)</td><td>PyPI</td><td>Apache-2.0, MIT, MPL-2.0</td></tr>
       <tr><td>Poppler pdftotext</td><td>Ubuntu package</td><td>Reads the text of bill PDFs</td><td>apt</td><td>GPL-2.0</td></tr>
-      <tr><td>Type and icons</td><td>n/a</td><td>System font; icons drawn as SVG for the app</td><td>The device</td><td>Written for the app</td></tr>
     </table>
   </div>
 
@@ -162,22 +161,23 @@
     <table>
       <tr><th>Service</th><th>Used for</th><th>Details</th></tr>
       <tr><td>SolarEdge Monitoring API v2</td><td>Production, power now, inverter status and alerts</td><td><code>monitoringapi.solaredge.com/v2</code>, OAuth through <code>connect.solaredge.com</code>; the refresh token rotates and is saved back as a GitHub secret. Free tier, 2,000 calls a month</td></tr>
-      <tr><td>Toronto Hydro</td><td>Bills and hourly meter readings</td><td>No API. Bill PDFs and MyTorontoHydro spreadsheets are added from Settings and read by the build; the PDF isn't kept</td></tr>
-      <tr><td>Open-Meteo</td><td>Weather now, the forecast, and past weather</td><td><code>api.open-meteo.com</code> and <code>archive-api.open-meteo.com</code>, no key. Called by the build, the Now screen, and Ask for each question</td></tr>
+      <tr><td>ecobee</td><td>Heating history</td><td>No API for new developers; the Download data CSV is added from Settings and kept encrypted in <code>data/ecobee/</code></td></tr>
+      <tr><td>Toronto Hydro</td><td>Bills and hourly meter readings</td><td>No API. Bill PDFs and MyTorontoHydro spreadsheets are added from Settings; kept encrypted, the PDF isn't kept</td></tr>
+      <tr><td>Open-Meteo</td><td>Weather now, forecast, past weather</td><td><code>api.open-meteo.com</code> and <code>archive-api.open-meteo.com</code>, no key. Called by the build, the Now screen, and Ask for each question</td></tr>
       <tr><td>Anthropic Claude API</td><td>Answers in Ask</td><td><code>api.anthropic.com/v1/messages</code>, model <code>claude-haiku-5-5</code>, called from the phone. Sends the question, recent conversation and a summary of months, bills, 120 days and the forecast. Key in the <code>ANTHROPIC_API_KEY</code> secret, carried inside the encrypted data</td></tr>
-      <tr><td>GitHub</td><td>Hosting, the hourly job, uploads</td><td>Pages serves the site; Actions runs the build hourly; files from the phone are committed encrypted to <code>data/inbox/</code> through the Git Data API with a fine-grained token (<code>UPLOAD_TOKEN</code>)</td></tr>
+      <tr><td>GitHub</td><td>Hosting, the hourly job, uploads</td><td>Pages serves the site, Actions runs the build hourly, and files from the phone arrive encrypted in <code>data/inbox/</code> via the Git Data API (<code>UPLOAD_TOKEN</code>)</td></tr>
       <tr><td>Web Push (Apple)</td><td>Alerts on the phone</td><td>VAPID-signed pushes from the build; subscriptions kept encrypted in <code>data/push.enc</code></td></tr>
       <tr><td>Browser features</td><td>Unlock, voice, offline</td><td>Web Crypto (PBKDF2-SHA256, AES-GCM), passkeys for Face ID unlock, microphone and Web Audio for recording, speech synthesis to read answers, a service worker, and local storage for Ask conversations</td></tr>
     </table>
   </div>
 
   <section><h2>What runs where</h2>
-    <p>On the phone: unlocking and decrypting the data, every screen and chart, recording and transcribing questions, reading answers aloud, and the calls to Claude and Open-Meteo. Nothing else leaves the phone except files you add, which are encrypted first.</p>
+    <p>On the phone: unlocking and decrypting, every screen and chart, transcribing spoken questions, reading answers aloud, and the calls to Claude and Open-Meteo. Files you add are encrypted before they leave.</p>
     <p>On GitHub, about every hour: the build fetches SolarEdge and the weather, reads new files, rebuilds the site and sends alerts. The site's data is published encrypted with a key from the passphrase (PBKDF2-SHA256, 600,000 rounds); serial numbers and tokens exist only inside it.</p>
     <p>This document: <code>docs/overview/</code>. Make sample data with <code>fake_data.py</code>, take screenshots with <code>shoot.js</code>, print with <code>pdf.js</code>.</p>
   </section>
 
-  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.0 · App 1.53</span><span>Page 3 of 3</span></span></footer>
+  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.1 · App 1.54</span><span>Page 3 of 3</span></span></footer>
 </div>
 
 </body>
