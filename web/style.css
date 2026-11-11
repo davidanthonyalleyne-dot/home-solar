@@ -522,3 +522,5 @@ body.grouped .top { margin-bottom: 10px; }
 .legend i.lg-gridk { background: var(--grid); }
 .trio .n.heat { color: #B86F0E; }
 @media (prefers-color-scheme: dark) { .trio .n.heat { color: var(--heat); } }
+.climhead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.climhead .group-label { margin: 0; }

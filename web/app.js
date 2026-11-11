@@ -765,22 +765,27 @@
 
   // ---------- Climate: heating and cooling from the ecobee thermostat, against the meter ----------
   // Daily rows are [heat pump h, backup h, cooling h, fan h, heat set °C, indoor °C, outdoor °C, humidity %].
-  function climateData() {
+  const climYears = () => [...new Set(Object.keys(state.data.thermostat.daily).map((d) => d.slice(0, 4)))].sort();
+  // a calendar year (January to December) for the Climate view, or the last 12 months for the cold-weather page
+  function climateData(year) {
     const t = state.data.thermostat.daily, ks = Object.keys(t).sort();
-    const last = ks.at(-1), from = new Date(Date.parse(last + "T12:00:00Z") - 364 * 864e5).toISOString().slice(0, 10);
-    const days = ks.filter((d) => d >= from).map((d) => {
+    let from, last;
+    if (year) { from = `${year}-01-01`; last = `${year}-12-31`; }
+    else { last = ks.at(-1); from = new Date(Date.parse(last + "T12:00:00Z") - 364 * 864e5).toISOString().slice(0, 10); }
+    const days = ks.filter((d) => d >= from && d <= last).map((d) => {
       const v = t[d], w = weatherDay(d), h = hydro()[d];
       const out = v[6] != null ? v[6] : w ? (w[0] + w[1]) / 2 : null;
       return { d, heat: v[0] || 0, aux: v[1] || 0, cool: v[2] || 0, fan: v[3] || 0, set: v[4], inside: v[5], out, grid: h ? h[0] : null };
     });
     const hs = state.data.system && state.data.system.heating, auxKw = (hs && hs.backupHeat && hs.backupHeat.kw) || 7.5;
     // what a kWh from the grid cost on average over the same months
-    const ms = Object.entries(M()).filter(([k, m]) => k >= from.slice(0, 7) && m.grid != null && m.imp);
+    const ms = Object.entries(M()).filter(([k, m]) => k >= from.slice(0, 7) && k <= last.slice(0, 7) && m.grid != null && m.imp);
     const rate = ms.length ? ms.reduce((a, [, m]) => a + m.grid, 0) / ms.reduce((a, [, m]) => a + m.imp, 0) : 0.15;
     return { days, from, last, auxKw, rate };
   }
   function climateView() {
-    const { days, from, last, auxKw, rate } = climateData();
+    const ys = climYears(), year = ys.includes(state.climYear) ? state.climYear : ys.at(-1);
+    const { days, auxKw, rate } = climateData(year);
     const sum = (k, ds = days) => ds.reduce((a, r) => a + r[k], 0);
     const heat = sum("heat"), aux = sum("aux"), cool = sum("cool");
     const auxCold = days.filter((r) => r.out != null && r.out < -5).reduce((a, r) => a + r.aux, 0);
@@ -788,7 +793,8 @@
     // months, oldest first
     const byM = {};
     days.forEach((r) => { const m = (byM[r.d.slice(0, 7)] ||= { heat: 0, aux: 0, cool: 0, out: [], n: 0 }); m.heat += r.heat; m.aux += r.aux; m.cool += r.cool; m.n++; if (r.out != null) m.out.push(r.out); });
-    const mk = Object.keys(byM).sort();
+    const mk = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
+    mk.forEach((k) => { byM[k] ||= { heat: 0, aux: 0, cool: 0, out: [], n: 0, empty: true }; });
     const W = contentWidth(), H = 210, top = 12, bot = 40, pw = W - 40, bw = pw / Math.max(mk.length, 1);
     const most = Math.max(1, ...mk.map((k) => Math.max(byM[k].heat + byM[k].aux, byM[k].cool)));
     const step = niceStep(most), ymax = Math.ceil(most / step) * step, Y = (v) => top + (H - top - bot) * (1 - v / ymax);
@@ -796,6 +802,7 @@
     for (let v = step; v <= ymax + 1e-9; v += step) g += `<line x1="0" x2="${pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="gridline"/>` + svgText(pw + 6, Y(v) + 4, `${fmt(v)} h`, "", "start");
     mk.forEach((k, i) => {
       const m = byM[k], x = i * bw + 3, w = Math.max(2, bw - 6), cx = x + w / 2;
+      if (m.empty) { g += svgText(cx, H - 22, new Date(2000, i, 1).toLocaleDateString("en-US", { month: "narrow" }), "minor", "middle"); return; }
       const bar = (a, b, cls) => b > a ? `<rect x="${x.toFixed(1)}" y="${Y(b).toFixed(1)}" width="${w.toFixed(1)}" height="${(Y(a) - Y(b)).toFixed(1)}" rx="2" class="${cls}"/>` : "";
       g += m.cool > m.heat + m.aux ? bar(0, m.cool, "b-cool") : bar(0, m.heat, "b-heat") + bar(m.heat, m.heat + m.aux, "b-aux");
       const o = m.out.length ? m.out.reduce((a, b) => a + b, 0) / m.out.length : null;
@@ -841,7 +848,8 @@
       }
     }
     return `<section class="first">
-        <div class="group-label">Heating and cooling, ${esc(shortDay(from))}, ${from.slice(0, 4)} to ${esc(shortDay(last))}, ${last.slice(0, 4)}</div>
+        <div class="climhead"><div class="group-label">Heating and cooling, ${year}${days.length && days.at(-1).d < `${year}-12-31` && year === ys.at(-1) ? " so far" : ""}</div>
+          <div class="steps"><button type="button" ${ys.indexOf(year) > 0 ? `data-climyear="${ys[ys.indexOf(year) - 1]}"` : "disabled"} aria-label="Previous year">‹</button><button type="button" ${ys.indexOf(year) < ys.length - 1 ? `data-climyear="${ys[ys.indexOf(year) + 1]}"` : "disabled"} aria-label="Next year">›</button></div></div>
         <div class="trio num">
           <div><div class="label">Heating</div><div class="n heat">${fmt(heat)}</div><div class="unit">hours</div></div>
           <div><div class="label">Backup heat</div><div class="n${aux > 1 ? " bad" : ""}">${fmt(aux)}</div><div class="unit">hours</div></div>
@@ -1723,6 +1731,8 @@
     if (e.target.closest("#askstop")) { if ("speechSynthesis" in window) speechSynthesis.cancel(); ask.speaking = false; render(); return; }
     if (e.target.closest("#alertsave")) { saveAlerts(false); return; }
     if (e.target.closest("#alertoff")) { saveAlerts(true); return; }
+    const cy = e.target.closest("[data-climyear]");
+    if (cy) { state.climYear = cy.dataset.climyear; render(); return; }
     if (e.target.closest("[data-cold]")) { state.coldView = true; render(); view.scrollTop = 0; return; }
     if (e.target.closest("[data-cold-back]")) { state.coldView = false; render(); view.scrollTop = 0; return; }
     const hv = e.target.closest("[data-hview]");
