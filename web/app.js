@@ -842,7 +842,7 @@
     return `<section class="first">
         <div class="group-label">Heating and cooling, ${esc(shortDay(from))}, ${from.slice(0, 4)} to ${esc(shortDay(last))}, ${last.slice(0, 4)}</div>
         <div class="trio num">
-          <div><div class="label">Heating</div><div class="n">${fmt(heat)}</div><div class="unit">hours</div></div>
+          <div><div class="label">Heating</div><div class="n heat">${fmt(heat)}</div><div class="unit">hours</div></div>
           <div><div class="label">Backup heat</div><div class="n${aux > 1 ? " bad" : ""}">${fmt(aux)}</div><div class="unit">hours</div></div>
           <div><div class="label">Cooling</div><div class="n cool">${fmt(cool)}</div><div class="unit">hours</div></div>
         </div>
@@ -872,7 +872,7 @@
     for (let v = step; v <= ymax + 1e-9; v += step) g += `<line x1="0" x2="${pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="gridline"/>` + svgText(pw + 6, Y(v) + 4, fmt(v), "", "start");
     bk.forEach((b, i) => {
       const gr = avg(b, "grid"), ax = avg(b, "aux"), x = i * bw + 3, w = Math.max(2, bw - 6), cx = x + w / 2;
-      g += `<rect x="${x.toFixed(1)}" y="${Y(gr - ax).toFixed(1)}" width="${w.toFixed(1)}" height="${(Y(0) - Y(gr - ax)).toFixed(1)}" rx="2" class="b-heat"/>`;
+      g += `<rect x="${x.toFixed(1)}" y="${Y(gr - ax).toFixed(1)}" width="${w.toFixed(1)}" height="${(Y(0) - Y(gr - ax)).toFixed(1)}" rx="2" class="b-gridk"/>`;
       if (ax > 0.5) g += `<rect x="${x.toFixed(1)}" y="${Y(gr).toFixed(1)}" width="${w.toFixed(1)}" height="${(Y(gr - ax) - Y(gr)).toFixed(1)}" rx="2" class="b-aux"/>`;
       g += svgText(cx, Y(gr) - 5, fmt(gr), "strong", "middle") + svgText(cx, H - 22, `${b}°`.replace("-", "−"), "", "middle") + svgText(cx, H - 6, `${bins[b].n} d`, "minor", "middle");
     });
@@ -896,7 +896,7 @@
     const mild = days.filter((r) => r.grid != null && r.heat + r.aux + r.cool < 0.5).map((r) => r.grid).sort((a, b) => a - b);
     return `<div class="top"><div><button type="button" class="sback" data-cold-back><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Climate</button><h1 class="h1-sm">How the house handles cold</h1></div></div>
       <section class="first"><p class="lead">${lead}</p>
-        <div class="legend" style="margin-top: 14px"><span><i class="lg-heat"></i>Grid</span><span><i class="lg-aux"></i>Of that, backup heat</span><span class="u">kWh a day</span></div>
+        <div class="legend" style="margin-top: 14px"><span><i class="lg-gridk"></i>Grid</span><span><i class="lg-aux"></i>Of that, backup heat</span><span class="u">kWh a day</span></div>
         <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Average daily grid use at each outdoor temperature">${g}</svg>
         <p class="sub">An average day at each outdoor temperature over the last year. Backup heat's share is estimated at ${fmt(auxKw, 1)} kW.</p></section>
       <section>${rows([

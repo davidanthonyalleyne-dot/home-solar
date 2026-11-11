@@ -462,11 +462,11 @@ body.locked .tabs { display: none; }
 .chatdel svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .chatdel:active { color: var(--bad); }
 /* heating (ecobee) */
-.chart .b-heat { fill: var(--grid); }
-.chart .b-aux { fill: var(--bad); }
-.legend i.lg-heat { background: var(--grid); }
-.legend i.lg-aux { background: var(--bad); }
-.trio .n.bad { color: var(--bad); }
+.chart .b-heat { fill: var(--heat); }
+.chart .b-aux { fill: var(--aux); }
+.legend i.lg-heat { background: var(--heat); }
+.legend i.lg-aux { background: var(--aux); }
+.trio .n.bad { color: var(--aux); }
 
 /* Settings: grouped list (iOS style), plain tinted icons, detail pages */
 :root { --group: #F2F2F7; --gcard: #FFFFFF; }
@@ -515,3 +515,10 @@ body.grouped, body.grouped main { background: var(--group); }
 
 .sbody { margin-top: 4px; }
 body.grouped .top { margin-bottom: 10px; }
+/* heating is warm, backup heat warmer; cooling stays blue */
+:root { --heat: #F2A541; --aux: #D9381E; }
+@media (prefers-color-scheme: dark) { :root { --heat: #F5B25A; --aux: #F0553A; } }
+.chart .b-gridk { fill: var(--grid); }
+.legend i.lg-gridk { background: var(--grid); }
+.trio .n.heat { color: #B86F0E; }
+@media (prefers-color-scheme: dark) { .trio .n.heat { color: var(--heat); } }
