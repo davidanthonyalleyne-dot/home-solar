@@ -464,6 +464,8 @@ body.locked .tabs { display: none; }
 /* heating (ecobee) */
 .chart .b-heat { fill: var(--heat); }
 .chart .b-aux { fill: var(--aux); }
+.chart g.lastyr { opacity: .3; }
+.chart text.lastyr { opacity: .6; }
 .legend i.lg-heat { background: var(--heat); }
 .legend i.lg-aux { background: var(--aux); }
 .trio .n.bad { color: var(--aux); }

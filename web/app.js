@@ -795,15 +795,27 @@
     days.forEach((r) => { const m = (byM[r.d.slice(0, 7)] ||= { heat: 0, aux: 0, cool: 0, out: [], n: 0 }); m.heat += r.heat; m.aux += r.aux; m.cool += r.cool; m.n++; if (r.out != null) m.out.push(r.out); });
     const mk = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
     mk.forEach((k) => { byM[k] ||= { heat: 0, aux: 0, cool: 0, out: [], n: 0, empty: true }; });
+    // months with no readings yet show last year's same month, faded
+    const prev = {};
+    if (mk.some((k) => byM[k].empty)) climateData(String(Number(year) - 1)).days.forEach((r) => { const m = (prev[r.d.slice(5, 7)] ||= { heat: 0, aux: 0, cool: 0, out: [] }); m.heat += r.heat; m.aux += r.aux; m.cool += r.cool; if (r.out != null) m.out.push(r.out); });
+    mk.forEach((k) => { const p = prev[k.slice(5)]; if (byM[k].empty && p && p.heat + p.aux + p.cool > 0) byM[k].ghost = p; });
+    const ghosts = mk.some((k) => byM[k].ghost);
     const W = contentWidth(), H = 210, top = 12, bot = 40, pw = W - 40, bw = pw / Math.max(mk.length, 1);
-    const most = Math.max(1, ...mk.map((k) => Math.max(byM[k].heat + byM[k].aux, byM[k].cool)));
+    const most = Math.max(1, ...mk.map((k) => { const m = byM[k].ghost || byM[k]; return Math.max(m.heat + m.aux, m.cool); }));
     const step = niceStep(most), ymax = Math.ceil(most / step) * step, Y = (v) => top + (H - top - bot) * (1 - v / ymax);
     let g = "";
     for (let v = step; v <= ymax + 1e-9; v += step) g += `<line x1="0" x2="${pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="gridline"/>` + svgText(pw + 6, Y(v) + 4, `${fmt(v)} h`, "", "start");
     mk.forEach((k, i) => {
       const m = byM[k], x = i * bw + 3, w = Math.max(2, bw - 6), cx = x + w / 2;
-      if (m.empty) { g += svgText(cx, H - 22, new Date(2000, i, 1).toLocaleDateString("en-US", { month: "narrow" }), "minor", "middle"); return; }
       const bar = (a, b, cls) => b > a ? `<rect x="${x.toFixed(1)}" y="${Y(b).toFixed(1)}" width="${w.toFixed(1)}" height="${(Y(a) - Y(b)).toFixed(1)}" rx="2" class="${cls}"/>` : "";
+      if (m.empty) {
+        const p = m.ghost;
+        if (p) {
+          g += `<g class="lastyr">${p.cool > p.heat + p.aux ? bar(0, p.cool, "b-cool") : bar(0, p.heat, "b-heat") + bar(p.heat, p.heat + p.aux, "b-aux")}</g>`;
+          if (p.out.length) g += svgText(cx, H - 6, `${Math.round(p.out.reduce((a, b) => a + b, 0) / p.out.length)}°`.replace("-", "−"), "minor lastyr", "middle");
+        }
+        g += svgText(cx, H - 22, new Date(2000, i, 1).toLocaleDateString("en-US", { month: "narrow" }), "minor", "middle"); return;
+      }
       g += m.cool > m.heat + m.aux ? bar(0, m.cool, "b-cool") : bar(0, m.heat, "b-heat") + bar(m.heat, m.heat + m.aux, "b-aux");
       const o = m.out.length ? m.out.reduce((a, b) => a + b, 0) / m.out.length : null;
       g += svgText(cx, H - 22, new Date(2000, Number(k.slice(5)) - 1, 1).toLocaleDateString("en-US", { month: "narrow" }), "", "middle");
@@ -859,7 +871,7 @@
       </section>
       <section><div class="legend"><span><i class="lg-heat"></i>Heating</span><span><i class="lg-aux"></i>Backup heat</span><span><i class="lg-cool"></i>Cooling</span><span class="u">hours a month</span></div>
         <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Heating and cooling hours by month, tap a month to open it">${g}</svg>
-        <p class="sub">Monthly average outdoor temperatures. Tap a month to open it.</p></section>
+        <p class="sub">Monthly average outdoor temperatures. Tap a month to open it.${ghosts ? ` Faded bars are the same months in ${Number(year) - 1}, until this year's readings come in.` : ""}</p></section>
       ${callout}${cmp}
       <section><button type="button" class="linkline big" data-cold><span>How the house handles cold</span>${chev}</button>
         <p class="sub">From your ecobee thermostat's history and your meter readings. Costs are estimates.</p></section>`;
