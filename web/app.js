@@ -1005,8 +1005,26 @@
     return `<section><div class="group-label">Heating and cooling</div>${rows(r)}${bk.note ? `<p class="sub">${esc(bk.note)}</p>` : ""}</section>`;
   }
 
-  function settingsScreen() {
-    const d = state.data, s = d.solar, h = Object.keys(hydro()).sort(), e = s && s.equipment;
+  // Settings: one short page of rows, each showing its status; tap a row for its details.
+  const SET_ICONS = {
+    solaredge: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4L6 18M18 6l1.4-1.4"/>',
+    hydro: '<path d="M13 2.5L5 13.5h6l-1 8 8-11h-6z"/>',
+    thermostat: '<path d="M14 14.6V5a2 2 0 0 0-4 0v9.6a4 4 0 1 0 4 0z"/><path d="M12 9v7"/>',
+    add: '<path d="M12 5v14M5 12h14"/>',
+    system: '<rect x="3" y="5" width="18" height="11" rx="1"/><path d="M3 10.5h18M9 5v11M15 5v11M12 16v4M8.5 20h7"/>',
+    heating: '<path d="M3 11l9-7 9 7"/><path d="M5 9.5V20h14V9.5"/><path d="M12 17c-1.7 0-2.6-1.2-2.6-2.5 0-1.6 1.6-2.2 2.6-4 1 1.8 2.6 2.4 2.6 4 0 1.3-.9 2.5-2.6 2.5z"/>',
+    alerts: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+    ask: '<path d="M4 5h16v11H10l-5 4v-4H4z"/>',
+    security: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>',
+  };
+  const SET_TITLES = { solaredge: "SolarEdge", hydro: "Toronto Hydro", thermostat: "ecobee thermostat", system: "Solar system", heating: "Heating and cooling", alerts: "Alerts", ask: "Ask", security: "Security" };
+  const setIcon = (k) => `<svg class="sicon" viewBox="0 0 24 24" aria-hidden="true">${SET_ICONS[k]}</svg>`;
+  const setChev = '<svg class="schev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
+  const setRow = (k, value) => `<button type="button" class="srow" data-setpage="${k}">${setIcon(k)}<span class="st">${SET_TITLES[k]}</span><span class="sv">${value}</span>${setChev}</button>`;
+  const setGroup = (label, inner, foot) => `<div class="sgroup">${label ? `<div class="slabel">${label}</div>` : ""}<div class="scard">${inner}</div>${foot ? `<p class="sfoot">${foot}</p>` : ""}</div>`;
+
+  function solarRows() {
+    const d = state.data, s = d.solar, e = s && s.equipment;
     const ok = s && s.connected && !s.needsConnect && !s.authTroubleSince;
     const sol = [
       ["Status", ok ? `<span class="okc">Connected</span>` : s && s.authTroubleSince ? `<span class="bad">No data since ${esc(timeOf(s.updated))}</span>` : s && s.needsConnect && s.daily ? "Sign-in expired" : "Not connected"],
@@ -1025,27 +1043,69 @@
       if (connected != null) sol.push(["Optimizers", `${connected}${models.length ? " · " + esc(models.join(", ")) : ""}`]);
     }
     if (ok && s.alertsChecked) sol.push(["Alerts checked", esc(timeOf(s.alertsChecked))]);
+    return { ok, sol };
+  }
+
+  function settingsPage(k) {
+    const d = state.data, s = d.solar, h = Object.keys(hydro()).sort();
     const bills = (d.bills || []).filter((b) => !b.preSolar);
-    return `<div class="top"><div><h1>Settings</h1></div><button type="button" class="done" data-back>Done</button></div>
-      <section class="first"><div class="group-label">SolarEdge</div>${rows(sol)}
-        ${ok ? `<p class="sub">Refreshes every hour during the day.${s.error ? " The last refresh failed, so these are the previous numbers." : ""}</p>` : connectBtn() + `<p class="sub">${d.connectUrl ? "You'll sign in with SolarEdge, then paste a one-time code into GitHub." : "Add SOLAREDGE_CLIENT_ID, SOLAREDGE_CLIENT_SECRET, SOLAREDGE_SITE_ID and GH_PAT under Settings, Secrets and variables, Actions in your GitHub repository."}</p>`}
-        ${inverterRows()}
-      </section>
-      ${systemSection()}
-      ${heatingSection()}
-      <section><div class="group-label">Toronto Hydro</div>${rows([
-        ["Meter data", h.length ? `${esc(shortDay(h[0]))}, ${h[0].slice(0, 4)} to ${esc(shortDay(h.at(-1)))}, ${h.at(-1).slice(0, 4)}` : "None yet"],
-        bills.length && ["Bills", `${bills.length} · ${esc(monthName(bills[0].to.slice(0, 7), "short"))} to ${esc(monthName(bills.at(-1).to.slice(0, 7), "short"))}`],
-        d.thermostat && ["Thermostat", `${esc(shortDay(d.thermostat.from))}, ${d.thermostat.from.slice(0, 4)} to ${esc(shortDay(d.thermostat.to))}, ${d.thermostat.to.slice(0, 4)}`],
-      ])}${uploadBlock()}</section>
-      ${alertsBlock()}
-      <section><div class="group-label">Security</div>${rows([
-        ["Data", state.encrypted ? "Encrypted" : "Not encrypted"],
-        state.encrypted && ["Unlock", esc(HomeSolarLock.status())],
-      ])}
-        ${state.encrypted ? `<button type="button" class="linkline danger" id="lockapp">Lock and forget this device</button><p class="sub">You'll need your passphrase to open the app here again.</p>` : `<p class="sub">Add a SITE_PASSPHRASE secret in GitHub to encrypt everything the site publishes.</p>`}
-      </section>
-      <section><p class="sub">Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a>. Sunrise and sunset are calculated for Parkdale. Built ${esc(timeOf(d.generated))}${state.version ? `. Version ${esc(state.version)}` : ""}.</p></section>`;
+    const span = (a, z) => `${esc(shortDay(a))}, ${a.slice(0, 4)} to ${esc(shortDay(z))}, ${z.slice(0, 4)}`;
+    const card = (inner) => `<div class="scard pad">${inner}</div>`;
+    let body = "";
+    if (k === "solaredge") {
+      const { ok, sol } = solarRows();
+      body = card(rows(sol) + (ok ? `<p class="sub">Refreshes every hour during the day.${s.error ? " The last refresh failed, so these are the previous numbers." : ""}</p>`
+        : connectBtn() + `<p class="sub">${d.connectUrl ? "You'll sign in with SolarEdge, then paste a one-time code into GitHub." : "Add SOLAREDGE_CLIENT_ID, SOLAREDGE_CLIENT_SECRET, SOLAREDGE_SITE_ID and GH_PAT under Settings, Secrets and variables, Actions in your GitHub repository."}</p>`)) + (inverterRows() ? card(inverterRows()) : "");
+    } else if (k === "hydro") {
+      body = card(rows([
+        ["Meter data", h.length ? span(h[0], h.at(-1)) : "None yet"],
+        ["Bills", bills.length ? `${bills.length} · ${esc(monthName(bills[0].to.slice(0, 7), "short"))} to ${esc(monthName(bills.at(-1).to.slice(0, 7), "short"))}` : "None yet"],
+      ])) + `<p class="sfoot">Meter readings come from the spreadsheets you download from MyTorontoHydro. Add them, and bill PDFs, from Settings.</p>`
+        + (uploadLog() ? `<div class="sgroup"><div class="slabel">Files added lately</div>${card(uploadLog())}</div>` : "");
+    } else if (k === "thermostat") {
+      const t = d.thermostat;
+      body = card(rows([["History", t ? span(t.from, t.to) : "None yet"], t && ["Days", fmt(Object.keys(t.daily || {}).length)]]))
+        + `<p class="sfoot">From ecobee.com, open Home IQ or your thermostat's Download data and save a month as CSV, then add it from Settings. The heating section in Month uses it.</p>`;
+    } else if (k === "system") {
+      body = systemSection().replace(/^<section>/, '<div class="scard pad">').replace(/<\/section>$/, "</div>").replace('<div class="group-label">Your system</div>', "");
+    } else if (k === "heating") {
+      body = heatingSection().replace(/^<section>/, '<div class="scard pad">').replace(/<\/section>$/, "</div>").replace('<div class="group-label">Heating and cooling</div>', "");
+    } else if (k === "alerts") {
+      body = alertsBlock().replace(/^\s*<section[^>]*>/, '<div class="scard pad">').replace(/<\/section>\s*$/, "</div>").replace(/<div class="group-label">Alerts<\/div>/, "");
+    } else if (k === "ask") {
+      const n = loadChats().length;
+      body = card(rows([["Answers by", d.askKey ? "Claude Haiku" : "Not set up"], ["Saved conversations", n ? `${fmt(n)} on this phone` : "None"], ["Voice", "Turned into text on this phone"]]))
+        + `<p class="sfoot">${d.askKey ? "Each question sends Claude a summary of the app's data and the forecast. Conversations stay on this phone." : "Add an ANTHROPIC_API_KEY secret in GitHub to turn Ask on."}</p>`
+        + (n ? card(`<button type="button" class="linkline danger" data-chatclear>Delete all conversations</button>`) : "");
+    } else if (k === "security") {
+      body = card(rows([["Data", state.encrypted ? "Encrypted" : "Not encrypted"], state.encrypted && ["Unlock", esc(HomeSolarLock.status())]]))
+        + (state.encrypted ? card(`<button type="button" class="linkline danger" id="lockapp">Lock and forget this device</button>`) + `<p class="sfoot">You'll need your passphrase to open the app here again.</p>`
+          : `<p class="sfoot">Add a SITE_PASSPHRASE secret in GitHub to encrypt everything the site publishes.</p>`);
+    }
+    return `<div class="top stop"><button type="button" class="sback" data-setback><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Settings</button><button type="button" class="done" data-back>Done</button></div>
+      <h1 class="sh1">${SET_TITLES[k]}</h1><div class="sbody">${body}</div>`;
+  }
+
+  function settingsScreen() {
+    if (state.setPage && SET_TITLES[state.setPage]) return settingsPage(state.setPage);
+    const d = state.data, s = d.solar, y = d.system || {};
+    const ok = s && s.connected && !s.needsConnect && !s.authTroubleSince;
+    const bills = (d.bills || []).filter((b) => !b.preSolar);
+    const solarV = ok ? `<span class="sdot ok"></span>Connected` : s && s.authTroubleSince ? `<span class="sdot bad"></span>No data` : s && s.needsConnect && s.daily ? `<span class="sdot bad"></span>Sign in again` : "Not connected";
+    const t = d.thermostat, mine = lsGet("alertsDevice");
+    const alertsOn = mine && mine.prefs ? Object.values(mine.prefs).filter(Boolean).length : 0;
+    const panels = y.panels && y.inverter ? `${y.panels.count} panels · ${fmt(y.inverter.dcKw, 1)} kW` : "";
+    const addFile = !state.encrypted || !d.uploadToken ? "" : setGroup("", `<label class="srow add">${setIcon("add")}<span class="st">Add a bill or data file</span><input type="file" id="addfile" accept=".pdf,.xlsx,.csv,application/pdf" hidden></label>`,
+      `<span id="upstatus" role="status">A Toronto Hydro bill PDF, a MyTorontoHydro spreadsheet or your ecobee thermostat's history. Encrypted before it leaves your phone.</span>`)
+      ;
+    return `<div class="top stop"><span></span><button type="button" class="done" data-back>Done</button></div><h1 class="sh1">Settings</h1>
+      <div class="sbody">
+        ${setGroup("Data sources", setRow("solaredge", solarV) + setRow("hydro", bills.length ? `${bills.length} bills` : "No bills") + setRow("thermostat", t ? `to ${esc(shortDay(t.to))}` : "Not added"))}
+        ${addFile}
+        ${setGroup("Your home", (y.panels ? setRow("system", panels) : "") + (y.heating ? setRow("heating", "Heat pump") : ""))}
+        ${setGroup("App", setRow("alerts", alertsOn ? `${alertsOn} on` : "Off") + setRow("ask", d.askKey ? "Claude" : "Not set up") + setRow("security", state.encrypted ? esc(HomeSolarLock.status() === "Passphrase each time" ? "Passphrase" : HomeSolarLock.status() === "Kept unlocked on this device" ? "This device" : HomeSolarLock.status()) : "Not encrypted"))}
+        <p class="sfoot center">${state.version ? `Solar ${esc(state.version)} · ` : ""}Built ${esc(timeOf(d.generated))}<br>Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a>. Sunrise and sunset are calculated for Parkdale.</p>
+      </div>`;
   }
 
   // ---------- Ask: questions about the house's energy, answered by Claude ----------
@@ -1441,7 +1501,8 @@
   function render() {
     const r = route();
     if (OLD[location.hash.slice(1)]) { history.replaceState(null, "", "#" + r); }
-    if (r !== "settings") state.lastTab = r;
+    if (r !== "settings") { state.lastTab = r; state.setPage = null; }
+    document.body.classList.toggle("grouped", r === "settings");
     view.innerHTML = screens[r]();
     document.querySelectorAll(".tabs a").forEach((a) => { if (a.dataset.tab === r) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
     if (r === "now" && !fitting) {
@@ -1502,7 +1563,10 @@
       if (m.dataset.go === "month" && route() !== "month") { location.hash = "#month"; return; }
       render(); return;
     }
-    if (e.target.closest("[data-back]")) { location.hash = "#" + (state.lastTab || "now"); return; }
+    if (e.target.closest("[data-back]")) { state.setPage = null; location.hash = "#" + (state.lastTab || "now"); return; }
+    const sp = e.target.closest("[data-setpage]");
+    if (sp) { state.setPage = sp.dataset.setpage; render(); view.scrollTop = 0; return; }
+    if (e.target.closest("[data-setback]")) { state.setPage = null; render(); view.scrollTop = 0; return; }
     if (e.target.closest("#lockapp")) { HomeSolarLock.forget(); location.reload(); return; }
     const d = e.target.closest("[data-day]");
     if (d) { state.day = d.dataset.day; render(); openSheet(dayName(state.day), daySheet(state.day)); }
