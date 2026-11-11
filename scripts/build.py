@@ -1125,7 +1125,7 @@ def process_inbox():
     sys.path.insert(0, str(ROOT / "scripts"))
     import parse_bill
     import tempfile
-    log = read_private("data/uploads.json", [])
+    ulog = read_private("data/uploads.json", [])
     store = read_private("data/bills.json", {"bills": []})
     now = dt.datetime.now(TZ).isoformat(timespec="minutes")
     def ingest(kind, ext, raw, stem):
@@ -1218,16 +1218,21 @@ def process_inbox():
                     entries = [{"when": now, "result": "refused", "note": "the zip was empty"}]
             else:
                 entries = [ingest(kind, ext, raw, f.stem)]
-        except Exception as e:  # a wrong key, a damaged file: say so and drop it
+        except Exception as e:  # a wrong key, a damaged file: say so, and keep the (still encrypted) file aside to retry
             entries = [{"when": now, "result": "refused", "note": f"couldn't read it ({type(e).__name__})"}]
+            import traceback
+            traceback.print_exc()
+            failed = ROOT / "data/inbox/failed"
+            failed.mkdir(exist_ok=True)
+            f.replace(failed / f.name)
         for entry in entries:
             print(f"inbox: {f.name}{' / ' + entry['file'] if entry.get('file') else ''}: {entry.get('result')} {entry.get('note', '')}")
             if entry.get("kind") in ("bill", "meter", "thermostat") or entry.get("result") == "refused":
                 UPLOAD_RESULTS.append(entry)
             if entry.get("kind") != "alerts" and entry.get("result") != "skipped":
-                log.append(entry)
-        f.unlink()
-    write_private("data/uploads.json", log[-50:])
+                ulog.append(entry)
+        f.unlink(missing_ok=True)
+    write_private("data/uploads.json", ulog[-50:])
 
 
 def decrypt_data(box):
