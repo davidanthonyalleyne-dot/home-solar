@@ -1208,10 +1208,17 @@ def process_inbox():
         try:
             box = json.loads(f.read_text())
             kind, ext = box.get("kind"), str(box.get("ext", "")).lower()
-            if not can_read_pdf and (kind in ("bill", "zip") or ext in ("pdf", "zip")):
+            if not can_read_pdf and (kind == "bill" or ext == "pdf"):
                 log(f"::warning::{f.name} waits for a run that can read PDFs")
                 continue
             raw = unseal(box)
+            if not can_read_pdf and (kind == "zip" or ext == "zip"):
+                import io
+                import zipfile
+                with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                    if any(n.lower().endswith((".pdf", ".zip")) for n in z.namelist()):
+                        log(f"::warning::{f.name} has PDFs in it, so it waits for a run that can read them")
+                        continue
             if kind == "zip" or (raw[:4] == b"PK\x03\x04" and ext == "zip"):
                 entries = unzip(raw, f.stem)
                 if not entries:
