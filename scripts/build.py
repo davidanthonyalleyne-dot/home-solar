@@ -1201,11 +1201,16 @@ def process_inbox():
                 out.append(e)
         return out
 
+    import shutil
+    can_read_pdf = bool(shutil.which("pdftotext"))
     for f in inbox:
         entries = []
         try:
             box = json.loads(f.read_text())
             kind, ext = box.get("kind"), str(box.get("ext", "")).lower()
+            if not can_read_pdf and (kind in ("bill", "zip") or ext in ("pdf", "zip")):
+                log(f"::warning::{f.name} waits for a run that can read PDFs")
+                continue
             raw = unseal(box)
             if kind == "zip" or (raw[:4] == b"PK\x03\x04" and ext == "zip"):
                 entries = unzip(raw, f.stem)

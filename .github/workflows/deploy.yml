@@ -34,7 +34,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: sudo apt-get install -y -q poppler-utils  # pdftotext, to read bill PDFs
+      # pdftotext, to read bill PDFs. If Ubuntu's mirrors are down the build still runs;
+      # bills wait in the inbox until a later run has it.
+      - run: sudo apt-get install -y -q poppler-utils || (sudo apt-get update -q && sudo apt-get install -y -q poppler-utils) || echo "::warning::poppler-utils didn't install; bill PDFs will wait"
       - run: pip install openpyxl cryptography pywebpush
       - id: build
         run: python scripts/build.py
