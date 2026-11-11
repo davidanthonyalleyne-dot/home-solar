@@ -533,3 +533,16 @@ body.grouped .top { margin-bottom: 10px; }
 .lock-actions { width: 100%; display: flex; flex-direction: column; gap: 10px; }
 body.locked main { padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
 .lock-ic svg { margin-bottom: -20px; }
+/* lock screen sunrise: rises once, then a slow soft glow */
+.lock-ic .rising { overflow: visible; }
+.lock-ic .halo { fill: var(--sun); opacity: 0; }
+.lock.animate .lock-ic .up { animation: lock-rise 1.8s cubic-bezier(.22, .8, .3, 1) .2s both; }
+.lock-ic .halo { animation: lock-glow 2.6s ease-in-out 2s infinite; }
+.lock.animate .lock-head h1 { animation: lock-fade .6s ease-out 1.3s both; }
+.lock.animate .lock-actions { animation: lock-fade .6s ease-out 1.6s both; }
+@keyframes lock-rise { from { transform: translateY(26px); } to { transform: none; } }
+@keyframes lock-glow { 0%, 100% { opacity: 0; } 50% { opacity: .28; } }
+@keyframes lock-fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.lock .btn svg { width: 24px; height: 24px; stroke-width: 1.8; }
+@media (prefers-reduced-motion: reduce) { .lock.animate .lock-ic .up, .lock-ic .halo, .lock.animate .lock-head h1, .lock.animate .lock-actions { animation: none; } }
+.lock [hidden] { display: none !important; }
