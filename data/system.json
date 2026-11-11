@@ -1,9 +1,48 @@
 {
  "note": "The equipment as installed, from the labels and Solify's single-line diagram. Serial and meter numbers are kept out of this public file; they come from the SYSTEM_PRIVATE secret and are encrypted with the rest of the data.",
- "panels": {"count": 17, "model": "LONGi LR4-72HPH-455M", "watts": 455, "strings": [9, 8]},
- "optimizers": {"count": 17, "model": "SolarEdge S500B"},
- "inverter": {"model": "SolarEdge SE6000H-US", "acKw": 6.0, "dcKw": 7.735},
- "shutdown": {"model": "SolarEdge DC Safety Switch", "where": "the switch on the box under the inverter"},
- "meter": {"model": "Itron OpenWay", "kind": "two-way"},
- "installer": "Solify"
+ "panels": {
+  "count": 17,
+  "model": "LONGi LR4-72HPH-455M",
+  "watts": 455,
+  "strings": [
+   9,
+   8
+  ]
+ },
+ "optimizers": {
+  "count": 17,
+  "model": "SolarEdge S500B"
+ },
+ "inverter": {
+  "model": "SolarEdge SE6000H-US",
+  "acKw": 6.0,
+  "dcKw": 7.735
+ },
+ "shutdown": {
+  "model": "SolarEdge DC Safety Switch",
+  "where": "the switch on the box under the inverter"
+ },
+ "meter": {
+  "model": "Itron OpenWay",
+  "kind": "two-way"
+ },
+ "installer": "Solify",
+ "heating": {
+  "kind": "Heat pump with electric backup",
+  "size": "3 ton",
+  "airHandler": {
+   "model": "Bosch BVA-36WN1-M20",
+   "part": "8733952440",
+   "power": "208/230 V, 1/2 HP blower",
+   "refrigerant": "R-410A"
+  },
+  "backupHeat": {
+   "kit": null,
+   "kw": 7.5,
+   "estimated": true,
+   "note": "The heater kit isn't marked on the air handler's label. The meter and the ecobee point to the 7.5 kW kit (EHK-08B); a technician can confirm it at the heater panel."
+  },
+  "outdoorUnit": null,
+  "thermostat": "ecobee"
+ }
 }

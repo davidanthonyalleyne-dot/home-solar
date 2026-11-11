@@ -984,6 +984,27 @@
       ${inv.dcKw && inv.acKw && inv.dcKw > inv.acKw ? `<p class="sub">The panels can make ${fmt(inv.dcKw, 1)} kW but the inverter tops out at ${fmt(inv.acKw, 0)} kW, so on the brightest days output levels off at about ${fmt(inv.acKw, 0)} kW. That's by design, not a fault.</p>` : ""}</section>`;
   }
 
+  // the heat pump: indoor air handler, outdoor unit (once added), backup heat, thermostat
+  function heatingSection() {
+    const y = state.data.system, h = y && y.heating;
+    if (!h) return "";
+    const pv = y.private || {}, ah = h.airHandler || {}, bk = h.backupHeat || {}, ou = h.outdoorUnit;
+    const r = [
+      ["Type", esc(h.kind)],
+      h.size && ["Size", esc(h.size)],
+      ["Outdoor unit", ou && ou.model ? esc(ou.model) : `<span class="sub">Not added yet</span>`],
+      ou && pv.outdoorUnitSerial && ["Outdoor serial", `<span class="num">${esc(pv.outdoorUnitSerial)}</span>`],
+      ah.model && ["Air handler", esc(ah.model)],
+      ah.part && ["Part number", `<span class="num">${esc(ah.part)}</span>`],
+      pv.airHandlerSerial && ["Air handler serial", `<span class="num">${esc(pv.airHandlerSerial)}</span>`],
+      bk.kw && ["Backup heat", `Electric, ${bk.estimated ? "about " : ""}${fmt(bk.kw, 1)} kW${bk.kit ? ` · ${esc(bk.kit)}` : ""}`],
+      ah.refrigerant && ["Refrigerant", esc(ah.refrigerant)],
+      ah.power && ["Power", esc(ah.power)],
+      h.thermostat && ["Thermostat", esc(h.thermostat)],
+    ];
+    return `<section><div class="group-label">Heating and cooling</div>${rows(r)}${bk.note ? `<p class="sub">${esc(bk.note)}</p>` : ""}</section>`;
+  }
+
   function settingsScreen() {
     const d = state.data, s = d.solar, h = Object.keys(hydro()).sort(), e = s && s.equipment;
     const ok = s && s.connected && !s.needsConnect && !s.authTroubleSince;
@@ -1011,6 +1032,7 @@
         ${inverterRows()}
       </section>
       ${systemSection()}
+      ${heatingSection()}
       <section><div class="group-label">Toronto Hydro</div>${rows([
         ["Meter data", h.length ? `${esc(shortDay(h[0]))}, ${h[0].slice(0, 4)} to ${esc(shortDay(h.at(-1)))}, ${h.at(-1).slice(0, 4)}` : "None yet"],
         bills.length && ["Bills", `${bills.length} · ${esc(monthName(bills[0].to.slice(0, 7), "short"))} to ${esc(monthName(bills.at(-1).to.slice(0, 7), "short"))}`],
@@ -1112,7 +1134,9 @@
     const s = solar() || {}, y = state.data.system || {};
     return JSON.stringify({
       today, place: "Toronto, Ontario", currency: "CAD",
-      system: { panels: y.panels, inverter: y.inverter && y.inverter.model, inverterLimitKw: y.inverter && y.inverter.acKw, installer: y.installer, firstProduction: s.installed },
+      system: { panels: y.panels, inverter: y.inverter && y.inverter.model, inverterLimitKw: y.inverter && y.inverter.acKw, installer: y.installer, firstProduction: s.installed,
+        heating: y.heating ? { kind: y.heating.kind, size: y.heating.size, airHandler: y.heating.airHandler && y.heating.airHandler.model, outdoorUnit: y.heating.outdoorUnit && y.heating.outdoorUnit.model,
+          backupHeatKw: y.heating.backupHeat && y.heating.backupHeat.kw, backupHeatKwEstimated: y.heating.backupHeat && y.heating.backupHeat.estimated, thermostat: y.heating.thermostat } : undefined },
       live: { generatingNowKw: s.nowKw, todaySoFarKwh: s.today, updated: s.updated, solarThisMonthKwh: s.month, solarThisYearKwh: s.year, solarLifetimeKwh: s.lifetime },
       notes: "Net metered on Toronto Hydro time-of-use. paid is what the household paid for electricity that month (from the bill when paidFrom is 'bill', otherwise estimated from meter readings). savedBySolar is costWithoutSolar minus paid. Meter data arrives in batches, so recent days may be missing. Bills marked beforeSolar are from before the panels were switched on, useful for before and after comparisons. The heating columns come from the ecobee thermostat (a heat pump with electric backup heat) for days where its history was added.",
       months, bills, dailyColumns: ["date", "gridKwh", "sentBackKwh", "solarKwh", "highC", "lowC", "heatPumpHours", "backupHeatHours", "fanHours", "heatSetC", "indoorC", "indoorHumidityPct"], daily: days,
