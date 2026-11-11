@@ -1021,7 +1021,7 @@
     for (let attempt = 0; ; attempt++) {
       const head = await gh("git/ref/heads/main");
       const parent = await gh(`git/commits/${head.object.sha}`);
-      const tree = await gh("git/trees", "POST", { base_tree: parent.tree.sha, tree: [{ path: `data/inbox/${stamp}-${kind}.json`, mode: "100644", type: "blob", sha: blob.sha }] });
+      const tree = await gh("git/trees", "POST", { base_tree: parent.tree.sha, tree: [{ path: `data/inbox/${stamp}-${Math.random().toString(36).slice(2, 6)}-${kind}.json`, mode: "100644", type: "blob", sha: blob.sha }] });
       const commit = await gh("git/commits", "POST", { message, tree: tree.sha, parents: [head.object.sha] });
       try { await gh("git/refs/heads/main", "PATCH", { sha: commit.sha }); break; }
       catch (err) { if (attempt >= 2) throw err; }  // someone else pushed in between: try on top of theirs
@@ -1090,23 +1090,25 @@
     }
   }
 
-  async function sendFile(file) {
+  async function sendFile(file, quiet) {
     const st = document.getElementById("upstatus"), say = (t, bad) => { if (st) { st.textContent = t; st.classList.toggle("bad", !!bad); } };
     const ext = (file.name.split(".").pop() || "").toLowerCase();
     let kind = ext === "pdf" ? "bill" : ext === "xlsx" || ext === "csv" ? "meter" : null;
     if (ext === "csv" && (await file.slice(0, 64).text()).replace(/^\uFEFF/, "").startsWith("#,Thermostat")) kind = "ecobee";
-    if (!kind) return say("That isn't a PDF bill or a spreadsheet.", true);
-    if (file.size > 20 * 1024 * 1024) return say("That file is too big.", true);
+    if (!kind) { say(`${file.name} isn't a PDF bill or a spreadsheet.`, true); return false; }
+    if (file.size > 20 * 1024 * 1024) { say(`${file.name} is too big.`, true); return false; }
     try {
       say("Encrypting…");
       const box = await HomeSolarLock.seal(new Uint8Array(await file.arrayBuffer()));
       Object.assign(box, { kind, ext });
       say("Sending…");
       await toInbox(JSON.stringify(box), kind, `Add a ${kind === "bill" ? "bill" : kind === "ecobee" ? "thermostat file" : "meter file"} from the app`);
-      say(kind === "bill" ? "Sent. The bill will be in the app in a few minutes." : kind === "ecobee" ? "Sent. The heating history will be in Month in a few minutes." : "Sent. The new readings will be in the app in a few minutes.");
+      if (!quiet) say(kind === "bill" ? "Sent. The bill will be in the app in a few minutes." : kind === "ecobee" ? "Sent. The heating history will be in the app in a few minutes." : "Sent. The new readings will be in the app in a few minutes.");
+      return true;
     } catch (err) {
       say(err && err.message === "unlock-again" ? "Lock the app and unlock it with your passphrase once, then try again."
         : err && err.message === "locked" ? "Unlock the app first." : (err && err.message) || "That didn't work.", true);
+      return false;
     }
   }
 
@@ -1244,7 +1246,7 @@
     const t = d.thermostat, mine = lsGet("alertsDevice");
     const alertsOn = mine && mine.prefs ? Object.values(mine.prefs).filter(Boolean).length : 0;
     const panels = y.panels && y.inverter ? `${y.panels.count} panels · ${fmt(y.inverter.dcKw, 1)} kW` : "";
-    const addFile = !state.encrypted || !d.uploadToken ? "" : setGroup("", `<label class="srow add">${setIcon("add")}<span class="st">Add a bill or data file</span><input type="file" id="addfile" accept=".pdf,.xlsx,.csv,application/pdf" hidden></label>`,
+    const addFile = !state.encrypted || !d.uploadToken ? "" : setGroup("", `<label class="srow add">${setIcon("add")}<span class="st">Add a bill or data file</span><input type="file" id="addfile" accept=".pdf,.xlsx,.csv,application/pdf" multiple hidden></label>`,
       `<span id="upstatus" role="status">A Toronto Hydro bill PDF, a MyTorontoHydro spreadsheet or your ecobee thermostat's history. Encrypted before it leaves your phone.</span>`)
       ;
     return `<div class="top stop"><span></span><button type="button" class="done" data-back>Done</button></div><h1 class="sh1">Settings</h1>
@@ -1669,7 +1671,18 @@
     if (e.target.id === "askform") { e.preventDefault(); const i = document.getElementById("askin"); askSend(i ? i.value : ""); }
   });
   view.addEventListener("change", (e) => {
-    if (e.target.id === "addfile" && e.target.files && e.target.files[0]) { sendFile(e.target.files[0]); e.target.value = ""; }
+    if (e.target.id === "addfile" && e.target.files && e.target.files.length) {
+      const files = [...e.target.files]; e.target.value = "";
+      (async () => {
+        const st = () => document.getElementById("upstatus");
+        let sent = 0;
+        for (const f of files) {
+          if (files.length > 1 && st()) st().textContent = `Sending ${sent + 1} of ${files.length}…`;
+          if (await sendFile(f, files.length > 1)) sent++;
+        }
+        if (files.length > 1 && st()) st().textContent = sent === files.length ? `Sent all ${sent}. They'll be in the app in a few minutes.` : `Sent ${sent} of ${files.length}. The others didn't go; try them again.`;
+      })();
+    }
   });
   view.addEventListener("click", (e) => {
     const pop = e.target.closest("[data-pop]");
