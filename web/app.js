@@ -992,7 +992,7 @@
     if (!u.length) return "";
     const line = (x) => {
       const what = x.kind === "bill" ? (x.to ? `${monthName(x.to.slice(0, 7))} bill` : "A bill") : x.kind === "meter" ? "Meter file"
-        : x.kind === "thermostat" ? `Thermostat, ${x.from ? monthName(x.from.slice(0, 7), "short") : ""}${x.to && x.to.slice(0, 7) !== (x.from || "").slice(0, 7) ? ` to ${monthName(x.to.slice(0, 7), "short")}` : ""}` : "A file";
+        : x.kind === "thermostat" ? `Thermostat, ${x.from ? monthName(x.from.slice(0, 7), "short") : ""}${x.to && x.to.slice(0, 7) !== (x.from || "").slice(0, 7) ? ` to ${monthName(x.to.slice(0, 7), "short")}` : ""}` : x.file ? esc(x.file) : "A file";
       const res = x.result === "added" ? "added" : x.result === "duplicate" ? "already in the app" : `not added${x.note ? `: ${x.note}` : ""}`;
       return [esc(what), `<span class="${x.result === "refused" ? "bad" : "sub"}">${esc(res)}</span>`];
     };
@@ -1093,17 +1093,17 @@
   async function sendFile(file, quiet) {
     const st = document.getElementById("upstatus"), say = (t, bad) => { if (st) { st.textContent = t; st.classList.toggle("bad", !!bad); } };
     const ext = (file.name.split(".").pop() || "").toLowerCase();
-    let kind = ext === "pdf" ? "bill" : ext === "xlsx" || ext === "csv" ? "meter" : null;
+    let kind = ext === "pdf" ? "bill" : ext === "xlsx" || ext === "csv" ? "meter" : ext === "zip" ? "zip" : null;
     if (ext === "csv" && (await file.slice(0, 64).text()).replace(/^\uFEFF/, "").startsWith("#,Thermostat")) kind = "ecobee";
-    if (!kind) { say(`${file.name} isn't a PDF bill or a spreadsheet.`, true); return false; }
-    if (file.size > 20 * 1024 * 1024) { say(`${file.name} is too big.`, true); return false; }
+    if (!kind) { say(`${file.name} isn't a bill, spreadsheet or zip.`, true); return false; }
+    if (file.size > (kind === "zip" ? 40 : 20) * 1024 * 1024) { say(`${file.name} is too big.`, true); return false; }
     try {
       say("Encrypting…");
       const box = await HomeSolarLock.seal(new Uint8Array(await file.arrayBuffer()));
       Object.assign(box, { kind, ext });
       say("Sending…");
-      await toInbox(JSON.stringify(box), kind, `Add a ${kind === "bill" ? "bill" : kind === "ecobee" ? "thermostat file" : "meter file"} from the app`);
-      if (!quiet) say(kind === "bill" ? "Sent. The bill will be in the app in a few minutes." : kind === "ecobee" ? "Sent. The heating history will be in the app in a few minutes." : "Sent. The new readings will be in the app in a few minutes.");
+      await toInbox(JSON.stringify(box), kind, `Add a ${kind === "bill" ? "bill" : kind === "ecobee" ? "thermostat file" : kind === "zip" ? "zip of files" : "meter file"} from the app`);
+      if (!quiet) say(kind === "zip" ? "Sent. Everything in the zip will be in the app in a few minutes." : kind === "bill" ? "Sent. The bill will be in the app in a few minutes." : kind === "ecobee" ? "Sent. The heating history will be in the app in a few minutes." : "Sent. The new readings will be in the app in a few minutes.");
       return true;
     } catch (err) {
       say(err && err.message === "unlock-again" ? "Lock the app and unlock it with your passphrase once, then try again."
@@ -1250,8 +1250,8 @@
     const t = d.thermostat, mine = lsGet("alertsDevice");
     const alertsOn = mine && mine.prefs ? Object.values(mine.prefs).filter(Boolean).length : 0;
     const panels = y.panels && y.inverter ? `${y.panels.count} panels · ${fmt(y.inverter.dcKw, 1)} kW` : "";
-    const addFile = !state.encrypted || !d.uploadToken ? "" : setGroup("", `<label class="srow add">${setIcon("add")}<span class="st">Add a bill or data file</span><input type="file" id="addfile" accept=".pdf,.xlsx,.csv,application/pdf" multiple hidden></label>`,
-      `<span id="upstatus" role="status">A Toronto Hydro bill PDF, a MyTorontoHydro spreadsheet or your ecobee thermostat's history. Encrypted before it leaves your phone.</span>`)
+    const addFile = !state.encrypted || !d.uploadToken ? "" : setGroup("", `<label class="srow add">${setIcon("add")}<span class="st">Add a bill or data file</span><input type="file" id="addfile" accept=".pdf,.xlsx,.csv,.zip,application/pdf,application/zip" multiple hidden></label>`,
+      `<span id="upstatus" role="status">A Toronto Hydro bill PDF, a MyTorontoHydro spreadsheet or your ecobee thermostat's history, or a zip of any of them. Encrypted before it leaves your phone.</span>`)
       ;
     return `<div class="top stop"><span></span><button type="button" class="done" data-back>Done</button></div><h1 class="sh1">Settings</h1>
       <div class="sbody">

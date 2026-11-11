@@ -1061,7 +1061,14 @@ def send_alerts(problems, solar, pem, extra=()):
             out.append(("connection", f"conn-{since[:13]}", "No live data from SolarEdge",
                         "Your panels are probably fine. Open Solar to see what's wrong."))
     out += list(extra)
-    for u in UPLOAD_RESULTS:
+    ups = UPLOAD_RESULTS
+    if len(ups) > 3:  # a zip full of files: one alert, not dozens
+        added = sum(1 for u in ups if u.get("result") == "added")
+        other = len(ups) - added
+        out.append(("files", f"files-{ups[0]['when']}-{len(ups)}", f"{added} file{'s' if added != 1 else ''} added",
+                    f"{added} of {len(ups)} files are in the app now." + (f" {other} weren't added; Settings, Toronto Hydro has the details." if other else "")))
+        ups = []
+    for u in ups:
         what = ((f"{dt.date.fromisoformat(u['to']):%B %Y} bill" if u.get("to") else "Bill") if u.get("kind") == "bill"
                 else "Thermostat data" if u.get("kind") == "thermostat" else "Meter file")
         body = {"added": "is in the app now.", "duplicate": "was already in the app."}.get(u.get("result"), f"wasn't added: {u.get('note', '')}")
@@ -1121,56 +1128,99 @@ def process_inbox():
     log = read_private("data/uploads.json", [])
     store = read_private("data/bills.json", {"bills": []})
     now = dt.datetime.now(TZ).isoformat(timespec="minutes")
-    for f in inbox:
+    def ingest(kind, ext, raw, stem):
+        """One file's worth: returns the log entry."""
         entry = {"when": now}
+        head = raw[:40].lstrip(b"\xef\xbb\xbf")
+        if head.startswith(b"#,Thermostat"):
+            kind = "ecobee"
+        elif head.startswith(b"%PDF"):
+            kind = "bill"
+        if kind == "bill":
+            with tempfile.NamedTemporaryFile(suffix=".pdf") as t:
+                t.write(raw); t.flush()
+                bill, problems = parse_bill.parse(parse_bill.text_of(t.name), store["bills"])
+            entry.update(kind="bill", statement=bill.get("statement"), to=bill.get("to"), due=bill.get("due"))
+            if problems:
+                entry.update(result="refused", note="; ".join(problems))
+            elif any(b["statement"] == bill["statement"] for b in store["bills"]):
+                entry.update(result="duplicate")
+            else:
+                store["bills"].append(bill)
+                store["bills"].sort(key=lambda b: b["statement"])
+                write_private("data/bills.json", store)
+                entry.update(result="added")
+        elif kind == "ecobee":
+            days = ecobee_days(raw.decode("utf-8", "replace"))
+            if not days:
+                raise ValueError("no readings")
+            ks = sorted(days)
+            ECOBEE_DIR.mkdir(exist_ok=True)
+            (ECOBEE_DIR / f"{ks[0]}-to-{ks[-1]}.csv.enc").write_text(json.dumps(seal(raw)))
+            entry.update(kind="thermostat", result="added", **{"from": ks[0], "to": ks[-1]}, days=len(ks))
+        elif kind == "alerts":
+            on = add_push_device(json.loads(raw))
+            entry.update(kind="alerts", result="on" if on else "off")
+        elif kind == "meter":
+            ext = ".csv" if ext == "csv" else ".xlsx"
+            with tempfile.NamedTemporaryFile(suffix=ext) as t:
+                t.write(raw); t.flush()
+                rows = sum(1 for _ in _rows(Path(t.name)))
+            (ROOT / "data/hydro" / (stem + ext + ".enc")).write_text(json.dumps(seal(raw)))
+            entry.update(kind="meter", result="added", rows=rows)
+        else:
+            entry.update(result="refused", note="unknown file type")
+        return entry
+
+    def unzip(raw, stem, depth=0):
+        """A .zip of bills, meter spreadsheets or ecobee files: each one goes in on its own."""
+        import io
+        import zipfile
+        out, total = [], 0
+        with zipfile.ZipFile(io.BytesIO(raw)) as z:
+            names = [i for i in z.infolist() if not i.is_dir() and "__MACOSX" not in i.filename and not Path(i.filename).name.startswith((".", "~$"))]
+            if len(names) > 300:
+                raise ValueError("more than 300 files in the zip")
+            for n, i in enumerate(sorted(names, key=lambda i: i.filename)):
+                total += i.file_size
+                if i.file_size > 50 * 1024 * 1024 or total > 300 * 1024 * 1024:
+                    raise ValueError("the zip is too big once unpacked")
+                data, ext = z.read(i), Path(i.filename).suffix.lower().lstrip(".")
+                name = Path(i.filename).name
+                try:
+                    if ext == "zip" or data[:4] == b"PK\x03\x04" and ext not in ("xlsx",):
+                        if depth >= 1:
+                            raise ValueError("zip inside a zip inside a zip")
+                        out += unzip(data, f"{stem}-{n}", depth + 1)
+                        continue
+                    kind = {"pdf": "bill", "xlsx": "meter", "csv": "meter"}.get(ext)
+                    e = ingest(kind, ext, data, f"{stem}-{n}") if kind else {"when": now, "result": "skipped", "note": "not a bill, spreadsheet or ecobee file"}
+                except Exception as err:
+                    e = {"when": now, "result": "refused", "note": f"couldn't read it ({type(err).__name__})"}
+                e["file"] = name
+                out.append(e)
+        return out
+
+    for f in inbox:
+        entries = []
         try:
             box = json.loads(f.read_text())
-            kind = box.get("kind")
+            kind, ext = box.get("kind"), str(box.get("ext", "")).lower()
             raw = unseal(box)
-            if raw[:40].lstrip(b"\xef\xbb\xbf").startswith(b"#,Thermostat"):
-                kind = "ecobee"
-            if kind == "bill":
-                with tempfile.NamedTemporaryFile(suffix=".pdf") as t:
-                    t.write(raw); t.flush()
-                    bill, problems = parse_bill.parse(parse_bill.text_of(t.name), store["bills"])
-                entry.update(kind="bill", statement=bill.get("statement"), to=bill.get("to"), due=bill.get("due"))
-                if problems:
-                    entry.update(result="refused", note="; ".join(problems))
-                elif any(b["statement"] == bill["statement"] for b in store["bills"]):
-                    entry.update(result="duplicate")
-                else:
-                    store["bills"].append(bill)
-                    store["bills"].sort(key=lambda b: b["statement"])
-                    write_private("data/bills.json", store)
-                    entry.update(result="added")
-            elif kind == "ecobee":
-                days = ecobee_days(raw.decode("utf-8", "replace"))
-                if not days:
-                    raise ValueError("no readings")
-                ks = sorted(days)
-                ECOBEE_DIR.mkdir(exist_ok=True)
-                (ECOBEE_DIR / f"{ks[0]}-to-{ks[-1]}.csv.enc").write_text(json.dumps({k: box[k] for k in ("v", "kdf", "iter", "salt", "iv", "ct")}))
-                entry.update(kind="thermostat", result="added", **{"from": ks[0], "to": ks[-1]}, days=len(ks))
-            elif kind == "alerts":
-                on = add_push_device(json.loads(raw))
-                entry.update(kind="alerts", result="on" if on else "off")
-            elif kind == "meter":
-                ext = ".csv" if str(box.get("ext", "")).lower() == "csv" else ".xlsx"
-                with tempfile.NamedTemporaryFile(suffix=ext) as t:
-                    t.write(raw); t.flush()
-                    rows = sum(1 for _ in _rows(Path(t.name)))
-                dest = ROOT / "data/hydro" / (f.stem + ext + ".enc")
-                dest.write_text(json.dumps({k: box[k] for k in ("v", "kdf", "iter", "salt", "iv", "ct")}))
-                entry.update(kind="meter", result="added", rows=rows)
+            if kind == "zip" or (raw[:4] == b"PK\x03\x04" and ext == "zip"):
+                entries = unzip(raw, f.stem)
+                if not entries:
+                    entries = [{"when": now, "result": "refused", "note": "the zip was empty"}]
             else:
-                entry.update(result="refused", note="unknown file type")
+                entries = [ingest(kind, ext, raw, f.stem)]
         except Exception as e:  # a wrong key, a damaged file: say so and drop it
-            entry.update(result="refused", note=f"couldn't read it ({type(e).__name__})")
-        print(f"inbox: {f.name}: {entry.get('result')} {entry.get('note', '')}")
-        if entry.get("kind") in ("bill", "meter", "thermostat") or entry.get("result") == "refused":
-            UPLOAD_RESULTS.append(entry)
-        if entry.get("kind") != "alerts":
-            log.append(entry)
+            entries = [{"when": now, "result": "refused", "note": f"couldn't read it ({type(e).__name__})"}]
+        for entry in entries:
+            print(f"inbox: {f.name}{' / ' + entry['file'] if entry.get('file') else ''}: {entry.get('result')} {entry.get('note', '')}")
+            if entry.get("kind") in ("bill", "meter", "thermostat") or entry.get("result") == "refused":
+                UPLOAD_RESULTS.append(entry)
+            if entry.get("kind") != "alerts" and entry.get("result") != "skipped":
+                log.append(entry)
         f.unlink()
     write_private("data/uploads.json", log[-50:])
 
