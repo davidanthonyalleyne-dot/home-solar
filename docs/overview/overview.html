@@ -73,7 +73,7 @@
     </div>
   </header>
 
-  <p class="intro">Solar joins two sources that never talk to each other: the <b>SolarEdge inverter</b> on the house (17 panels, 7.7 kW) and <b>Toronto Hydro's</b> meter readings and bills. It works out Ontario's net metering rules the way the bills do, so the savings are real dollars, checked against every bill on file. It opens to four tabs, Now, Month, History and <b>Ask</b>, where you can ask about your energy by typing or by voice, and it runs from the iPhone Home Screen.</p>
+  <p class="intro">Solar joins two sources that never talk to each other: the <b>SolarEdge inverter</b> on the house (17 panels, 7.7 kW) and <b>Toronto Hydro's</b> meter readings and bills. It works out Ontario's net metering rules the way the bills do, so the savings are real dollars, checked against every bill on file. It has five tabs: Now, Month, History, <b>Ask</b>, for questions about your energy by typing or by voice, and Settings. It runs from the iPhone Home Screen.</p>
 
   <div class="shots" style="grid-template-columns: repeat(3, minmax(0, 1fr))">
     <figure>
@@ -101,7 +101,7 @@
     </div>
   </div>
 
-  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.4 · App 1.61</span><span>Page 1 of 3</span></span></footer>
+  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.5 · App 1.62</span><span>Page 1 of 3</span></span></footer>
 </div>
 
 <div class="page">
@@ -135,7 +135,7 @@
     <section><h2>Good to know</h2><p>Meter data comes from exported files, so costs trail by however long it's been since the last one. SolarEdge's API has no per-panel data. An answer in Ask is lost if you leave Solar mid-answer; it's asked again when you come back.</p></section>
   </div>
 
-  <footer><span class="num">Updated November 11, 2026</span><span class="ver"><span>Document 2.4 · App 1.61</span><span>Page 2 of 3</span></span></footer>
+  <footer><span class="num">Updated November 11, 2026</span><span class="ver"><span>Document 2.5 · App 1.62</span><span>Page 2 of 3</span></span></footer>
 </div>
 
 <div class="page tech" style="gap: 12px">
@@ -147,7 +147,7 @@
     <p class="label">Sources and libraries</p>
     <table>
       <tr><th>Piece</th><th>Version</th><th>What it does</th><th>Loaded from</th><th>Licence</th></tr>
-      <tr><td>App code</td><td>App 1.61</td><td>The four tabs, charts, net metering maths, encryption and Ask (<code>app.js</code>, <code>lock.js</code>, <code>style.css</code>, <code>sw.js</code>). No framework; charts and icons are SVG drawn for the app, text in the system font</td><td>GitHub Pages, this repo's <code>web/</code></td><td>Written for the app</td></tr>
+      <tr><td>App code</td><td>App 1.62</td><td>The five tabs, charts, net metering maths, encryption and Ask (<code>app.js</code>, <code>lock.js</code>, <code>style.css</code>, <code>sw.js</code>). No framework; charts and icons are SVG drawn for the app, text in the system font</td><td>GitHub Pages, this repo's <code>web/</code></td><td>Written for the app</td></tr>
       <tr><td>Build job</td><td>Python 3</td><td>Fetches data, reads bills and meter files, models costs, encrypts, sends alerts (<code>scripts/build.py</code>, <code>money.py</code>, <code>parse_bill.py</code>)</td><td>GitHub Actions</td><td>Written for the app</td></tr>
       <tr><td>Transformers.js</td><td>3.5.1</td><td>Runs the speech model in the browser, with ONNX Runtime Web inside</td><td>cdn.jsdelivr.net</td><td>Apache-2.0</td></tr>
       <tr><td>Whisper tiny.en</td><td>Xenova, 8-bit</td><td>Turns a spoken question into text on the phone (about 40 MB, cached after first use)</td><td>huggingface.co</td><td>MIT</td></tr>
@@ -177,7 +177,7 @@
     <p>This document: <code>docs/overview/</code>. Make sample data with <code>fake_data.py</code>, take screenshots with <code>shoot.js</code>, print with <code>pdf.js</code>.</p>
   </section>
 
-  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.4 · App 1.61</span><span>Page 3 of 3</span></span></footer>
+  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.5 · App 1.62</span><span>Page 3 of 3</span></span></footer>
 </div>
 
 </body>
