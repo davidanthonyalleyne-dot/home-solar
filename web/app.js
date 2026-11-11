@@ -759,9 +759,158 @@
       ${energyChart()}
       <section>${co2Line()}</section>`;
   }
-  const histSwitch = () => `<div class="seg" role="group" aria-label="Show cost or energy">${["cost", "energy"].map((v) => `<button type="button" data-hview="${v}" aria-pressed="${state.histView === v}">${v === "cost" ? "Cost" : "Energy"}</button>`).join("")}</div>`;
+  const hasClimate = () => !!(state.data.thermostat && state.data.thermostat.daily && Object.keys(state.data.thermostat.daily).length >= 20);
+  const histSwitch = () => { const vs = ["cost", "energy", ...(hasClimate() ? ["climate"] : [])];
+    return `<div class="seg${vs.length > 2 ? " three" : ""}" role="group" aria-label="Show ${vs.length > 2 ? "cost, energy or climate" : "cost or energy"}">${vs.map((v) => `<button type="button" data-hview="${v}" aria-pressed="${state.histView === v}">${{ cost: "Cost", energy: "Energy", climate: "Climate" }[v]}</button>`).join("")}</div>`; };
+
+  // ---------- Climate: heating and cooling from the ecobee thermostat, against the meter ----------
+  // Daily rows are [heat pump h, backup h, cooling h, fan h, heat set °C, indoor °C, outdoor °C, humidity %].
+  function climateData() {
+    const t = state.data.thermostat.daily, ks = Object.keys(t).sort();
+    const last = ks.at(-1), from = new Date(Date.parse(last + "T12:00:00Z") - 364 * 864e5).toISOString().slice(0, 10);
+    const days = ks.filter((d) => d >= from).map((d) => {
+      const v = t[d], w = weatherDay(d), h = hydro()[d];
+      const out = v[6] != null ? v[6] : w ? (w[0] + w[1]) / 2 : null;
+      return { d, heat: v[0] || 0, aux: v[1] || 0, cool: v[2] || 0, fan: v[3] || 0, set: v[4], inside: v[5], out, grid: h ? h[0] : null };
+    });
+    const hs = state.data.system && state.data.system.heating, auxKw = (hs && hs.backupHeat && hs.backupHeat.kw) || 7.5;
+    // what a kWh from the grid cost on average over the same months
+    const ms = Object.entries(M()).filter(([k, m]) => k >= from.slice(0, 7) && m.grid != null && m.imp);
+    const rate = ms.length ? ms.reduce((a, [, m]) => a + m.grid, 0) / ms.reduce((a, [, m]) => a + m.imp, 0) : 0.15;
+    return { days, from, last, auxKw, rate };
+  }
+  function climateView() {
+    const { days, from, last, auxKw, rate } = climateData();
+    const sum = (k, ds = days) => ds.reduce((a, r) => a + r[k], 0);
+    const heat = sum("heat"), aux = sum("aux"), cool = sum("cool");
+    const auxCold = days.filter((r) => r.out != null && r.out < -5).reduce((a, r) => a + r.aux, 0);
+    const auxDays = days.filter((r) => r.aux > 0.1).length;
+    // months, oldest first
+    const byM = {};
+    days.forEach((r) => { const m = (byM[r.d.slice(0, 7)] ||= { heat: 0, aux: 0, cool: 0, out: [], n: 0 }); m.heat += r.heat; m.aux += r.aux; m.cool += r.cool; m.n++; if (r.out != null) m.out.push(r.out); });
+    const mk = Object.keys(byM).sort();
+    const W = contentWidth(), H = 210, top = 12, bot = 40, pw = W - 40, bw = pw / Math.max(mk.length, 1);
+    const most = Math.max(1, ...mk.map((k) => Math.max(byM[k].heat + byM[k].aux, byM[k].cool)));
+    const step = niceStep(most), ymax = Math.ceil(most / step) * step, Y = (v) => top + (H - top - bot) * (1 - v / ymax);
+    let g = "";
+    for (let v = step; v <= ymax + 1e-9; v += step) g += `<line x1="0" x2="${pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="gridline"/>` + svgText(pw + 6, Y(v) + 4, `${fmt(v)} h`, "", "start");
+    mk.forEach((k, i) => {
+      const m = byM[k], x = i * bw + 3, w = Math.max(2, bw - 6), cx = x + w / 2;
+      const bar = (a, b, cls) => b > a ? `<rect x="${x.toFixed(1)}" y="${Y(b).toFixed(1)}" width="${w.toFixed(1)}" height="${(Y(a) - Y(b)).toFixed(1)}" rx="2" class="${cls}"/>` : "";
+      g += m.cool > m.heat + m.aux ? bar(0, m.cool, "b-cool") : bar(0, m.heat, "b-heat") + bar(m.heat, m.heat + m.aux, "b-aux");
+      const o = m.out.length ? m.out.reduce((a, b) => a + b, 0) / m.out.length : null;
+      g += svgText(cx, H - 22, new Date(2000, Number(k.slice(5)) - 1, 1).toLocaleDateString("en-US", { month: "narrow" }), "", "middle");
+      if (o != null) g += svgText(cx, H - 6, `${Math.round(o)}°`.replace("-", "−"), "minor", "middle");
+      g += `<rect x="${(i * bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}" class="hit" data-ym="${k}" data-go="month" role="button" aria-label="${esc(monthName(k))}: heating ${fmt(m.heat + m.aux)} hours, cooling ${fmt(m.cool)} hours"/>`;
+    });
+    g += `<line x1="0" x2="${pw}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" class="axisline"/>`;
+    // the most recent stretch where heat ran flat out and the house still fell behind its setting
+    let run = [], worst = null;
+    days.forEach((r) => {
+      const behind = r.heat >= 23.5 && r.inside != null && r.set != null && r.inside < r.set - 1.5;
+      if (behind) run.push(r); else { if (run.length >= 3) worst = run; run = []; }
+    });
+    if (run.length >= 3) worst = run;
+    let callout = "";
+    if (worst) {
+      const lo = Math.min(...worst.map((r) => r.inside)), hi = Math.max(...worst.map((r) => r.inside)), setv = Math.max(...worst.map((r) => r.set));
+      const kwh = worst.every((r) => r.grid != null) ? worst.reduce((a, r) => a + r.grid, 0) : null;
+      const span = `${shortDay(worst[0].d)} to ${worst[0].d.slice(0, 7) === worst.at(-1).d.slice(0, 7) ? Number(worst.at(-1).d.slice(8)) : shortDay(worst.at(-1).d)}`;
+      callout = `<section class="alerts"><p class="lead"><b class="bad">${esc(span)}: the house couldn't keep up</b></p>
+        <p class="sub">The heat ran all day${worst.every((r) => r.aux > 12) ? ", backup heat too," : ""} and the house still sat at ${fmt(lo, 0)} to ${fmt(hi, 0)}°C against a ${fmt(setv, 0)}°C setting.${kwh ? ` Those ${worst.length} days drew about ${fmt(Math.round(kwh / 100) * 100)} kWh from the grid.` : ""} Worth a service call before the next cold snap.</p></section>`;
+    }
+    // heating per degree of cold: the latest month with real heating against the same month a year before
+    const hdd = (ds) => ds.reduce((a, r) => a + (r.out == null ? 0 : Math.max(0, 18 - r.out)), 0);
+    const all = Object.keys(state.data.thermostat.daily).sort(), tday = state.data.thermostat.daily;
+    const monthStat = (ym) => { const ds = all.filter((d) => d.startsWith(ym)).map((d) => ({ heat: tday[d][0] || 0, aux: tday[d][1] || 0, set: tday[d][4], out: tday[d][6] != null ? tday[d][6] : weatherDay(d) ? (weatherDay(d)[0] + weatherDay(d)[1]) / 2 : null }));
+      const dd = hdd(ds); if (ds.length < 20 || dd < 60) return null;
+      const sets = ds.map((r) => r.set).filter((x) => x != null);
+      return { ym, per: ds.reduce((a, r) => a + r.heat + r.aux, 0) / dd, set: sets.length ? sets.reduce((a, b) => a + b, 0) / sets.length : null }; };
+    let cmp = "";
+    for (const ym of [...new Set(all.map((d) => d.slice(0, 7)))].reverse()) {
+      const a = monthStat(ym), prevYm = `${Number(ym.slice(0, 4)) - 1}${ym.slice(4)}`, b = a && monthStat(prevYm);
+      if (a && b) {
+        const ch = Math.round((a.per / b.per - 1) * 100), sd = a.set != null && b.set != null ? a.set - b.set : 0;
+        const why = Math.abs(sd) >= 1 ? (sd > 0 && ch > 0 ? ", much of it from the warmer setting" : sd < 0 && ch < 0 ? ", much of it from the cooler setting" : "") : "";
+        cmp = `<section><div class="group-label">Heating per degree of cold</div>${rows([
+          [esc(monthName(b.ym)), `${fmt(b.per, 2)} h${b.set != null ? ` <span class="sub">set to ${fmt(b.set, 0)}°</span>` : ""}`],
+          [esc(monthName(a.ym)), `${fmt(a.per, 2)} h${a.set != null ? ` <span class="sub">set to ${fmt(a.set, 0)}°</span>` : ""}`]])}
+          <p class="sub">Hours of heating for each degree a day averaged below 18°C. ${Math.abs(ch) < 5 ? "About the same as a year before." : `About ${Math.abs(ch)}% ${ch > 0 ? "more" : "less"} heating for the same cold${why}.`}</p></section>`;
+        break;
+      }
+    }
+    return `<section class="first">
+        <div class="group-label">Heating and cooling, ${esc(shortDay(from))}, ${from.slice(0, 4)} to ${esc(shortDay(last))}, ${last.slice(0, 4)}</div>
+        <div class="trio num">
+          <div><div class="label">Heating</div><div class="n">${fmt(heat)}</div><div class="unit">hours</div></div>
+          <div><div class="label">Backup heat</div><div class="n${aux > 1 ? " bad" : ""}">${fmt(aux)}</div><div class="unit">hours</div></div>
+          <div><div class="label">Cooling</div><div class="n cool">${fmt(cool)}</div><div class="unit">hours</div></div>
+        </div>
+        <p class="lead">${aux > 1 ? `Backup heat cost about <b>${dollars(Math.round(aux * auxKw * rate / 10) * 10)}</b>. It ran on ${auxDays} days${auxCold / aux > 0.5 ? `, and ${pct(auxCold, aux)}% of its hours were on days below −5°C` : ""}.` : "The heat pump did all the heating; backup heat didn't run."}</p>
+      </section>
+      <section><div class="legend"><span><i class="lg-heat"></i>Heating</span><span><i class="lg-aux"></i>Backup heat</span><span><i class="lg-cool"></i>Cooling</span><span class="u">hours a month</span></div>
+        <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Heating and cooling hours by month, tap a month to open it">${g}</svg>
+        <p class="sub">Under each month, its average outdoor temperature. Tap a month to open it.</p></section>
+      ${callout}${cmp}
+      <section><button type="button" class="linkline big" data-cold><span>How the house handles cold</span>${chev}</button>
+        <p class="sub">From your ecobee thermostat's history and your meter readings. Costs are estimates.</p></section>`;
+  }
+
+  function coldView() {
+    const { days, auxKw, rate } = climateData();
+    const bins = {};
+    days.filter((r) => r.out != null && r.grid != null).forEach((r) => {
+      const b = Math.floor(r.out / 5) * 5, x = (bins[b] ||= { n: 0, grid: 0, aux: 0, heat: 0 });
+      x.n++; x.grid += r.grid; x.aux += Math.min(r.grid, r.aux * auxKw); x.heat += r.heat;
+    });
+    const bk = Object.keys(bins).map(Number).sort((a, b) => a - b).filter((b) => bins[b].n >= 3 && b <= 25);
+    if (!bk.length) return `<p class="sub">Not enough days with both thermostat and meter data yet.</p>`;
+    const avg = (b, k) => bins[b][k] / bins[b].n;
+    const W = contentWidth(), H = 230, top = 18, bot = 40, pw = W - 40, bw = pw / bk.length;
+    const most = Math.max(...bk.map((b) => avg(b, "grid"))), step = niceStep(most), ymax = Math.ceil(most / step) * step, Y = (v) => top + (H - top - bot) * (1 - v / ymax);
+    let g = "";
+    for (let v = step; v <= ymax + 1e-9; v += step) g += `<line x1="0" x2="${pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="gridline"/>` + svgText(pw + 6, Y(v) + 4, fmt(v), "", "start");
+    bk.forEach((b, i) => {
+      const gr = avg(b, "grid"), ax = avg(b, "aux"), x = i * bw + 3, w = Math.max(2, bw - 6), cx = x + w / 2;
+      g += `<rect x="${x.toFixed(1)}" y="${Y(gr - ax).toFixed(1)}" width="${w.toFixed(1)}" height="${(Y(0) - Y(gr - ax)).toFixed(1)}" rx="2" class="b-heat"/>`;
+      if (ax > 0.5) g += `<rect x="${x.toFixed(1)}" y="${Y(gr).toFixed(1)}" width="${w.toFixed(1)}" height="${(Y(gr - ax) - Y(gr)).toFixed(1)}" rx="2" class="b-aux"/>`;
+      g += svgText(cx, Y(gr) - 5, fmt(gr), "strong", "middle") + svgText(cx, H - 22, `${b}°`.replace("-", "−"), "", "middle") + svgText(cx, H - 6, `${bins[b].n} d`, "minor", "middle");
+    });
+    g += `<line x1="0" x2="${pw}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" class="axisline"/>`;
+    // where backup heat starts, and where the heat pump runs all day
+    // a band counts as needing backup heat when it averages over 3 hours a day of it
+    const auxFrom = [...bk].reverse().find((b) => avg(b, "aux") > 3 * auxKw), flat = [...bk].reverse().find((b) => avg(b, "heat") >= 23);
+    const deg = (b) => `<b>${String(b + 5).replace("-", "−")}°C</b>`;
+    const lead = auxFrom == null ? "The heat pump handled every temperature on its own; backup heat barely ran."
+      : flat != null && flat >= auxFrom ? `Down to about ${deg(auxFrom)} the heat pump copes on its own. Below that, it runs all day and backup heat makes up the rest.`
+      : `Down to about ${deg(auxFrom)} the heat pump copes on its own. Below that, backup heat starts${flat != null ? `, and below ${deg(flat)} the heat pump runs all day and backup heat does the rest` : ""}.`;
+    // what a degree is worth in the coldest months: kWh per degree-day from the meter, at the average price
+    const winter = days.filter((r) => r.grid != null && r.out != null && r.out < 10 && ["12", "01", "02"].includes(r.d.slice(5, 7)));
+    let degree = null;
+    if (winter.length >= 20) {
+      const xs = winter.map((r) => 18 - r.out), ys = winter.map((r) => r.grid), mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length;
+      const slope = xs.reduce((a, x, i) => a + (x - mx) * (ys[i] - my), 0) / xs.reduce((a, x) => a + (x - mx) ** 2, 0);
+      if (slope > 0) degree = slope * 30 * rate;
+    }
+    const nonstop = days.filter((r) => r.heat >= 23.9).length;
+    const mild = days.filter((r) => r.grid != null && r.heat + r.aux + r.cool < 0.5).map((r) => r.grid).sort((a, b) => a - b);
+    return `<div class="top"><div><button type="button" class="sback" data-cold-back><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Climate</button><h1 class="h1-sm">How the house handles cold</h1></div></div>
+      <section class="first"><p class="lead">${lead}</p>
+        <div class="legend" style="margin-top: 14px"><span><i class="lg-heat"></i>Grid</span><span><i class="lg-aux"></i>Of that, backup heat</span><span class="u">kWh a day</span></div>
+        <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Average daily grid use at each outdoor temperature">${g}</svg>
+        <p class="sub">An average day at each outdoor temperature over the last year. Backup heat's share is estimated at ${fmt(auxKw, 1)} kW.</p></section>
+      <section>${rows([
+        degree && ["One degree cooler in winter", `about ${dollars(Math.round(degree / 5) * 5)} a month`],
+        ["Days the heat pump ran nonstop", fmt(nonstop)],
+        mild.length >= 5 && ["A mild day, no heating or cooling", `${fmt(mild[Math.floor(mild.length / 2)])} kWh`],
+      ])}</section>`;
+  }
 
   function historyScreen() {
+    if (state.histView === "climate" && hasClimate()) {
+      if (state.coldView) return coldView();
+      return `<div class="top"><div><div class="eyebrow">From your ecobee thermostat</div><h1>History</h1></div></div>${histSwitch()}${climateView()}`;
+    }
     if (state.histView === "energy" && solar()) {
       return `<div class="top"><div><div class="eyebrow">Since ${esc(monthName(solar().installed ? solar().installed.slice(0, 7) : Object.keys(solar().daily).sort()[0].slice(0, 7)))}</div><h1>History</h1></div></div>${histSwitch()}${energyView()}`;
     }
@@ -1502,6 +1651,7 @@
     const r = route();
     if (OLD[location.hash.slice(1)]) { history.replaceState(null, "", "#" + r); }
     if (r !== "settings") { state.lastTab = r; state.setPage = null; }
+    if (r !== "history") state.coldView = false;
     document.body.classList.toggle("grouped", r === "settings");
     view.innerHTML = screens[r]();
     document.querySelectorAll(".tabs a").forEach((a) => { if (a.dataset.tab === r) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
@@ -1547,6 +1697,8 @@
     if (e.target.closest("#askstop")) { if ("speechSynthesis" in window) speechSynthesis.cancel(); ask.speaking = false; render(); return; }
     if (e.target.closest("#alertsave")) { saveAlerts(false); return; }
     if (e.target.closest("#alertoff")) { saveAlerts(true); return; }
+    if (e.target.closest("[data-cold]")) { state.coldView = true; render(); view.scrollTop = 0; return; }
+    if (e.target.closest("[data-cold-back]")) { state.coldView = false; render(); view.scrollTop = 0; return; }
     const hv = e.target.closest("[data-hview]");
     if (hv) { state.histView = hv.dataset.hview; try { localStorage.setItem("histView", state.histView); } catch (_) {} render(); return; }
     const ps = e.target.closest("[data-presolar]");

@@ -502,3 +502,13 @@ body.grouped, body.grouped main { background: var(--group); }
 .slog .rows .r { font-size: 13px; padding: 6px 0; }
 .sback { display: flex; align-items: center; gap: 2px; min-height: 44px; border: 0; background: transparent; padding: 0; font: inherit; font-size: 17px; color: var(--sun); cursor: pointer; margin-left: -6px; }
 .sback svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* Climate view */
+:root { --cool: #4F7FA8; }
+@media (prefers-color-scheme: dark) { :root { --cool: #6FA3D6; } }
+.seg.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.chart .b-cool { fill: var(--cool); }
+.legend i.lg-cool { background: var(--cool); }
+.chart text.minor { fill: var(--faint); font-size: 10px; }
+.trio .n.cool { color: var(--cool); }
+.linkline.big { font-size: 17px; color: var(--text); padding: 4px 0; min-height: 48px; }
+.h1-sm { font-size: 28px; line-height: 1.15; margin-top: 4px; }
