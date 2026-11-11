@@ -554,3 +554,4 @@ body.locked main { padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
 .sdetails summary::-webkit-details-marker { display: none; }
 .sdetails summary .schev { transition: transform .2s; }
 .sdetails[open] summary .schev { transform: rotate(90deg); }
+.serial { font-size: 14px; white-space: nowrap; letter-spacing: -0.01em; }

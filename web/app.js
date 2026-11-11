@@ -1226,24 +1226,22 @@
     const card = (inner) => `<div class="scard pad">${inner}</div>`;
     const grp = (k, t, r, foot) => `<div class="sgroup"><div class="slabel">${heatLabel(k, t)}</div>${card(rows(r))}${foot ? `<p class="sfoot">${foot}</p>` : ""}</div>`;
     const short = (m) => esc(String(m || "").replace(/^Bosch\s+/, ""));
-    const ids = [
-      ou.part && ["Outdoor part", `<span class="num">${esc(ou.part)}</span>`],
-      pv.outdoorUnitSerial && ["Outdoor serial", `<span class="num">${esc(pv.outdoorUnitSerial)}</span>`],
-      ah.part && ["Air handler part", `<span class="num">${esc(ah.part)}</span>`],
-      pv.airHandlerSerial && ["Air handler serial", `<span class="num">${esc(pv.airHandlerSerial)}</span>`],
-    ].filter(Boolean);
     return grp("pump", "Heat pump", [
         ["Make", "Bosch"], h.size && ["Size", esc(h.size)], h.thermostat && ["Thermostat", `ecobee`],
         ah.refrigerant && ["Refrigerant", esc(ah.refrigerant)]])
       + grp("outdoor", "Outdoor unit", [
         ["Make", "Bosch"], ["Model", ou.model ? short(ou.model) : `<span class="sub">Not added yet</span>`],
+        ou.part && ["Part number", `<span class="num">${esc(ou.part)}</span>`],
+        pv.outdoorUnitSerial && ["Serial", `<span class="num serial">${esc(pv.outdoorUnitSerial)}</span>`],
         ou.compressor && ["Compressor", esc(ou.compressor.replace(/ rotary, /, ", ").replace(/ to /, "–").replace(/ capacity$/, ""))],
         (ou.seer2 || ou.hspf2) && ["Rated", [ou.seer2 && `SEER2 ${esc(ou.seer2.replace(/ to /, "–"))}`, ou.hspf2 && `HSPF2 ${esc(ou.hspf2.replace(/ to /, "–"))}`].filter(Boolean).join(" · ")]],
         ou.heatingCapacity ? esc(ou.heatingCapacity) : "")
-      + grp("indoor", "Air handler", [["Make", "Bosch"], ah.model && ["Model", short(ah.model)], ah.power && ["Blower", esc(String(ah.power).replace(/^.*?,\s*/, "").replace(/ blower$/, ""))]])
-      + grp("backup", "Backup heat", [["Make", "Bosch heater kit"], ["Kind", "Electric"], bk.kw && ["Size", `${bk.estimated ? "About " : ""}${fmt(bk.kw, 1)} kW`]],
+      + grp("indoor", "Air handler", [["Make", "Bosch"], ah.model && ["Model", short(ah.model)],
+        ah.part && ["Part number", `<span class="num">${esc(ah.part)}</span>`],
+        pv.airHandlerSerial && ["Serial", `<span class="num serial">${esc(pv.airHandlerSerial)}</span>`], ah.power && ["Blower", esc(String(ah.power).replace(/^.*?,\s*/, "").replace(/ blower$/, ""))]])
+      + grp("backup", "Backup heat", [["Make", "Bosch"], ["Kind", "Electric"], bk.kw && ["Size", `${bk.estimated ? "About " : ""}${fmt(bk.kw, 1)} kW`]],
         bk.note ? esc(bk.note) : "")
-      + (ids.length ? `<details class="sgroup sdetails"><summary class="slabel">${heatLabel("tag", "Part and serial numbers")}<svg class="schev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></summary>${card(rows(ids))}</details>` : "");
+      ;
   }
 
   function settingsPage(k) {
