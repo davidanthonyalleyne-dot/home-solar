@@ -494,7 +494,7 @@
       <div class="legend" style="margin-top: 14px"><span><i class="lg-heat"></i>Heat pump</span>${aux > 0 ? `<span><i class="lg-aux"></i>Backup heat</span>` : ""}<span class="u">hours a day</span></div>
       <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Heating hours each day">${g}</svg>
       ${notes.map((x) => `<p class="sub">${x}</p>`).join("")}
-      <p class="sub">From your ecobee's history.</p></section>`;
+      <p class="sub">From your ecobee thermostat's history.</p></section>`;
   }
 
   function dayChart(ym) {
@@ -853,7 +853,7 @@
     if (!state.encrypted) return `<p class="sub">Adding files from the app needs the data to be encrypted first.</p>`;
     if (!state.data.uploadToken) return `<p class="sub">To add bills and meter files from here, add an UPLOAD_TOKEN secret in GitHub: a fine-grained token with read and write access to this repository's contents only.</p>`;
     return `<label class="btn secondary filebtn"><input type="file" id="addfile" accept=".pdf,.xlsx,.csv,application/pdf" hidden>Add a bill or data file</label>
-      <p class="sub" id="upstatus" role="status">A Toronto Hydro bill PDF, a usage spreadsheet from MyTorontoHydro, or your ecobee's history (the CSV from ecobee.com, Home IQ or Download data). It's encrypted before it leaves your phone.</p>
+      <p class="sub" id="upstatus" role="status">A Toronto Hydro bill PDF, a usage spreadsheet from MyTorontoHydro, or your ecobee thermostat's history (the CSV from ecobee.com, Home IQ or Download data). It's encrypted before it leaves your phone.</p>
       ${uploadLog()}`;
   }
   // commits one encrypted file (JSON text) to data/inbox

@@ -40,9 +40,9 @@
    "kit": null,
    "kw": 7.5,
    "estimated": true,
-   "note": "The heater kit isn't marked on the air handler's label. The meter and the ecobee point to the 7.5 kW kit (EHK-08B); a technician can confirm it at the heater panel."
+   "note": "The heater kit isn't marked on the air handler's label. The meter and the ecobee thermostat point to the 7.5 kW kit (EHK-08B); a technician can confirm it at the heater panel."
   },
   "outdoorUnit": null,
-  "thermostat": "ecobee"
+  "thermostat": "ecobee smart thermostat"
  }
 }
