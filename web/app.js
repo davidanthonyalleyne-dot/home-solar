@@ -352,7 +352,7 @@
     const cw = currentWeather();
     const wxNow = cw ? `<span class="wxnow">${wxIcon(cw.code, cw.isDay ?? 1)}${deg(cw.temp)} ${esc(wx(cw.code).toLowerCase())}</span>` : "";
     const head = `<div class="top nowhead"><div><div class="eyebrow">${esc(today)}${wxNow}</div><h1>Now</h1></div>
-      <div class="topright">${dot}<a class="iconbtn" href="#settings" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2.4"/><circle cx="15" cy="17" r="2.4"/></svg></a></div></div>`;
+      <div class="topright">${dot}</div></div>`;
     const s = solar();
     if (!s) {
       return head + `<section class="first"><p class="lead">SolarEdge isn't connected yet.</p>
@@ -1237,7 +1237,7 @@
         + (state.encrypted ? card(`<button type="button" class="linkline danger" id="lockapp">Lock and forget this device</button>`) + `<p class="sfoot">You'll need your passphrase to open the app here again.</p>`
           : `<p class="sfoot">Add a SITE_PASSPHRASE secret in GitHub to encrypt everything the site publishes.</p>`);
     }
-    return `<div class="top stop"><button type="button" class="sback" data-setback><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Settings</button><button type="button" class="done" data-back>Done</button></div>
+    return `<div class="top stop"><button type="button" class="sback" data-setback><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Settings</button></div>
       <h1 class="sh1">${SET_TITLES[k]}</h1><div class="sbody">${body}</div>`;
   }
 
@@ -1253,7 +1253,7 @@
     const addFile = !state.encrypted || !d.uploadToken ? "" : setGroup("", `<label class="srow add">${setIcon("add")}<span class="st">Add a bill or data file</span><input type="file" id="addfile" accept=".pdf,.xlsx,.csv,.zip,application/pdf,application/zip" multiple hidden></label>`,
       `<span id="upstatus" role="status">A Toronto Hydro bill PDF, a MyTorontoHydro spreadsheet or your ecobee thermostat's history, or a zip of any of them. Encrypted before it leaves your phone.</span>`)
       ;
-    return `<div class="top stop"><span></span><button type="button" class="done" data-back>Done</button></div><h1 class="sh1">Settings</h1>
+    return `<div class="top"><div><h1>Settings</h1></div></div>
       <div class="sbody">
         ${setGroup("Data sources", setRow("solaredge", solarV) + setRow("hydro", bills.length ? `${bills.length} bills` : "No bills") + setRow("thermostat", t ? `to ${esc(shortDay(t.to))}` : "Not added"))}
         ${addFile}
@@ -1671,6 +1671,14 @@
     if (r === "ask") { askAfterRender(); warmVoice(); if (!ask.resumed) { ask.resumed = true; setTimeout(resumeCutOff, 300); } }
   }
 
+  document.querySelector(".tabs").addEventListener("click", (e) => {
+    const t = e.target.closest("a[data-tab]");
+    if (t && t.dataset.tab === route()) {
+      if (route() === "settings" && state.setPage) { state.setPage = null; render(); }
+      else if (route() === "history" && state.coldView) { state.coldView = false; render(); }
+      view.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  });
   view.addEventListener("submit", (e) => {
     if (e.target.id === "askform") { e.preventDefault(); const i = document.getElementById("askin"); askSend(i ? i.value : ""); }
   });
