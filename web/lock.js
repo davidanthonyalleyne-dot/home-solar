@@ -89,7 +89,7 @@ window.HomeSolarLock = (() => {
 
   function shell(view, inner) {
     document.body.classList.add("locked");
-    view.innerHTML = `<section class="lock"><div class="lock-head"><span class="lock-ic">${appIcon}</span><h1>Solar</h1></div>${inner}</section>`;
+    view.innerHTML = `<section class="lock"><div class="lock-head"><span class="lock-ic">${appIcon}</span><h1>Solar</h1></div><div class="lock-actions">${inner}</div></section>`;
   }
 
   // Resolves with the decrypted data, asking for Face ID or the passphrase as needed.

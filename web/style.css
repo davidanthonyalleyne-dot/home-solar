@@ -524,3 +524,12 @@ body.grouped .top { margin-bottom: 10px; }
 @media (prefers-color-scheme: dark) { .trio .n.heat { color: var(--heat); } }
 .climhead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .climhead .group-label { margin: 0; }
+/* lock screen: the icon and name in the middle, the buttons at the bottom, within thumb reach */
+.lock { min-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 40px); justify-content: space-between; gap: 0; padding-bottom: 8px; }
+.lock-head { flex: 1; justify-content: center; margin: 0; gap: 10px; }
+.lock-ic { width: auto; height: auto; border-radius: 0; background: none; box-shadow: none; }
+.lock-ic svg { width: 96px; height: 96px; }
+.lock-ic .hz { stroke: var(--text); }
+.lock-actions { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+body.locked main { padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
+.lock-ic svg { margin-bottom: -20px; }
