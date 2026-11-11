@@ -1144,7 +1144,11 @@
       ["Type", esc(h.kind)],
       h.size && ["Size", esc(h.size)],
       ["Outdoor unit", ou && ou.model ? esc(ou.model) : `<span class="sub">Not added yet</span>`],
+      ou && ou.part && ["Outdoor part number", `<span class="num">${esc(ou.part)}</span>`],
       ou && pv.outdoorUnitSerial && ["Outdoor serial", `<span class="num">${esc(pv.outdoorUnitSerial)}</span>`],
+      ou && ou.compressor && ["Compressor", esc(ou.compressor)],
+      ou && ou.seer2 && ["Cooling rating", `SEER2 ${esc(ou.seer2)}`],
+      ou && ou.hspf2 && ["Heating rating", `HSPF2 ${esc(ou.hspf2)}`],
       ah.model && ["Air handler", esc(ah.model)],
       ah.part && ["Part number", `<span class="num">${esc(ah.part)}</span>`],
       pv.airHandlerSerial && ["Air handler serial", `<span class="num">${esc(pv.airHandlerSerial)}</span>`],
@@ -1153,7 +1157,7 @@
       ah.power && ["Power", esc(ah.power)],
       h.thermostat && ["Thermostat", esc(h.thermostat)],
     ];
-    return `<section><div class="group-label">Heating and cooling</div>${rows(r)}${bk.note ? `<p class="sub">${esc(bk.note)}</p>` : ""}</section>`;
+    return `<section><div class="group-label">Heating and cooling</div>${rows(r)}${ou && ou.heatingCapacity ? `<p class="sub">Heat output: ${esc(ou.heatingCapacity)}.</p>` : ""}${bk.note ? `<p class="sub">${esc(bk.note)}</p>` : ""}</section>`;
   }
 
   // Settings: one short page of rows, each showing its status; tap a row for its details.
@@ -1347,7 +1351,7 @@
       today, place: "Toronto, Ontario", currency: "CAD",
       system: { panels: y.panels, inverter: y.inverter && y.inverter.model, inverterLimitKw: y.inverter && y.inverter.acKw, installer: y.installer, firstProduction: s.installed,
         heating: y.heating ? { kind: y.heating.kind, size: y.heating.size, airHandler: y.heating.airHandler && y.heating.airHandler.model, outdoorUnit: y.heating.outdoorUnit && y.heating.outdoorUnit.model,
-          backupHeatKw: y.heating.backupHeat && y.heating.backupHeat.kw, backupHeatKwEstimated: y.heating.backupHeat && y.heating.backupHeat.estimated, thermostat: y.heating.thermostat } : undefined },
+          outdoorUnitDetails: y.heating.outdoorUnit || undefined, backupHeatKw: y.heating.backupHeat && y.heating.backupHeat.kw, backupHeatKwEstimated: y.heating.backupHeat && y.heating.backupHeat.estimated, thermostat: y.heating.thermostat } : undefined },
       live: { generatingNowKw: s.nowKw, todaySoFarKwh: s.today, updated: s.updated, solarThisMonthKwh: s.month, solarThisYearKwh: s.year, solarLifetimeKwh: s.lifetime },
       notes: "Net metered on Toronto Hydro time-of-use. paid is what the household paid for electricity that month (from the bill when paidFrom is 'bill', otherwise estimated from meter readings). savedBySolar is costWithoutSolar minus paid. Meter data arrives in batches, so recent days may be missing. Bills marked beforeSolar are from before the panels were switched on, useful for before and after comparisons. The heating columns come from the ecobee thermostat (a heat pump with electric backup heat) for days where its history was added.",
       months, bills, dailyColumns: ["date", "gridKwh", "sentBackKwh", "solarKwh", "highC", "lowC", "heatPumpHours", "backupHeatHours", "fanHours", "heatSetC", "indoorC", "indoorHumidityPct"], daily: days,

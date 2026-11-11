@@ -328,6 +328,10 @@ def system_info():
         info["private"] = json.loads(os.environ.get("SYSTEM_PRIVATE") or "{}")
     except ValueError:
         info["private"] = {}
+    try:  # the heat pump's serials live in their own secret, so the solar one needn't be retyped
+        info["private"].update(json.loads(os.environ.get("HVAC_PRIVATE") or "{}"))
+    except ValueError:
+        pass
     return info
 
 

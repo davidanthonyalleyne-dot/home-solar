@@ -47,6 +47,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           SITE_PASSPHRASE: ${{ secrets.SITE_PASSPHRASE }}
           SYSTEM_PRIVATE: ${{ secrets.SYSTEM_PRIVATE }}
+          HVAC_PRIVATE: ${{ secrets.HVAC_PRIVATE }}
           UPLOAD_TOKEN: ${{ secrets.UPLOAD_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           VAPID_PRIVATE: ${{ secrets.VAPID_PRIVATE }}

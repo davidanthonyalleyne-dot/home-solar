@@ -42,7 +42,15 @@
    "estimated": true,
    "note": "The heater kit isn't marked on the air handler's label. The meter and the ecobee thermostat point to the 7.5 kW kit (EHK-08B); a technician can confirm it at the heater panel."
   },
-  "outdoorUnit": null,
+  "outdoorUnit": {
+   "model": "Bosch BOVA-36HDN1-M20G",
+   "part": "8733952437",
+   "compressor": "Inverter rotary, 25 to 110% capacity",
+   "seer2": "15.0 to 20.0",
+   "hspf2": "9.0 to 9.5",
+   "refrigerant": "R-410A, 7 lb 9 oz factory charge",
+   "heatingCapacity": "About 22,700 BTU/h at \u22128\u00b0C, 19,900 at \u221217\u00b0C and 18,300 at \u221220\u00b0C, its lowest heating temperature (Bosch spec sheet, with this air handler)"
+  },
   "thermostat": "ecobee smart thermostat"
  }
 }
