@@ -489,7 +489,7 @@
       <div class="trio ruled num">
         <div><div class="label">Heat pump</div><div class="n">${fmt(heat)}</div><div class="unit">hours</div></div>
         <div><div class="label">Backup heat</div><div class="n${aux > 0.5 ? " bad" : ""}">${fmt(aux, aux && aux < 10 ? 1 : 0)}</div><div class="unit">hours</div></div>
-        <div><div class="label">${cool > heat ? "Cooling" : "Set to"}</div><div class="n">${cool > heat ? fmt(cool) : setAvg != null ? fmt(setAvg, 1) : "–"}</div><div class="unit">${cool > heat ? "hours" : "°C on average"}</div></div>
+        <div><div class="label">${cool > heat ? "Cooling" : "Set to"}</div><div class="n">${cool > heat ? fmt(cool) : setAvg != null ? fmt(setAvg, 1) : "–"}</div><div class="unit">${cool > heat ? "hours" : "⌀ °C"}</div></div>
       </div>
       <div class="legend" style="margin-top: 14px"><span><i class="lg-heat"></i>Heat pump</span>${aux > 0 ? `<span><i class="lg-aux"></i>Backup heat</span>` : ""}<span class="u">hours a day</span></div>
       <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Heating hours each day">${g}</svg>
@@ -633,8 +633,8 @@
       t.push(["Heat pump ran", `${fmt(th[0], 1)} h`]);
       if (th[1] > 0) t.push([`<span class="bad">Backup heat ran</span>`, `<span class="bad">${fmt(th[1], 1)} h</span>`]);
       if (th[2] > 0) t.push(["Cooling ran", `${fmt(th[2], 1)} h`]);
-      if (th[4] != null) t.push(["Thermostat set to", `${fmt(th[4], 1)}°`]);
-      if (th[5] != null) t.push(["Inside", `${fmt(th[5], 1)}°${th[7] != null ? ` <span class="sub">${fmt(th[7])}% humidity</span>` : ""}`]);
+      if (th[4] != null) t.push(["Thermostat set to", `⌀ ${fmt(th[4], 1)}°`]);
+      if (th[5] != null) t.push(["Inside", `⌀ ${fmt(th[5], 1)}°${th[7] != null ? ` <span class="sub">${fmt(th[7])}% humidity</span>` : ""}`]);
     }
     return rows(p) + `<div class="gap"></div>` + rows(w) + (t.length ? `<div class="gap"></div>` + rows(t) : "");
   }
@@ -800,7 +800,7 @@
       g += m.cool > m.heat + m.aux ? bar(0, m.cool, "b-cool") : bar(0, m.heat, "b-heat") + bar(m.heat, m.heat + m.aux, "b-aux");
       const o = m.out.length ? m.out.reduce((a, b) => a + b, 0) / m.out.length : null;
       g += svgText(cx, H - 22, new Date(2000, Number(k.slice(5)) - 1, 1).toLocaleDateString("en-US", { month: "narrow" }), "", "middle");
-      if (o != null) g += svgText(cx, H - 6, `${Math.round(o)}°`.replace("-", "−"), "minor", "middle");
+      if (o != null) g += svgText(cx, H - 6, `⌀${Math.round(o)}°`.replace("-", "−"), "minor", "middle");
       g += `<rect x="${(i * bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}" class="hit" data-ym="${k}" data-go="month" role="button" aria-label="${esc(monthName(k))}: heating ${fmt(m.heat + m.aux)} hours, cooling ${fmt(m.cool)} hours"/>`;
     });
     g += `<line x1="0" x2="${pw}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" class="axisline"/>`;
@@ -833,8 +833,8 @@
         const ch = Math.round((a.per / b.per - 1) * 100), sd = a.set != null && b.set != null ? a.set - b.set : 0;
         const why = Math.abs(sd) >= 1 ? (sd > 0 && ch > 0 ? ", much of it from the warmer setting" : sd < 0 && ch < 0 ? ", much of it from the cooler setting" : "") : "";
         cmp = `<section><div class="group-label">Heating per degree of cold</div>${rows([
-          [esc(monthName(b.ym)), `${fmt(b.per, 2)} h${b.set != null ? ` <span class="sub">set to ${fmt(b.set, 0)}°</span>` : ""}`],
-          [esc(monthName(a.ym)), `${fmt(a.per, 2)} h${a.set != null ? ` <span class="sub">set to ${fmt(a.set, 0)}°</span>` : ""}`]])}
+          [esc(monthName(b.ym)), `${fmt(b.per, 2)} h${b.set != null ? ` <span class="sub">set to ⌀ ${fmt(b.set, 0)}°</span>` : ""}`],
+          [esc(monthName(a.ym)), `${fmt(a.per, 2)} h${a.set != null ? ` <span class="sub">set to ⌀ ${fmt(a.set, 0)}°</span>` : ""}`]])}
           <p class="sub">Hours of heating for each degree a day averaged below 18°C. ${Math.abs(ch) < 5 ? "About the same as a year before." : `About ${Math.abs(ch)}% ${ch > 0 ? "more" : "less"} heating for the same cold${why}.`}</p></section>`;
         break;
       }
@@ -850,7 +850,7 @@
       </section>
       <section><div class="legend"><span><i class="lg-heat"></i>Heating</span><span><i class="lg-aux"></i>Backup heat</span><span><i class="lg-cool"></i>Cooling</span><span class="u">hours a month</span></div>
         <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Heating and cooling hours by month, tap a month to open it">${g}</svg>
-        <p class="sub">Under each month, its average outdoor temperature. Tap a month to open it.</p></section>
+        <p class="sub">⌀ is each month's average outdoor temperature. Tap a month to open it.</p></section>
       ${callout}${cmp}
       <section><button type="button" class="linkline big" data-cold><span>How the house handles cold</span>${chev}</button>
         <p class="sub">From your ecobee thermostat's history and your meter readings. Costs are estimates.</p></section>`;
@@ -896,9 +896,9 @@
     const mild = days.filter((r) => r.grid != null && r.heat + r.aux + r.cool < 0.5).map((r) => r.grid).sort((a, b) => a - b);
     return `<div class="top"><div><button type="button" class="sback" data-cold-back><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Climate</button><h1 class="h1-sm">How the house handles cold</h1></div></div>
       <section class="first"><p class="lead">${lead}</p>
-        <div class="legend" style="margin-top: 14px"><span><i class="lg-gridk"></i>Grid</span><span><i class="lg-aux"></i>Of that, backup heat</span><span class="u">kWh a day</span></div>
+        <div class="legend" style="margin-top: 14px"><span><i class="lg-gridk"></i>Grid</span><span><i class="lg-aux"></i>Of that, backup heat</span><span class="u">⌀ kWh a day</span></div>
         <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Average daily grid use at each outdoor temperature">${g}</svg>
-        <p class="sub">An average day at each outdoor temperature over the last year. Backup heat's share is estimated at ${fmt(auxKw, 1)} kW.</p></section>
+        <p class="sub">⌀ is an average day at each outdoor temperature over the last year. Backup heat's share is estimated at ${fmt(auxKw, 1)} kW.</p></section>
       <section>${rows([
         degree && ["One degree cooler in winter", `about ${dollars(Math.round(degree / 5) * 5)} a month`],
         ["Days the heat pump ran nonstop", fmt(nonstop)],
