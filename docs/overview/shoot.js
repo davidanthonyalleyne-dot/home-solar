@@ -44,7 +44,7 @@ const server = http.createServer((q, r) => {
   await shot("history", "history");
   await shot("energy", "history", async () => p.click('[data-hview="energy"]'));
   await shot("bill", "month", async () => { await lastMonth(); await p.waitForTimeout(300); const l = p.locator('[data-sheet="bill"]'); if (await l.count()) await l.first().click(); });
-  await shot("settings", "settings", async () => p.evaluate(() => { const s = [...document.querySelectorAll(".group-label")].find((x) => x.textContent === "Toronto Hydro"); if (s) s.scrollIntoView(); }));
+  await shot("settings", "settings");
   await shot("ask", "ask");
   await b.close(); server.close();
   console.log("shots saved in", out);
