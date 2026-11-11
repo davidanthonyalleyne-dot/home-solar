@@ -803,7 +803,7 @@
       if (o != null) g += svgText(cx, H - 6, `${Math.round(o)}°`.replace("-", "−"), "minor", "middle");
       g += `<rect x="${(i * bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}" class="hit" data-ym="${k}" data-go="month" role="button" aria-label="${esc(monthName(k))}: heating ${fmt(m.heat + m.aux)} hours, cooling ${fmt(m.cool)} hours"/>`;
     });
-    g += svgText(pw + 6, H - 6, "⌀ °C", "minor", "start");
+    g += svgText(pw + 6, H - 6, "⌀", "minor", "start");
     g += `<line x1="0" x2="${pw}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" class="axisline"/>`;
     // the most recent stretch where heat ran flat out and the house still fell behind its setting
     let run = [], worst = null;
@@ -851,7 +851,7 @@
       </section>
       <section><div class="legend"><span><i class="lg-heat"></i>Heating</span><span><i class="lg-aux"></i>Backup heat</span><span><i class="lg-cool"></i>Cooling</span><span class="u">hours a month</span></div>
         <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Heating and cooling hours by month, tap a month to open it">${g}</svg>
-        <p class="sub">Under each month, its average outdoor temperature. Tap a month to open it.</p></section>
+        <p class="sub">Monthly average outdoor temperatures. Tap a month to open it.</p></section>
       ${callout}${cmp}
       <section><button type="button" class="linkline big" data-cold><span>How the house handles cold</span>${chev}</button>
         <p class="sub">From your ecobee thermostat's history and your meter readings. Costs are estimates.</p></section>`;
