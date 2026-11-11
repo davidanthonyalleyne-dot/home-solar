@@ -512,8 +512,24 @@ def read_solaredge(prev):
         log("solaredge: nothing due, reusing the last data")
         return prev, False
 
+    # GitHub can take a little while to hand a just-updated secret to the next run, so the
+    # newest token is also kept (encrypted) in the repository and tried first.
+    saved = (read_private("data/solaredge_token.json") or {}).get("refresh_token") if _passphrase() else None
+    tries = [t for t in dict.fromkeys([saved, refresh]) if t]
+    tok, err = None, None
+    for i, candidate in enumerate(tries):
+        try:
+            tok = token_request({"grant_type": "refresh_token", "refresh_token": candidate})
+            if i:
+                log("solaredge: the saved token was stale, the secret's one worked")
+            break
+        except AuthError as e:
+            err = e
+            if getattr(e, "temporary", False):
+                break
     try:
-        tok = token_request({"grant_type": "refresh_token", "refresh_token": refresh})
+        if tok is None:
+            raise err
     except AuthError as e:
         # SolarEdge's own servers failing: keep the last data and retry next run, for up to 12 hours
         since = prev.get("authTroubleSince") or now.isoformat(timespec="minutes")
@@ -524,6 +540,8 @@ def read_solaredge(prev):
         return {**prev, "connected": False, "needsConnect": True, "authTroubleSince": None, "error": "SolarEdge access expired"}, False
     if tok.get("refresh_token"):
         try:
+            if _passphrase():
+                write_private("data/solaredge_token.json", {"refresh_token": tok["refresh_token"], "at": now.isoformat(timespec="seconds")})
             save_refresh_token(tok["refresh_token"])
         except Exception as e:
             log(f"::error::Couldn't save the new SolarEdge refresh token: {e}. Run Connect SolarEdge again.")
