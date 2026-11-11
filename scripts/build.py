@@ -19,6 +19,7 @@ import csv
 import datetime as dt
 import glob
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -869,6 +870,60 @@ def encrypt_private_files():
         log(f"encrypted data/hydro/{f.name}")
 
 
+# ---------- ecobee thermostat history ----------
+# ecobee's "Download data" CSV: one row every 5 minutes with set points, temperatures and
+# how many seconds the heat pump, backup (aux) heat, cooling and fan ran. Kept encrypted in
+# data/ecobee; summed here by day. Where files overlap, the later file wins.
+ECOBEE_DIR = ROOT / "data/ecobee"
+
+
+def ecobee_days(text):
+    import csv
+    import io
+    rows = [r for r in csv.reader(io.StringIO(text)) if r and not r[0].startswith("#")]
+    if not rows or rows[0][:2] != ["Date", "Time"]:
+        raise ValueError("not an ecobee export")
+    head = rows[0]
+    col = lambda name: head.index(name) if name in head else None
+    c = {k: col(n) for k, n in (("heat", "Heat Stage 1 (sec)"), ("heat2", "Heat Stage 2 (sec)"), ("aux", "Aux Heat 1 (sec)"), ("aux2", "Aux Heat 2 (sec)"),
+                                ("cool", "Cool Stage 1 (sec)"), ("fan", "Fan (sec)"), ("set", "Heat Set Temp (C)"), ("in", "Current Temp (C)"),
+                                ("out", "Outdoor Temp (C)"), ("hum", "Current Humidity (%RH)"))}
+    num = lambda r, k: (float(r[c[k]]) if c[k] is not None and c[k] < len(r) and r[c[k]] not in ("", None) else None)
+    acc = {}
+    for r in rows[1:]:
+        if len(r) < 3 or not re.match(r"\d{4}-\d{2}-\d{2}$", r[0]):
+            continue
+        a = acc.setdefault(r[0], {"heat": 0, "aux": 0, "cool": 0, "fan": 0, "set": [], "in": [], "out": [], "hum": []})
+        a["heat"] += (num(r, "heat") or 0) + (num(r, "heat2") or 0)
+        a["aux"] += (num(r, "aux") or 0) + (num(r, "aux2") or 0)
+        a["cool"] += num(r, "cool") or 0
+        a["fan"] += num(r, "fan") or 0
+        for k in ("set", "in", "out", "hum"):
+            v = num(r, k)
+            if v is not None and v > -100:
+                a[k].append(v)
+    avg = lambda xs: round(sum(xs) / len(xs), 1) if xs else None
+    # [heat pump h, backup heat h, cooling h, fan h, heat set °C, indoor °C, outdoor °C, humidity %]
+    return {d: [round(a["heat"] / 3600, 2), round(a["aux"] / 3600, 2), round(a["cool"] / 3600, 2), round(a["fan"] / 3600, 2),
+                avg(a["set"]), avg(a["in"]), avg(a["out"]), avg(a["hum"])] for d, a in sorted(acc.items())}
+
+
+def read_thermostat():
+    if not _passphrase() or not ECOBEE_DIR.exists():
+        return None
+    daily = {}
+    for f in sorted(ECOBEE_DIR.glob("*.enc"), key=lambda f: f.stat().st_mtime):
+        try:
+            daily.update(ecobee_days(unseal(json.loads(f.read_text())).decode("utf-8", "replace")))
+        except Exception as e:
+            log(f"::warning::{f.name} couldn't be read: {e}")
+    if not daily:
+        return None
+    ks = sorted(daily)
+    return {"from": ks[0], "to": ks[-1], "columns": ["heatPumpH", "backupHeatH", "coolH", "fanH", "heatSetC", "indoorC", "outdoorC", "humidityPct"],
+            "daily": {k: daily[k] for k in ks}}
+
+
 # ---------- phone alerts (Web Push) ----------
 # The app subscribes the phone and sends the subscription, encrypted, through data/inbox.
 # It is kept encrypted in data/push.enc. The VAPID key that signs each alert is a
@@ -1003,7 +1058,8 @@ def send_alerts(problems, solar, pem, extra=()):
                         "Your panels are probably fine. Open Solar to see what's wrong."))
     out += list(extra)
     for u in UPLOAD_RESULTS:
-        what = (f"{dt.date.fromisoformat(u['to']):%B %Y} bill" if u.get("to") else "Bill") if u.get("kind") == "bill" else "Meter file"
+        what = ((f"{dt.date.fromisoformat(u['to']):%B %Y} bill" if u.get("to") else "Bill") if u.get("kind") == "bill"
+                else "Thermostat data" if u.get("kind") == "thermostat" else "Meter file")
         body = {"added": "is in the app now.", "duplicate": "was already in the app."}.get(u.get("result"), f"wasn't added: {u.get('note', '')}")
         out.append(("files", f"file-{u['when']}-{what}", f"{what} {'added' if u.get('result') == 'added' else 'not added' if u.get('result') == 'refused' else 'already there'}", f"{what} {body}"))
     keep, changed, failed = [], False, False
@@ -1067,6 +1123,8 @@ def process_inbox():
             box = json.loads(f.read_text())
             kind = box.get("kind")
             raw = unseal(box)
+            if raw[:40].lstrip(b"\xef\xbb\xbf").startswith(b"#,Thermostat"):
+                kind = "ecobee"
             if kind == "bill":
                 with tempfile.NamedTemporaryFile(suffix=".pdf") as t:
                     t.write(raw); t.flush()
@@ -1081,6 +1139,14 @@ def process_inbox():
                     store["bills"].sort(key=lambda b: b["statement"])
                     write_private("data/bills.json", store)
                     entry.update(result="added")
+            elif kind == "ecobee":
+                days = ecobee_days(raw.decode("utf-8", "replace"))
+                if not days:
+                    raise ValueError("no readings")
+                ks = sorted(days)
+                ECOBEE_DIR.mkdir(exist_ok=True)
+                (ECOBEE_DIR / f"{ks[0]}-to-{ks[-1]}.csv.enc").write_text(json.dumps({k: box[k] for k in ("v", "kdf", "iter", "salt", "iv", "ct")}))
+                entry.update(kind="thermostat", result="added", **{"from": ks[0], "to": ks[-1]}, days=len(ks))
             elif kind == "alerts":
                 on = add_push_device(json.loads(raw))
                 entry.update(kind="alerts", result="on" if on else "off")
@@ -1097,7 +1163,7 @@ def process_inbox():
         except Exception as e:  # a wrong key, a damaged file: say so and drop it
             entry.update(result="refused", note=f"couldn't read it ({type(e).__name__})")
         print(f"inbox: {f.name}: {entry.get('result')} {entry.get('note', '')}")
-        if entry.get("kind") in ("bill", "meter") or entry.get("result") == "refused":
+        if entry.get("kind") in ("bill", "meter", "thermostat") or entry.get("result") == "refused":
             UPLOAD_RESULTS.append(entry)
         if entry.get("kind") != "alerts":
             log.append(entry)
@@ -1164,6 +1230,7 @@ def main():
         "push": {"publicKey": push_pub, "devices": [{"id": device_id(d["subscription"]), "prefs": d.get("prefs", {})} for d in push_devices()]} if push_pub else None,
         "bills": (read_private("data/bills.json") or {}).get("bills"),
         "uploads": (read_private("data/uploads.json") or [])[-10:],
+        "thermostat": read_thermostat(),
         # only ever published inside the encrypted data
         "uploadToken": (os.environ.get("UPLOAD_TOKEN") or None) if _passphrase() else None,
         "askKey": (os.environ.get("ANTHROPIC_API_KEY") or None) if _passphrase() else None,

@@ -449,6 +449,54 @@
       </div>${bar}${line}${src}</section>`;
   }
 
+  // the ecobee's history for the month: how long the heat pump and backup heat ran
+  const TH = { heat: 0, aux: 1, cool: 2, fan: 3, set: 4, inside: 5, out: 6, hum: 7 };
+  function heatingBlock(ym) {
+    const t = state.data.thermostat;
+    if (!t || !t.daily) return "";
+    const ds = Object.entries(t.daily).filter(([d]) => d.slice(0, 7) === ym);
+    if (ds.length < 3) return "";
+    const sum = (k) => ds.reduce((a, [, v]) => a + (v[TH[k]] || 0), 0);
+    const heat = sum("heat"), aux = sum("aux"), cool = sum("cool");
+    const sets = ds.map(([, v]) => v[TH.set]).filter((x) => x != null), setAvg = sets.length ? sets.reduce((a, b) => a + b, 0) / sets.length : null;
+    const outOf = (d, v) => v[TH.out] != null ? v[TH.out] : weatherDay(d) ? (weatherDay(d)[0] + weatherDay(d)[1]) / 2 : null;
+    const dd = ds.reduce((a, [d, v]) => { const o = outOf(d, v); return a + (o == null ? 0 : Math.max(0, 18 - o)); }, 0);
+    const fanAll = ds.filter(([, v]) => v[TH.fan] >= 23.5).length;
+    const W = contentWidth(), H = 150, top = 26, bot = 20, right = 44, n = daysIn(ym), pw = W - right, bw = pw / n;
+    const most = Math.max(1, ...ds.map(([, v]) => (v[TH.heat] || 0) + (v[TH.aux] || 0)));
+    const step = niceStep(most), ymax = Math.ceil(most / step) * step;
+    const Y = (v) => top + (H - top - bot) * (1 - v / ymax);
+    let g = "";
+    for (let v = step; v <= ymax + 1e-9; v += step) g += `<line x1="0" x2="${pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" class="gridline"/>` + svgText(pw + 6, Y(v) + 4, `${fmt(v)} h`, "", "start");
+    const by = Object.fromEntries(ds);
+    for (let i = 0; i < n; i++) {
+      const d = `${ym}-${String(i + 1).padStart(2, "0")}`, v = by[d];
+      if (!v) continue;
+      const x = i * bw, hp = v[TH.heat] || 0, ax = v[TH.aux] || 0;
+      if (d === state.day) g += `<rect x="${x.toFixed(1)}" y="${top - 6}" width="${bw.toFixed(1)}" height="${H - bot + 8 - top}" rx="3" class="sel"/>` + svgText(Math.min(pw - 40, Math.max(40, x + bw / 2)), 14, `${shortDay(d)}: ${fmt(hp + ax, 1)} h${v[TH.set] != null ? `, set ${fmt(v[TH.set], 1)}°` : ""}`, "strong");
+      g += `<rect x="${(x + 1).toFixed(1)}" y="${Y(hp).toFixed(1)}" width="${Math.max(1.5, bw - 2).toFixed(1)}" height="${(Y(0) - Y(hp)).toFixed(1)}" class="b-heat"/>`;
+      if (ax > 0) g += `<rect x="${(x + 1).toFixed(1)}" y="${Y(hp + ax).toFixed(1)}" width="${Math.max(1.5, bw - 2).toFixed(1)}" height="${(Y(hp) - Y(hp + ax)).toFixed(1)}" class="b-aux"/>`;
+      g += `<rect x="${x.toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}" class="hit" data-day="${d}" role="button" aria-label="${esc(dayName(d))}: heating ${fmt(hp + ax, 1)} hours"/>`;
+    }
+    [1, 8, 15, 22, 29].filter((d) => d <= n).forEach((d) => { g += svgText((d - 0.5) * bw, H - 4, d); });
+    const notes = [];
+    if (dd > 15 && heat + aux > 0) notes.push(`About <b>${fmt((heat + aux) / dd, 1)} hours</b> of heating for each degree the day averaged below 18°C.`);
+    if (aux > 0.5) notes.push(`<b class="bad">Backup heat ran ${fmt(aux, 1)} hours.</b> It uses two to three times the power of the heat pump for the same warmth.`);
+    else if (heat > 5) notes.push("No backup heat this month; the heat pump did it all.");
+    if (fanAll >= 3) notes.push(`The fan ran all day on <b>${fanAll} days</b>, which adds a few kWh a day.`);
+    if (ds.length < n && ym < torontoToday().slice(0, 7)) notes.push(`Thermostat data for ${ds.length} of ${n} days.`);
+    return `<section><div class="group-label">Heating</div>
+      <div class="trio ruled num">
+        <div><div class="label">Heat pump</div><div class="n">${fmt(heat)}</div><div class="unit">hours</div></div>
+        <div><div class="label">Backup heat</div><div class="n${aux > 0.5 ? " bad" : ""}">${fmt(aux, aux && aux < 10 ? 1 : 0)}</div><div class="unit">hours</div></div>
+        <div><div class="label">${cool > heat ? "Cooling" : "Set to"}</div><div class="n">${cool > heat ? fmt(cool) : setAvg != null ? fmt(setAvg, 1) : "–"}</div><div class="unit">${cool > heat ? "hours" : "°C on average"}</div></div>
+      </div>
+      <div class="legend" style="margin-top: 14px"><span><i class="lg-heat"></i>Heat pump</span>${aux > 0 ? `<span><i class="lg-aux"></i>Backup heat</span>` : ""}<span class="u">hours a day</span></div>
+      <svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="group" aria-label="Heating hours each day">${g}</svg>
+      ${notes.map((x) => `<p class="sub">${x}</p>`).join("")}
+      <p class="sub">From your ecobee's history.</p></section>`;
+  }
+
   function dayChart(ym) {
     const days = monthDays(ym);
     const hasHome = days.some((r) => r.home != null), hasImp = days.some((r) => r.imp != null), hasProd = days.some((r) => r.prod != null);
@@ -563,7 +611,7 @@
 
   function monthScreen() {
     if (!state.month) return `<div class="top"><div><h1>Month</h1></div></div><section class="first"><p class="lead">No data yet.</p><p class="sub">Add a Toronto Hydro export to data/hydro or connect SolarEdge.</p></section>`;
-    return monthHead() + moneyBlock(state.month) + dayChart(state.month) + facts(state.month) + ledger(state.month);
+    return monthHead() + moneyBlock(state.month) + dayChart(state.month) + facts(state.month) + heatingBlock(state.month) + ledger(state.month);
   }
 
   function daySheet(d) {
@@ -580,7 +628,15 @@
     const wd = weatherDay(r.d), sun = sunTimes(r.d), w = [];
     if (wd) { w.push([esc(wx(wd[2])), `H ${deg(wd[0])} <span class="sub">L ${deg(wd[1])}</span>`]); if (wd[3] != null) w.push(["Sunshine", `${fmt(wd[3], 1)} h`]); }
     w.push(["Sunrise and sunset", `${clock(sun.rise)} · ${clock(sun.set)}`], ["Daylight", hm(sun.set - sun.rise)]);
-    return rows(p) + `<div class="gap"></div>` + rows(w);
+    const th = state.data.thermostat && state.data.thermostat.daily && state.data.thermostat.daily[r.d], t = [];
+    if (th) {
+      t.push(["Heat pump ran", `${fmt(th[0], 1)} h`]);
+      if (th[1] > 0) t.push([`<span class="bad">Backup heat ran</span>`, `<span class="bad">${fmt(th[1], 1)} h</span>`]);
+      if (th[2] > 0) t.push(["Cooling ran", `${fmt(th[2], 1)} h`]);
+      if (th[4] != null) t.push(["Thermostat set to", `${fmt(th[4], 1)}°`]);
+      if (th[5] != null) t.push(["Inside", `${fmt(th[5], 1)}°${th[7] != null ? ` <span class="sub">${fmt(th[7])}% humidity</span>` : ""}`]);
+    }
+    return rows(p) + `<div class="gap"></div>` + rows(w) + (t.length ? `<div class="gap"></div>` + rows(t) : "");
   }
 
   // a month from before the panels: just the bill (or bills) that ended in it
@@ -786,7 +842,8 @@
     const u = (state.data.uploads || []).slice(-4).reverse();
     if (!u.length) return "";
     const line = (x) => {
-      const what = x.kind === "bill" ? (x.to ? `${monthName(x.to.slice(0, 7))} bill` : "A bill") : x.kind === "meter" ? "Meter file" : "A file";
+      const what = x.kind === "bill" ? (x.to ? `${monthName(x.to.slice(0, 7))} bill` : "A bill") : x.kind === "meter" ? "Meter file"
+        : x.kind === "thermostat" ? `Thermostat, ${x.from ? monthName(x.from.slice(0, 7), "short") : ""}${x.to && x.to.slice(0, 7) !== (x.from || "").slice(0, 7) ? ` to ${monthName(x.to.slice(0, 7), "short")}` : ""}` : "A file";
       const res = x.result === "added" ? "added" : x.result === "duplicate" ? "already in the app" : `not added${x.note ? `: ${x.note}` : ""}`;
       return [esc(what), `<span class="${x.result === "refused" ? "bad" : "sub"}">${esc(res)}</span>`];
     };
@@ -795,8 +852,8 @@
   function uploadBlock() {
     if (!state.encrypted) return `<p class="sub">Adding files from the app needs the data to be encrypted first.</p>`;
     if (!state.data.uploadToken) return `<p class="sub">To add bills and meter files from here, add an UPLOAD_TOKEN secret in GitHub: a fine-grained token with read and write access to this repository's contents only.</p>`;
-    return `<label class="btn secondary filebtn"><input type="file" id="addfile" accept=".pdf,.xlsx,.csv,application/pdf" hidden>Add a bill or meter file</label>
-      <p class="sub" id="upstatus" role="status">A Toronto Hydro bill PDF, or a usage spreadsheet from MyTorontoHydro. It's encrypted before it leaves your phone.</p>
+    return `<label class="btn secondary filebtn"><input type="file" id="addfile" accept=".pdf,.xlsx,.csv,application/pdf" hidden>Add a bill or data file</label>
+      <p class="sub" id="upstatus" role="status">A Toronto Hydro bill PDF, a usage spreadsheet from MyTorontoHydro, or your ecobee's history (the CSV from ecobee.com, Home IQ or Download data). It's encrypted before it leaves your phone.</p>
       ${uploadLog()}`;
   }
   // commits one encrypted file (JSON text) to data/inbox
@@ -887,7 +944,8 @@
   async function sendFile(file) {
     const st = document.getElementById("upstatus"), say = (t, bad) => { if (st) { st.textContent = t; st.classList.toggle("bad", !!bad); } };
     const ext = (file.name.split(".").pop() || "").toLowerCase();
-    const kind = ext === "pdf" ? "bill" : ext === "xlsx" || ext === "csv" ? "meter" : null;
+    let kind = ext === "pdf" ? "bill" : ext === "xlsx" || ext === "csv" ? "meter" : null;
+    if (ext === "csv" && (await file.slice(0, 64).text()).replace(/^\uFEFF/, "").startsWith("#,Thermostat")) kind = "ecobee";
     if (!kind) return say("That isn't a PDF bill or a spreadsheet.", true);
     if (file.size > 20 * 1024 * 1024) return say("That file is too big.", true);
     try {
@@ -895,8 +953,8 @@
       const box = await HomeSolarLock.seal(new Uint8Array(await file.arrayBuffer()));
       Object.assign(box, { kind, ext });
       say("Sending…");
-      await toInbox(JSON.stringify(box), kind, `Add a ${kind === "bill" ? "bill" : "meter file"} from the app`);
-      say(kind === "bill" ? "Sent. The bill will be in the app in a few minutes." : "Sent. The new readings will be in the app in a few minutes.");
+      await toInbox(JSON.stringify(box), kind, `Add a ${kind === "bill" ? "bill" : kind === "ecobee" ? "thermostat file" : "meter file"} from the app`);
+      say(kind === "bill" ? "Sent. The bill will be in the app in a few minutes." : kind === "ecobee" ? "Sent. The heating history will be in Month in a few minutes." : "Sent. The new readings will be in the app in a few minutes.");
     } catch (err) {
       say(err && err.message === "unlock-again" ? "Lock the app and unlock it with your passphrase once, then try again."
         : err && err.message === "locked" ? "Unlock the app first." : (err && err.message) || "That didn't work.", true);
@@ -956,6 +1014,7 @@
       <section><div class="group-label">Toronto Hydro</div>${rows([
         ["Meter data", h.length ? `${esc(shortDay(h[0]))}, ${h[0].slice(0, 4)} to ${esc(shortDay(h.at(-1)))}, ${h.at(-1).slice(0, 4)}` : "None yet"],
         bills.length && ["Bills", `${bills.length} · ${esc(monthName(bills[0].to.slice(0, 7), "short"))} to ${esc(monthName(bills.at(-1).to.slice(0, 7), "short"))}`],
+        d.thermostat && ["Thermostat", `${esc(shortDay(d.thermostat.from))}, ${d.thermostat.from.slice(0, 4)} to ${esc(shortDay(d.thermostat.to))}, ${d.thermostat.to.slice(0, 4)}`],
       ])}${uploadBlock()}</section>
       ${alertsBlock()}
       <section><div class="group-label">Security</div>${rows([
@@ -1046,15 +1105,17 @@
     for (let i = 120; i >= 0; i--) {
       const d = new Date(Date.parse(today + "T12:00:00Z") - i * 864e5).toISOString().slice(0, 10);
       const h = state.data.hydro && state.data.hydro[d], w = weatherDay(d), p = solar() && solar().daily[d];
-      if (h || p != null || w) days.push([d, h ? r2(h[0]) : null, h ? r2(h[1]) : null, p != null ? r2(p) : null, w ? w[0] : null, w ? w[1] : null]);
+      const th = state.data.thermostat && state.data.thermostat.daily[d];
+      if (h || p != null || w || th) days.push([d, h ? r2(h[0]) : null, h ? r2(h[1]) : null, p != null ? r2(p) : null, w ? w[0] : null, w ? w[1] : null,
+        ...(th ? [th[0], th[1], th[3], th[4], th[5], th[7]] : [null, null, null, null, null, null])]);
     }
     const s = solar() || {}, y = state.data.system || {};
     return JSON.stringify({
       today, place: "Toronto, Ontario", currency: "CAD",
       system: { panels: y.panels, inverter: y.inverter && y.inverter.model, inverterLimitKw: y.inverter && y.inverter.acKw, installer: y.installer, firstProduction: s.installed },
       live: { generatingNowKw: s.nowKw, todaySoFarKwh: s.today, updated: s.updated, solarThisMonthKwh: s.month, solarThisYearKwh: s.year, solarLifetimeKwh: s.lifetime },
-      notes: "Net metered on Toronto Hydro time-of-use. paid is what the household paid for electricity that month (from the bill when paidFrom is 'bill', otherwise estimated from meter readings). savedBySolar is costWithoutSolar minus paid. Meter data arrives in batches, so recent days may be missing. Bills marked beforeSolar are from before the panels were switched on, useful for before and after comparisons.",
-      months, bills, dailyColumns: ["date", "gridKwh", "sentBackKwh", "solarKwh", "highC", "lowC"], daily: days,
+      notes: "Net metered on Toronto Hydro time-of-use. paid is what the household paid for electricity that month (from the bill when paidFrom is 'bill', otherwise estimated from meter readings). savedBySolar is costWithoutSolar minus paid. Meter data arrives in batches, so recent days may be missing. Bills marked beforeSolar are from before the panels were switched on, useful for before and after comparisons. The heating columns come from the ecobee thermostat (a heat pump with electric backup heat) for days where its history was added.",
+      months, bills, dailyColumns: ["date", "gridKwh", "sentBackKwh", "solarKwh", "highC", "lowC", "heatPumpHours", "backupHeatHours", "fanHours", "heatSetC", "indoorC", "indoorHumidityPct"], daily: days,
     });
   }
   // Live weather for Ask: conditions now, the next 24 hours, and seven days ahead, with the

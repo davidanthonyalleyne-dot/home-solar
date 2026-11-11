@@ -461,3 +461,9 @@ body.locked .tabs { display: none; }
 .chatdel { width: 44px; height: 44px; flex-shrink: 0; border: 0; background: transparent; color: var(--faint); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .chatdel svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .chatdel:active { color: var(--bad); }
+/* heating (ecobee) */
+.chart .b-heat { fill: var(--grid); }
+.chart .b-aux { fill: var(--bad); }
+.legend i.lg-heat { background: var(--grid); }
+.legend i.lg-aux { background: var(--bad); }
+.trio .n.bad { color: var(--bad); }
