@@ -104,7 +104,8 @@ def check(b):
 
 if __name__ == "__main__":
     from pathlib import Path
-    earlier = json.loads((Path(__file__).resolve().parent.parent / "data/bills.json").read_text())["bills"]
+    sys.path.insert(0, str(Path(__file__).resolve().parent)); import build
+    earlier = build.read_private("data/bills.json")["bills"]  # needs SITE_PASSPHRASE once encrypted
     for f in sys.argv[1:]:
         b, problems = parse(text_of(f), earlier)
         print(json.dumps(b))

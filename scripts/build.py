@@ -815,6 +815,60 @@ def unseal(box):
 
 
 
+# ---------- private files kept in the repository ----------
+# Bills, monthly grid figures, the upload log and Toronto Hydro meter exports hold real
+# numbers, and the repository is public, so they're stored encrypted the same way as
+# everything else: data/bills.enc rather than data/bills.json, data/hydro/*.xlsx.enc.
+# A plain file found in the repository is encrypted (and removed) on the next build.
+PRIVATE_JSON = ("data/bills.json", "data/grid_monthly.json", "data/uploads.json")
+
+
+def seal(raw):
+    """Encrypt bytes into a box that unseal() (and the app's lock.js) can open."""
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    salt, iv = os.urandom(16), os.urandom(12)
+    ct = AESGCM(_key(_passphrase(), salt)).encrypt(iv, raw, None)
+    b64 = lambda b: base64.b64encode(b).decode()
+    return {"v": 1, "kdf": "PBKDF2-SHA256", "iter": KDF_ITER, "salt": b64(salt), "iv": b64(iv), "ct": b64(ct)}
+
+
+def _enc_of(path):
+    return ROOT / (path[:-5] + ".enc")
+
+
+def read_private(path, default=None):
+    enc, plain = _enc_of(path), ROOT / path
+    try:
+        if enc.exists():
+            return json.loads(unseal(json.loads(enc.read_text()))) if _passphrase() else default
+        return json.loads(plain.read_text()) if plain.exists() else default
+    except ValueError as e:
+        log(f"::warning::{path} couldn't be read: {e}")
+        return default
+
+
+def write_private(path, obj):
+    raw = json.dumps(obj, indent=1).encode()
+    if _passphrase():
+        _enc_of(path).write_text(json.dumps(seal(raw)))
+        (ROOT / path).unlink(missing_ok=True)
+    else:
+        (ROOT / path).write_bytes(raw)
+
+
+def encrypt_private_files():
+    if not _passphrase():
+        return
+    for path in PRIVATE_JSON:
+        if (ROOT / path).exists():
+            write_private(path, json.loads((ROOT / path).read_text()))
+            log(f"encrypted {path}")
+    for f in list((ROOT / "data/hydro").glob("*.xlsx")) + list((ROOT / "data/hydro").glob("*.csv")):
+        f.with_name(f.name + ".enc").write_text(json.dumps(seal(f.read_bytes())))
+        f.unlink()
+        log(f"encrypted data/hydro/{f.name}")
+
+
 # ---------- phone alerts (Web Push) ----------
 # The app subscribes the phone and sends the subscription, encrypted, through data/inbox.
 # It is kept encrypted in data/push.enc. The VAPID key that signs each alert is a
@@ -995,7 +1049,7 @@ def send_alerts(problems, solar, pem, extra=()):
 def process_inbox():
     """Files added from the app's Add file button arrive encrypted in data/inbox.
 
-    A bill PDF is read into data/bills.json (only the numbers; the PDF itself is dropped).
+    A bill PDF is read into data/bills.enc (only the numbers; the PDF itself is dropped).
     A meter export moves to data/hydro, still encrypted. Each result is logged in
     data/uploads.json for the app to show. The workflow commits these changes."""
     inbox = sorted((ROOT / "data/inbox").glob("*.json"))
@@ -1004,10 +1058,8 @@ def process_inbox():
     sys.path.insert(0, str(ROOT / "scripts"))
     import parse_bill
     import tempfile
-    log_f = ROOT / "data/uploads.json"
-    log = json.loads(log_f.read_text()) if log_f.exists() else []
-    bills_f = ROOT / "data/bills.json"
-    store = json.loads(bills_f.read_text())
+    log = read_private("data/uploads.json", [])
+    store = read_private("data/bills.json", {"bills": []})
     now = dt.datetime.now(TZ).isoformat(timespec="minutes")
     for f in inbox:
         entry = {"when": now}
@@ -1027,7 +1079,7 @@ def process_inbox():
                 else:
                     store["bills"].append(bill)
                     store["bills"].sort(key=lambda b: b["statement"])
-                    bills_f.write_text(json.dumps(store, indent=1))
+                    write_private("data/bills.json", store)
                     entry.update(result="added")
             elif kind == "alerts":
                 on = add_push_device(json.loads(raw))
@@ -1050,7 +1102,7 @@ def process_inbox():
         if entry.get("kind") != "alerts":
             log.append(entry)
         f.unlink()
-    log_f.write_text(json.dumps(log[-50:], indent=1))
+    write_private("data/uploads.json", log[-50:])
 
 
 def decrypt_data(box):
@@ -1063,8 +1115,8 @@ def decrypt_data(box):
 def _money(hydro, solar, weather):
     try:
         import money
-        return money.build_money(hydro, (solar or {}).get("daily"), HYDRO_INTERVALS, _json_file("data/bills.json", "bills"),
-                                 _json_file("data/grid_monthly.json", "months"), dt.datetime.now(TZ).date())
+        return money.build_money(hydro, (solar or {}).get("daily"), HYDRO_INTERVALS, (read_private("data/bills.json") or {}).get("bills"),
+                                 (read_private("data/grid_monthly.json") or {}).get("months"), dt.datetime.now(TZ).date())
     except Exception as e:  # costs are extra: never fail the build over them
         log(f"::warning::cost model failed: {e}")
         return None
@@ -1082,6 +1134,7 @@ def _json_file(path, key):
 # ---------- build ----------
 
 def main():
+    encrypt_private_files()
     process_inbox()
     hydro = read_hydro()
     prev = previous_data()
@@ -1109,14 +1162,14 @@ def main():
         "solar": solar,
         "weather": weather,
         "push": {"publicKey": push_pub, "devices": [{"id": device_id(d["subscription"]), "prefs": d.get("prefs", {})} for d in push_devices()]} if push_pub else None,
-        "bills": _json_file("data/bills.json", "bills"),
-        "uploads": (json.loads((ROOT / "data/uploads.json").read_text())[-10:] if (ROOT / "data/uploads.json").exists() else []),
+        "bills": (read_private("data/bills.json") or {}).get("bills"),
+        "uploads": (read_private("data/uploads.json") or [])[-10:],
         # only ever published inside the encrypted data
         "uploadToken": (os.environ.get("UPLOAD_TOKEN") or None) if _passphrase() else None,
         "askKey": (os.environ.get("ANTHROPIC_API_KEY") or None) if _passphrase() else None,
         "system": system_info(),
         "money": money_out,
-        "gridMonthly": _json_file("data/grid_monthly.json", "months"),
+        "gridMonthly": (read_private("data/grid_monthly.json") or {}).get("months"),
         "connectUrl": authorize_url() if solar and (solar.get("needsConnect") or solar.get("authTroubleSince")) else None,
         "repo": os.environ.get("GITHUB_REPOSITORY"),
     }

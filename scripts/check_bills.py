@@ -4,7 +4,8 @@ import json
 import sys
 from pathlib import Path
 
-bills = json.loads((Path(__file__).resolve().parent.parent / "data/bills.json").read_text())["bills"]
+import sys; sys.path.insert(0, str(Path(__file__).resolve().parent)); import build  # noqa: E402
+bills = build.read_private("data/bills.json")["bills"]  # needs SITE_PASSPHRASE once encrypted
 bad = 0
 for b in bills:
     buy = sum(round(k * r, 2) for k, r in b["buy"].values())
