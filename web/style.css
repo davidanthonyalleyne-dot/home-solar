@@ -656,3 +656,32 @@ body.locked main { padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
 @keyframes wx-drift { 0%, 100% { transform: translateX(-.7px) } 50% { transform: translateX(.9px) } }
 @keyframes wx-bank { 0%, 100% { opacity: .9; transform: translateX(-1px) } 50% { opacity: .25; transform: translateX(1px) } }
 @media (prefers-reduced-motion: reduce) { .wxi .wa { animation: none; } .wxi .glow { opacity: .2; } .wxi .st { opacity: 1; } .wxi .bk { opacity: .8; } }
+
+/* ---------- iPhone turned sideways (Settings, Display, Landscape layout) ---------- */
+body.land main {
+  max-width: none;
+  padding: 12px max(24px, calc(env(safe-area-inset-right) + 6px)) calc(env(safe-area-inset-bottom) + 64px) max(24px, calc(env(safe-area-inset-left) + 6px));
+}
+body.land:not(.r-now):not(.r-month) main { padding-left: max(calc(env(safe-area-inset-left) + 6px), calc((100vw - 620px) / 2)); padding-right: max(calc(env(safe-area-inset-right) + 6px), calc((100vw - 620px) / 2)); }
+body.land .tabs { padding: 5px max(40px, env(safe-area-inset-left)) calc(env(safe-area-inset-bottom) + 2px); }
+body.land .tabs a { flex-direction: row; justify-content: center; gap: 6px; font-size: 13px; min-height: 36px; }
+body.land .tabs svg { width: 22px; height: 22px; }
+body.land .askdock { bottom: calc(env(safe-area-inset-bottom) + 43px); max-width: 620px; }
+.landgrid { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 30px; align-items: start; }
+.landl .nowhead .eyebrow { flex-wrap: nowrap; white-space: nowrap; }
+.landtot .label { font-size: 12px; white-space: nowrap; }
+.landl .strip + section.first { margin-top: 10px; padding-top: 12px; }
+.landl .split { margin-top: 12px; }
+.landl .lead { font-size: 14px; }
+.landl .top { padding-top: 6px; }
+.landl h1 { font-size: 28px; }
+.landl .big { font-size: 36px; letter-spacing: -1px; }
+.landl .big small { font-size: 15px; }
+.landl .pair { margin-top: 12px; }
+.landtot { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--rule); }
+.landtot .n { font-size: 17px; }
+.landl section { padding: 14px 0; }
+.landl .strip { margin-top: 10px; }
+.landr section { border-top: 0; padding-top: 4px; }
+.landr > .chart, .landr > svg { margin-top: 0; }
+body.land .askspacer { height: 90px; }

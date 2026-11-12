@@ -28,7 +28,16 @@
   const WIDE = matchMedia("(min-width: 1000px)");
   const wide = () => WIDE.matches;
   const NOW_SIDE = 340, NOW_GAP = 44;
+  // iPhone turned sideways: Now and Month split into two columns (Settings can turn this off)
+  const LAND = matchMedia("(orientation: landscape) and (max-height: 500px)");
+  const land = () => LAND.matches && !wide() && lsGet("landscape") !== false;
+  let landCol = false;  // true while drawing the chart that sits in the right-hand column
+  const LAND_LEFT = 280, LAND_GAP = 30;
   const contentWidth = () => {
+    if (land()) {
+      const cs = getComputedStyle(view), inner = view.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      return Math.round(landCol ? inner - LAND_LEFT - LAND_GAP : Math.min(620, inner));
+    }
     if (!wide()) return Math.max(280, Math.min(560, document.documentElement.clientWidth || innerWidth) - 40);
     const cs = getComputedStyle(view), inner = view.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     return Math.round(document.body.classList.contains("r-now") ? inner - NOW_SIDE - NOW_GAP : Math.min(720, inner));
@@ -437,6 +446,20 @@
     if (t) wrows.push([`<span class="wxrow">${wxIcon(t[3], 1)}Tomorrow, ${esc(wx(t[3]).toLowerCase())}</span>`, `H ${deg(t[1])} <span class="sub">L ${deg(t[2])}</span>`]);
 
     const since = s.installed ? s.installed.slice(0, 4) : "install";
+    if (land()) {
+      landCol = true; const big = todayChart(s, fresh).svg; landCol = false;
+      return `<div class="landgrid"><div class="landl">${head}
+        <div class="pair">
+          <div><div class="label">Generating now</div><div class="big num ${nowKw > 0 && !offline ? "sun" : "dim"}">${nowBig}<small> kW</small></div><div class="sub">${esc(nowNote)}</div></div>
+          <div><div class="label">So far today</div><div class="big num${offline ? " dim" : ""}">${todayBig}<small> ${smallDay && !(offline && !fresh) ? "Wh" : "kWh"}</small></div>${todayNote ? `<div class="sub">${todayNote}</div>` : ""}</div>
+        </div>
+        <div class="trio ruled num landtot">
+          <div><div class="label">This month</div><div class="n">${kwh(s.month)}</div></div>
+          <div><div class="label">This year</div><div class="n">${fmt(s.year)}</div></div>
+          <div><div class="label">Since ${esc(since)}</div><div class="n">${fmt(s.lifetime)}</div></div>
+        </div></div>
+        <div class="landr">${big}</div></div>`;
+    }
     if (wide()) return `${head}<div class="nowgrid"><div class="nowmain">
       <section class="first nowtop">
         <div class="pair">
@@ -689,6 +712,10 @@
 
   function monthScreen() {
     if (!state.month) return `<div class="top"><div><h1>Month</h1></div></div><section class="first"><p class="lead">No data yet.</p><p class="sub">Add a Toronto Hydro export to data/hydro or connect SolarEdge.</p></section>`;
+    if (land()) {
+      landCol = true; const chart = dayChart(state.month); landCol = false;
+      return `<div class="landgrid"><div class="landl">${monthHead()}${moneyBlock(state.month)}</div><div class="landr">${chart}</div></div>` + facts(state.month) + heatingBlock(state.month) + ledger(state.month);
+    }
     return monthHead() + moneyBlock(state.month) + dayChart(state.month) + facts(state.month) + heatingBlock(state.month) + ledger(state.month);
   }
 
@@ -1263,6 +1290,7 @@
 
   // Settings: one short page of rows, each showing its status; tap a row for its details.
   const SET_ICONS = {
+    rotate: '<rect x="3" y="7" width="18" height="10" rx="2.5"/><path d="M17.5 7V5.5a2 2 0 0 0-2-2H13M14.5 2l-1.5 1.5L14.5 5"/>',
     solaredge: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4L6 18M18 6l1.4-1.4"/>',
     hydro: '<path d="M13 2.5L5 13.5h6l-1 8 8-11h-6z"/>',
     thermostat: '<path d="M14 14.6V5a2 2 0 0 0-4 0v9.6a4 4 0 1 0 4 0z"/><path d="M12 9v7"/>',
@@ -1393,6 +1421,8 @@
         ${setGroup("Data sources", setRow("solaredge", solarV) + setRow("hydro", bills.length ? `${bills.length} bills` : "No bills") + setRow("thermostat", t ? `to ${esc(shortDay(t.to))}` : "Not added"))}
         ${addFile}
         ${setGroup("Your home", (y.panels ? setRow("system", panels) : "") + (y.heating ? setRow("heating", "Heat pump") : ""))}
+        ${setGroup("Display", `<label class="srow">${setIcon("rotate")}<span class="st">Landscape layout</span><input type="checkbox" class="switch" id="landpref" ${lsGet("landscape") !== false ? "checked" : ""}></label>`,
+          "On an iPhone turned sideways, Now and Month split into two columns so everything fits without scrolling. Off keeps the upright layout.")}
         ${setGroup("App", setRow("alerts", alertsOn ? `${alertsOn} on` : "Off") + setRow("ask", d.askKey ? "Claude" : "Not set up") + setRow("security", state.encrypted ? esc(HomeSolarLock.status() === "Passphrase each time" ? "Passphrase" : HomeSolarLock.status() === "Kept unlocked on this device" ? "This device" : HomeSolarLock.status()) : "Not encrypted"))}
         <p class="sfoot center">${state.version ? `Solar ${esc(state.version)} · ` : ""}Built ${esc(timeOf(d.generated))}<br>Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a>. Sunrise and sunset are calculated for Parkdale.</p>
       </div>`;
@@ -1797,11 +1827,18 @@
     if (r !== "history") state.coldView = false;
     document.body.classList.toggle("grouped", r === "settings");
     document.body.classList.toggle("wide", wide());
+    document.body.classList.toggle("land", land());
     for (const k of Object.keys(screens)) document.body.classList.toggle("r-" + k, k === r);
     view.innerHTML = screens[r]();
     sideFoot();
     document.querySelectorAll(".tabs a").forEach((a) => { if (a.dataset.tab === r) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
-    if (r === "now" && !fitting) {
+    if (r === "now" && !fitting && land()) {
+      const tabs = document.querySelector(".tabs"), lr = view.querySelector(".landr");
+      if (lr) {
+        const next = Math.max(120, Math.min(420, innerHeight - tabs.getBoundingClientRect().height - lr.getBoundingClientRect().top - 10));
+        if (Math.abs(next - (state.nowH || 200)) > 4) { state.nowH = next; fitting = true; view.innerHTML = screens.now(); fitting = false; }
+      }
+    } else if (r === "now" && !fitting) {
       const tabs = document.querySelector(".tabs"), tb = tabs && !wide() ? tabs.getBoundingClientRect().height : 0;
       const nm = wide() && view.querySelector(".nowmain");
       const used = nm ? nm.getBoundingClientRect().bottom - view.getBoundingClientRect().top + view.scrollTop + parseFloat(getComputedStyle(view).paddingBottom)
@@ -1823,6 +1860,7 @@
     f.innerHTML = `<div class="sfst ${sys.level}"><i></i>${esc(label)}</div>${s && s.updated ? `<div class="sfup">Updated ${esc(ago(s.updated))}</div>` : ""}`;
   }
   WIDE.addEventListener("change", () => { if (state.data) render(); });
+  LAND.addEventListener("change", () => { if (state.data) render(); });
   document.getElementById("sidefoot").addEventListener("click", () => {
     const sys = state.data && systemStatus();
     if (!sys) return;
@@ -1840,6 +1878,7 @@
     if (e.target.id === "askform") { e.preventDefault(); const i = document.getElementById("askin"); askSend(i ? i.value : ""); }
   });
   view.addEventListener("change", (e) => {
+    if (e.target.id === "landpref") { lsSet("landscape", e.target.checked ? null : false); document.body.classList.toggle("land", land()); return; }
     if (e.target.id === "addfile" && e.target.files && e.target.files.length) {
       const files = [...e.target.files]; e.target.value = "";
       (async () => {
