@@ -646,7 +646,7 @@ body.locked main { padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
 .wxi .sn.d1 { animation-delay: -1s } .wxi .sn.d2 { animation-delay: -2s } .wxi .sn.d3 { animation-delay: -.5s } .wxi .sn.d4 { animation-delay: -1.5s }
 .wxi .sunc { fill: var(--sun); stroke: none; }
 .wxi .glow { fill: var(--sun); stroke: none; opacity: 0; animation: wx-glow 2.6s ease-in-out infinite; }
-.wxi .st { fill: var(--muted); stroke-width: 1; animation: wx-tw 3.2s ease-in-out infinite; }
+.wxi .st { fill: var(--muted); stroke: none; animation: wx-tw 3.2s ease-in-out infinite; }
 .wxi .st.d1 { animation-delay: -.8s } .wxi .st.d2 { animation-delay: -1.6s } .wxi .st.d3 { animation-delay: -2.4s }
 .wxi .dr { animation: wx-drift 6s ease-in-out infinite; } .wxi .dr.slow { animation-duration: 8s; }
 .wxi .bk { fill: var(--muted); stroke: none; animation: wx-bank 5s ease-in-out infinite; }
