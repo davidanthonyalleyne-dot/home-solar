@@ -1847,8 +1847,26 @@
       if (Math.abs(next - (state.nowH || 200)) > 4) { state.nowH = next; fitting = true; view.innerHTML = screens.now(); fitting = false; }
     }
     document.title = { now: "Now", month: mName(state.month || "2000-01"), history: "History", ask: "Ask", settings: "Settings" }[r] + " · Solar";
+    fitCheck();
     if (r === "ask") { askAfterRender(); warmVoice(); if (!ask.resumed) { ask.resumed = true; setTimeout(resumeCutOff, 300); } }
   }
+
+  // a page that fits on the screen shouldn't scroll or show a scroll bar
+  function fitCheck() {
+    const last = view.lastElementChild;
+    if (!last) return;
+    const tabs = document.querySelector(".tabs"), tb = wide() || !tabs ? 0 : tabs.getBoundingClientRect().height;
+    const bottom = last.getBoundingClientRect().bottom - view.getBoundingClientRect().top + view.scrollTop;
+    const fits = bottom <= view.clientHeight - tb + 1;
+    view.classList.toggle("fits", fits);
+    if (fits) view.scrollTop = 0;
+  }
+  // typing in Ask: the keyboard covers the tab bar, so the question field sits right on top of the keyboard
+  const vv = window.visualViewport;
+  const kbFit = () => { const kb = vv ? Math.max(0, innerHeight - vv.height - vv.offsetTop) : 0; document.documentElement.style.setProperty("--kb", kb + "px"); };
+  document.addEventListener("focusin", (e) => { if (e.target.id === "askin") { document.body.classList.add("typing"); kbFit(); } });
+  document.addEventListener("focusout", (e) => { if (e.target.id === "askin") { document.body.classList.remove("typing"); document.documentElement.style.setProperty("--kb", "0px"); } });
+  if (vv) { vv.addEventListener("resize", () => { if (document.body.classList.contains("typing")) kbFit(); }); vv.addEventListener("scroll", () => { if (document.body.classList.contains("typing")) kbFit(); }); }
 
   // the sidebar's foot: whether everything is working, and how fresh the numbers are
   function sideFoot() {
@@ -1946,7 +1964,7 @@
     const d = e.target.closest("[data-day]");
     if (d) { state.day = d.dataset.day; render(); openSheet(dayName(state.day), daySheet(state.day)); }
   });
-  view.addEventListener("toggle", (e) => { if (e.target.matches("details.acc")) state.ledgerOpen = e.target.open; }, true);
+  view.addEventListener("toggle", (e) => { if (e.target.matches("details.acc")) { state.ledgerOpen = e.target.open; fitCheck(); } }, true);
   view.addEventListener("keydown", (e) => {
     if ((e.key === "Enter" || e.key === " ") && e.target.matches("[role=button]")) { e.preventDefault(); e.target.dispatchEvent(new MouseEvent("click", { bubbles: true })); }
   });

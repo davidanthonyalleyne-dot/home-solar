@@ -685,3 +685,9 @@ body.land .askdock { bottom: calc(env(safe-area-inset-bottom) + 43px); max-width
 .landr section { border-top: 0; padding-top: 4px; }
 .landr > .chart, .landr > svg { margin-top: 0; }
 body.land .askspacer { height: 90px; }
+
+/* a page that fits doesn't scroll */
+main.fits { overflow-y: hidden; }
+/* typing in Ask: the tab bar stays at the bottom, under the keyboard; the question field rides on the keyboard */
+body.typing .tabs { display: none; }
+body.typing .askdock { bottom: var(--kb, 0px) !important; padding-bottom: 8px; }
