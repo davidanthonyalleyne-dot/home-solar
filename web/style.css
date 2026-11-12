@@ -557,3 +557,76 @@ body.locked main { padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
 .sdetails summary .schev { transition: transform .2s; }
 .sdetails[open] summary .schev { transform: rotate(90deg); }
 .serial { font-size: 14px; white-space: nowrap; letter-spacing: -0.01em; }
+
+/* ---------- iPad in landscape, and anything as wide: sidebar, wider pages, two columns on Now ---------- */
+.sidetitle, .sidefoot { display: none; }
+:root { --side: #F2F2F7; --sidesel: rgba(120, 120, 128, .14); --sidew: 280px; }
+@media (prefers-color-scheme: dark) { :root { --side: #1C1C1E; --sidesel: rgba(120, 120, 128, .26); } }
+@media (min-width: 1000px) {
+  .tabs {
+    top: 0; right: auto; width: var(--sidew);
+    flex-direction: column; justify-content: flex-start; gap: 2px;
+    padding: calc(env(safe-area-inset-top) + 26px) 14px calc(env(safe-area-inset-bottom) + 22px) max(14px, env(safe-area-inset-left));
+    background: var(--side); -webkit-backdrop-filter: none; backdrop-filter: none;
+    border-top: 0; border-right: .5px solid var(--rule);
+  }
+  .sidetitle { display: block; font-size: 30px; font-weight: 700; letter-spacing: -.5px; padding: 0 12px 16px; }
+  .tabs a { flex: 0 0 auto; flex-direction: row; justify-content: flex-start; gap: 13px; min-height: 46px; padding: 0 12px; border-radius: 11px;
+    font-size: 17px; font-weight: 400; color: var(--text); transition: background-color .15s; }
+  .tabs a svg { width: 24px; height: 24px; color: var(--muted); }
+  .tabs a[aria-current="page"] { background: var(--sidesel); color: var(--sun); font-weight: 600; }
+  .tabs a[aria-current="page"] svg { color: var(--sun); }
+  .tabs a:active { background: var(--sidesel); }
+  .sidefoot { display: block; margin-top: auto; padding: 8px 12px; border: 0; background: transparent; text-align: left; border-radius: 11px; cursor: pointer; font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .sfst { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--text); }
+  .sidefoot:active { background: var(--sidesel); }
+  .sfst i { width: 9px; height: 9px; border-radius: 5px; background: var(--ok); flex-shrink: 0; }
+  .sfst.bad i { background: var(--bad); } .sfst.warn i { background: var(--warn); } .sfst.unknown i { background: var(--faint); }
+
+  body.wide main {
+    max-width: none; margin: 0 0 0 var(--sidew);
+    padding: calc(env(safe-area-inset-top) + 28px) max(48px, calc((100vw - var(--sidew) - 720px) / 2)) calc(env(safe-area-inset-bottom) + 48px);
+  }
+  body.wide.r-now main { padding-left: max(44px, calc((100vw - var(--sidew) - 1120px) / 2)); padding-right: max(44px, calc((100vw - var(--sidew) - 1120px) / 2)); }
+  body.locked main { margin: 0 auto; }
+  .ptr { left: calc(var(--sidew) + (100vw - var(--sidew)) / 2); }
+
+  /* Now: the day on the left, the cards on the right */
+  .nowgrid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 44px; align-items: start; }
+  .nowmain .big { font-size: 60px; letter-spacing: -1.8px; }
+  .nowmain .big small { font-size: 22px; }
+  .nowmain .nowtop .pair { gap: 32px; }
+  .nowmain .nowtop .pair > div + div { border-left: 1px solid var(--rule); padding-left: 32px; }
+  .nowmain .nowgen .trio .n { font-size: 28px; }
+  .nowside { display: flex; flex-direction: column; gap: 16px; padding-top: 16px; }
+  .card { background: var(--well); border-radius: 18px; padding: 18px 20px 20px; }
+  .card .group-label { text-transform: uppercase; letter-spacing: .04em; font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+  .card .lead { margin-top: 2px; line-height: 1.45; }
+  .cardbig { font-size: 32px; font-weight: 600; letter-spacing: -.6px; line-height: 1.1; }
+  .cardbig small { font-size: 16px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+  .chart.mini { margin-top: 14px; }
+  .chart.mini .past { fill: var(--sun); }
+  .chart.mini .today { fill: var(--sun); opacity: .45; }
+  .chart.mini .future { fill: var(--rule); }
+  .fcrows { display: flex; flex-direction: column; }
+  .fc { display: grid; grid-template-columns: 44px 26px 1fr auto; align-items: center; gap: 10px; min-height: 44px; font-size: 16px; }
+  .fc + .fc { border-top: 1px solid var(--rule); }
+  .fc .wxi { width: 24px; height: 24px; }
+  .fct .sub { font-size: 15px; margin: 0; }
+  .fck { color: var(--sun); font-weight: 600; }
+  .fck small { font-size: 13px; font-weight: 500; }
+
+  /* Ask's input sits above the bottom edge now that the tab bar is gone */
+  body.wide .askdock { left: var(--sidew); max-width: 720px; bottom: 0; padding: 10px 0 calc(env(safe-area-inset-bottom) + 14px); }
+  body.wide .nowhead .statuswrap { display: none; }
+
+  /* sheets open as a card in the middle of the screen */
+  .sheet { top: 50%; bottom: auto; left: calc(var(--sidew) + (100vw - var(--sidew)) / 2); right: auto; width: 580px; max-width: calc(100vw - var(--sidew) - 64px);
+    max-height: 82vh; margin: 0; border-radius: 20px; padding: 0 28px 28px;
+    transform: translate(-50%, -47%) scale(.97); opacity: 0; transition: transform .28s cubic-bezier(.2, .9, .3, 1), opacity .2s; box-shadow: 0 30px 80px rgba(0, 0, 0, .25); }
+  .sheet header { padding-top: 20px; }
+  .sheet header::before { display: none; }
+  .sheet-wrap.open .sheet { transform: translate(-50%, -50%); opacity: 1; }
+}
+.sheetstatus { display: flex; flex-direction: column; width: auto; padding: 4px 0 8px; }
+.sheetstatus .pi span { font-size: 15px; color: var(--muted); }

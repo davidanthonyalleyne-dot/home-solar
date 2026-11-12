@@ -24,7 +24,15 @@
   const money = (n) => (n < 0 ? "−$" : "$") + Math.abs(n).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const dollars = (n) => (n < 0 ? "−$" : "$") + Math.round(Math.abs(n)).toLocaleString("en-CA");
   const chev = '<svg class="chev" viewBox="0 0 10 16" aria-hidden="true"><path d="M2 2l6 6-6 6"/></svg>';
-  const contentWidth = () => Math.max(280, Math.min(560, document.documentElement.clientWidth || innerWidth) - 40);
+  // iPad in landscape (and anything as wide): a sidebar instead of the tab bar, and room for two columns on Now
+  const WIDE = matchMedia("(min-width: 1000px)");
+  const wide = () => WIDE.matches;
+  const NOW_SIDE = 340, NOW_GAP = 44;
+  const contentWidth = () => {
+    if (!wide()) return Math.max(280, Math.min(560, document.documentElement.clientWidth || innerWidth) - 40);
+    const cs = getComputedStyle(view), inner = view.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    return Math.round(document.body.classList.contains("r-now") ? inner - NOW_SIDE - NOW_GAP : Math.min(720, inner));
+  };
 
   // ---------- data ----------
   const hydro = () => state.data.hydro || {};
@@ -344,6 +352,56 @@
     return t.toLocaleString("en-US", { month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: TZNAME }).replace(" at ", ", ").replace(" AM", " am").replace(" PM", " pm");
   }
 
+  // ---------- Now, wide: the cards down the right ----------
+  let fc = null, fcAt = 0;  // a week of forecast, with weather codes for the icons
+  function loadForecast() {
+    if (fc && Date.now() - fcAt < 30 * 60000) return;
+    fcAt = Date.now();
+    askWeather().then(() => { if (fc && route() === "now" && wide()) render(); });
+  }
+  function daysCard(t) {
+    loadForecast();
+    let rws = [];
+    if (fc) rws = fc.filter((r) => r.d > torontoToday()).slice(0, 5);
+    else if (t) rws = [{ d: t[0], code: t[3], hi: t[1], lo: t[2], kwh: null }];
+    if (!rws.length) return "";
+    return `<div class="card"><div class="group-label">Coming days</div><div class="fcrows">${rws.map((r) => `
+      <div class="fc"><span class="fcd">${esc(parseDay(r.d).toLocaleDateString("en-US", { weekday: "short" }))}</span>${wxIcon(r.code, 1)}
+        <span class="fct num">${deg(r.hi).replace("-", "−")} <span class="sub">${deg(r.lo).replace("-", "−")}</span></span><span class="fck num">${r.kwh != null ? `${fmt(r.kwh, r.kwh < 10 ? 1 : 0)}<small> kWh</small>` : ""}</span></div>`).join("")}</div>
+      ${fc ? `<p class="sub">Expected solar, from forecast sunlight and what the panels made on similar days.</p>` : ""}</div>`;
+  }
+  function monthCard(s) {
+    const ym = torontoToday().slice(0, 7), n = daysIn(ym), today = Number(torontoToday().slice(8));
+    const vals = Array.from({ length: n }, (_, i) => { const d = `${ym}-${String(i + 1).padStart(2, "0")}`; return [d, s.daily[d]]; });
+    const mx = Math.max(1, ...vals.map(([, v]) => v || 0)), W = NOW_SIDE - 40, H = 84, bw = W / n;
+    let g = "";
+    vals.forEach(([d, v], i) => {
+      const x = i * bw + 1, w = Math.max(2, bw - 2.5);
+      if (i + 1 > today) { g += `<rect x="${x.toFixed(1)}" y="${H - 3}" width="${w.toFixed(1)}" height="3" rx="1.5" class="future"/>`; return; }
+      const h = v ? Math.max(3, (H - 6) * v / mx) : 3;
+      g += `<rect x="${x.toFixed(1)}" y="${(H - h).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" class="${i + 1 === today ? "today" : "past"}"/>`;
+      g += `<rect x="${(i * bw).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${H}" class="hit" data-day="${d}" role="button" aria-label="${esc(dayName(d))}${v != null ? `: ${kwh(v)} kWh` : ""}"/>`;
+    });
+    const m = M()[ym], saved = m && m.saved != null ? m.saved : null;
+    return `<div class="card"><div class="group-label">${esc(mName(ym))} so far</div>
+      <div class="cardbig num">${kwh(s.month)}<small> kWh</small></div>
+      ${saved != null ? `<div class="sub">Saved about ${dollars(saved)}</div>` : ""}
+      <svg class="chart mini" width="${W}" height="${H + 16}" viewBox="0 0 ${W} ${H + 16}" role="group" aria-label="Solar each day this month">${g}
+        ${svgText(1, H + 14, "1", "", "start")}${svgText(W - 1, H + 14, String(n), "", "end")}</svg></div>`;
+  }
+  function heatCard() {
+    const th = state.data.thermostat && state.data.thermostat.daily;
+    if (!th) return "";
+    const last = Object.keys(th).sort().at(-1);
+    if (!last || Date.parse(torontoToday()) - Date.parse(last) > 3 * 864e5) return "";
+    const v = th[last], when = last === torontoToday() ? "today" : "on " + dayName(last);
+    const parts = [`The heat pump ran ${fmt(v[0], 1)} hours ${when}`];
+    if (v[1] > 0.1) parts.push(`backup heat ${fmt(v[1], 1)}`);
+    if (v[2] > 0.1) parts.push(`cooling ${fmt(v[2], 1)}`);
+    return `<div class="card"><div class="group-label">Heating</div>
+      <p class="lead">${v[5] != null ? `Inside ${deg(v[5])}${v[4] != null ? `, set to ${deg(v[4])}` : ""}. ` : ""}${esc(parts.join(", "))}${v[1] > 0.1 ? "" : ", no backup heat"}.</p></div>`;
+  }
+
   function nowScreen() {
     const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: TZNAME });
     const sys = systemStatus();
@@ -376,6 +434,23 @@
     if (t) wrows.push([`<span class="wxrow">${wxIcon(t[3], 1)}Tomorrow, ${esc(wx(t[3]).toLowerCase())}</span>`, `H ${deg(t[1])} <span class="sub">L ${deg(t[2])}</span>`]);
 
     const since = s.installed ? s.installed.slice(0, 4) : "install";
+    if (wide()) return `${head}<div class="nowgrid"><div class="nowmain">
+      <section class="first nowtop">
+        <div class="pair">
+          <div><div class="label">Generating now</div><div class="big num ${nowKw > 0 && !offline ? "sun" : "dim"}">${nowBig}<small> kW</small></div><div class="sub">${esc(nowNote)}</div></div>
+          <div><div class="label">So far today</div><div class="big num${offline ? " dim" : ""}">${todayBig}<small> ${smallDay && !(offline && !fresh) ? "Wh" : "kWh"}</small></div>${todayNote ? `<div class="sub">${todayNote}</div>` : ""}</div>
+        </div>
+        ${svg}
+      </section>
+      <section class="nowgen">
+        <div class="group-label">Generated by solar</div>
+        <div class="trio ruled num">
+          <div><div class="label">This month</div><div class="n">${kwh(s.month)}</div><div class="unit">kWh</div></div>
+          <div><div class="label">This year</div><div class="n">${fmt(s.year)}</div><div class="unit">kWh</div></div>
+          <div><div class="label">Since ${esc(since)}</div><div class="n">${fmt(s.lifetime)}</div><div class="unit">kWh</div></div>
+        </div>
+      </section></div>
+      <aside class="nowside">${daysCard(t)}${monthCard(s)}${heatCard()}</aside></div>`;
     return `${head}
       <section class="first nowtop">
         <div class="pair">
@@ -1442,6 +1517,8 @@
         expectedSolarNote: "expectedSolarKwh is an estimate from forecast sunlight and what the panels made on recent days with similar light. Snow on the panels would lower it.",
       };
       askWxAt = Date.now();
+      fc = d.time.map((dd, i) => ({ d: dd, code: d.weather_code[i], hi: d.temperature_2m_max[i], lo: d.temperature_2m_min[i],
+        kwh: k && d.shortwave_radiation_sum[i] != null ? k * d.shortwave_radiation_sum[i] : null }));
     } catch (_) { /* answer without it; the context says so */ }
     clearTimeout(t);
     return askWx;
@@ -1716,18 +1793,38 @@
     if (r !== "settings") { state.lastTab = r; state.setPage = null; }
     if (r !== "history") state.coldView = false;
     document.body.classList.toggle("grouped", r === "settings");
+    document.body.classList.toggle("wide", wide());
+    for (const k of Object.keys(screens)) document.body.classList.toggle("r-" + k, k === r);
     view.innerHTML = screens[r]();
+    sideFoot();
     document.querySelectorAll(".tabs a").forEach((a) => { if (a.dataset.tab === r) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
     if (r === "now" && !fitting) {
-      const tabs = document.querySelector(".tabs"), tb = tabs ? tabs.getBoundingClientRect().height : 0;
-      const used = view.scrollHeight - parseFloat(getComputedStyle(view).paddingBottom) + tb + 8;
-      const next = Math.max(130, Math.min(340, (state.nowH || 200) + innerHeight - used));
+      const tabs = document.querySelector(".tabs"), tb = tabs && !wide() ? tabs.getBoundingClientRect().height : 0;
+      const nm = wide() && view.querySelector(".nowmain");
+      const used = nm ? nm.getBoundingClientRect().bottom - view.getBoundingClientRect().top + view.scrollTop + parseFloat(getComputedStyle(view).paddingBottom)
+        : view.scrollHeight - parseFloat(getComputedStyle(view).paddingBottom) + tb + 8;
+      const next = Math.max(130, Math.min(wide() ? 460 : 340, (state.nowH || 200) + innerHeight - used));
       if (Math.abs(next - (state.nowH || 200)) > 4) { state.nowH = next; fitting = true; view.innerHTML = screens.now(); fitting = false; }
     }
     document.title = { now: "Now", month: mName(state.month || "2000-01"), history: "History", ask: "Ask", settings: "Settings" }[r] + " · Solar";
     if (r === "ask") { askAfterRender(); warmVoice(); if (!ask.resumed) { ask.resumed = true; setTimeout(resumeCutOff, 300); } }
   }
 
+  // the sidebar's foot: whether everything is working, and how fresh the numbers are
+  function sideFoot() {
+    const f = document.getElementById("sidefoot");
+    if (!f) return;
+    const sys = wide() && state.data && systemStatus(), s = state.data && solar();
+    if (!sys) { f.innerHTML = ""; return; }
+    const label = sys.level === "ok" ? "All working" : sys.level === "unknown" ? "Not checked yet" : sys.items.find((x) => x.level === sys.level).title;
+    f.innerHTML = `<div class="sfst ${sys.level}"><i></i>${esc(label)}</div>${s && s.updated ? `<div class="sfup">Updated ${esc(ago(s.updated))}</div>` : ""}`;
+  }
+  WIDE.addEventListener("change", () => { if (state.data) render(); });
+  document.getElementById("sidefoot").addEventListener("click", () => {
+    const sys = state.data && systemStatus();
+    if (!sys) return;
+    openSheet("System", `<div class="status-pop sheetstatus">${sys.items.map((x) => `<div class="pi ${x.level}"><i></i><div><b>${esc(x.title)}</b>${x.note ? `<span>${x.note}</span>` : ""}</div></div>`).join("")}${sys.connect ? connectBtn() : ""}</div>`);
+  });
   document.querySelector(".tabs").addEventListener("click", (e) => {
     const t = e.target.closest("a[data-tab]");
     if (t && t.dataset.tab === route()) {
