@@ -1425,6 +1425,7 @@
           "On an iPhone turned sideways, Now and Month split into two columns so everything fits without scrolling. Off keeps the upright layout.")}
         ${setGroup("App", setRow("alerts", alertsOn ? `${alertsOn} on` : "Off") + setRow("ask", d.askKey ? "Claude" : "Not set up") + setRow("security", state.encrypted ? esc(HomeSolarLock.status() === "Passphrase each time" ? "Passphrase" : HomeSolarLock.status() === "Kept unlocked on this device" ? "This device" : HomeSolarLock.status()) : "Not encrypted"))}
         <p class="sfoot center">${state.version ? `Solar ${esc(state.version)} · ` : ""}Built ${esc(timeOf(d.generated))}<br>Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a>. Sunrise and sunset are calculated for Parkdale.</p>
+        ${(() => { const e = recentErr(); return e ? `<p class="sfoot center errnote">Last problem, ${esc(timeOf(e.t))}: ${esc(e.m.split("\n")[0])}</p>` : ""; })()}
       </div>`;
   }
 
@@ -1820,7 +1821,21 @@
   function route() { const r = location.hash.slice(1) || "now"; return screens[r] ? r : OLD[r] || "now"; }
 
   let fitting = false;
+  // a screen that fails to draw shouldn't leave the app stuck: say so, keep the tabs working, and note it for Settings
+  function logErr(err) {
+    try { const l = JSON.parse(localStorage.getItem("errlog") || "[]"); l.push({ t: new Date().toISOString(), m: String((err && (err.stack || err.message)) || err).slice(0, 300) }); localStorage.setItem("errlog", JSON.stringify(l.slice(-10))); } catch (e) { /* storage off */ }
+  }
+  window.addEventListener("error", (e) => logErr(e.error || e.message));
+  window.addEventListener("unhandledrejection", (e) => logErr(e.reason));
   function render() {
+    try { renderScreen(); }
+    catch (err) {
+      logErr(err);
+      view.classList.remove("fits");
+      view.innerHTML = `<section class="first"><h1>Something went wrong</h1><p class="lead">This screen couldn't be drawn. The other tabs still work, and reopening Solar usually clears it.</p><button type="button" class="btn secondary" onclick="location.reload()">Reload</button></section>`;
+    }
+  }
+  function renderScreen() {
     const r = route();
     if (OLD[location.hash.slice(1)]) { history.replaceState(null, "", "#" + r); }
     if (r !== "settings") { state.lastTab = r; state.setPage = null; }
@@ -1865,7 +1880,18 @@
   const vv = window.visualViewport;
   const kbFit = () => { const kb = vv ? Math.max(0, innerHeight - vv.height - vv.offsetTop) : 0; document.documentElement.style.setProperty("--kb", kb + "px"); };
   document.addEventListener("focusin", (e) => { if (e.target.id === "askin") { document.body.classList.add("typing"); kbFit(); } });
-  document.addEventListener("focusout", (e) => { if (e.target.id === "askin") { document.body.classList.remove("typing"); document.documentElement.style.setProperty("--kb", "0px"); } });
+  document.addEventListener("focusout", (e) => { if (e.target.id === "askin") { document.body.classList.remove("typing"); document.documentElement.style.setProperty("--kb", "0px"); setTimeout(() => window.scrollTo(0, 0), 60); } });
+  // iOS can leave the page nudged up after the keyboard or a trip to the background, so taps on the
+  // tab bar land in the wrong place; and a half-closed sheet or a stuck "typing" state can sit over it
+  function unstick() {
+    if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0);
+    const a = document.activeElement;
+    if (!(a && a.id === "askin")) { document.body.classList.remove("typing"); document.documentElement.style.setProperty("--kb", "0px"); }
+    document.querySelectorAll(".sheet-wrap:not(.open)").forEach((el) => el.remove());
+    if (!document.querySelector(".sheet-wrap")) document.body.classList.remove("noscroll");
+  }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) unstick(); });
+  window.addEventListener("pageshow", unstick);
   if (vv) { vv.addEventListener("resize", () => { if (document.body.classList.contains("typing")) kbFit(); }); vv.addEventListener("scroll", () => { if (document.body.classList.contains("typing")) kbFit(); }); }
 
   // the sidebar's foot: whether everything is working, and how fresh the numbers are
@@ -1877,6 +1903,7 @@
     const label = sys.level === "ok" ? "All working" : sys.level === "unknown" ? "Not checked yet" : sys.items.find((x) => x.level === sys.level).title;
     f.innerHTML = `<div class="sfst ${sys.level}"><i></i>${esc(label)}</div>${s && s.updated ? `<div class="sfup">Updated ${esc(ago(s.updated))}</div>` : ""}`;
   }
+  const recentErr = () => { try { const l = JSON.parse(localStorage.getItem("errlog") || "[]"), e = l[l.length - 1]; return e && Date.now() - Date.parse(e.t) < 7 * 864e5 ? e : null; } catch (x) { return null; } };
   WIDE.addEventListener("change", () => { if (state.data) render(); });
   LAND.addEventListener("change", () => { if (state.data) render(); });
   document.getElementById("sidefoot").addEventListener("click", () => {
@@ -1886,6 +1913,13 @@
   });
   document.querySelector(".tabs").addEventListener("click", (e) => {
     const t = e.target.closest("a[data-tab]");
+    if (t && t.dataset.tab !== route()) {
+      // move ourselves rather than leaning on the link, and clear anything that could be sitting over the page
+      e.preventDefault();
+      unstick();
+      location.hash = t.dataset.tab;
+      return;
+    }
     if (t && t.dataset.tab === route()) {
       if (route() === "settings" && state.setPage) { state.setPage = null; render(); }
       else if (route() === "history" && state.coldView) { state.coldView = false; render(); }
