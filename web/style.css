@@ -697,3 +697,22 @@ main.fits { overflow-y: hidden; }
 /* typing in Ask: the tab bar stays at the bottom, under the keyboard; the question field rides on the keyboard */
 body.typing .tabs { display: none; }
 body.typing .askdock { bottom: var(--kb, 0px); padding-bottom: 8px; }
+
+/* landscape Now: the left column fills the height, top to bottom, with no scrolling */
+body.land.r-now main { display: flex; flex-direction: column; }
+body.land.r-now .landgrid { flex: 1 1 auto; min-height: 0; align-items: stretch; }
+body.land.r-now .landl { display: flex; flex-direction: column; justify-content: space-between; min-height: 0; }
+body.land.r-now .landr { display: flex; align-items: flex-end; }
+body.land.r-now .landl .big { font-size: clamp(34px, 10.5vh, 48px); white-space: nowrap; }
+body.land.r-now .landl .big small { font-size: 16px; }
+body.land.r-now .landl .pair { margin-top: 0; }
+.landwx { display: flex; justify-content: space-between; align-items: center; font-size: 16px; padding: 10px 0; border-top: 1px solid var(--rule); }
+.landwx .wxrow { display: flex; align-items: center; gap: 8px; }
+.landwx .sub { font-size: 13px; }
+body.land.r-now .landtot { margin-top: 0; }
+body.land.r-now .landtot .n { font-size: 19px; white-space: nowrap; }
+body.land.r-now .landl .pair { grid-template-columns: auto auto; justify-content: space-between; }
+.landtot .n small { font-size: 12px; color: var(--muted); font-weight: 500; }
+.landtotl { font-size: 12px; color: var(--muted); padding-top: 10px; border-top: 1px solid var(--rule); }
+body.land.r-now .landtot { border-top: 0; padding-top: 4px; }
+body.land.r-now .landtot .n { font-size: 21px; }
