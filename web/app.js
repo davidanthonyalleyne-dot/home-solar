@@ -1567,6 +1567,7 @@
   function mdLite(t) { return esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>"); }
   function askAnswer(text) {
     let chart = "", source = "";
+    text = text.replace(/```chart(?![\s\S]*?```)[\s\S]*$/, "");  // a chart cut off mid-way: leave it out
     text = text.replace(/```chart\s*([\s\S]*?)```/, (_, j) => {
       try {
         const c = JSON.parse(j), rows = (c.rows || []).slice(0, 6), ser = (c.series || []).slice(0, 2);
@@ -1639,7 +1640,7 @@
       const r = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "content-type": "application/json", "x-api-key": state.data.askKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({ model: ASK_MODEL, max_tokens: 700,
+        body: JSON.stringify({ model: ASK_MODEL, max_tokens: 1400,
           system: [{ type: "text", text: ASK_SYSTEM }, { type: "text", text: "The app's data:\n" + askContext(), cache_control: { type: "ephemeral" } },
             { type: "text", text: "Live weather:\n" + (wx ? JSON.stringify(wx) : "not available right now") + (pastChatsNote() ? "\n\n" + pastChatsNote() : "") }],
           messages: history }),
@@ -1848,17 +1849,16 @@
     sideFoot();
     document.querySelectorAll(".tabs a").forEach((a) => { if (a.dataset.tab === r) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
     if (r === "now" && !fitting && land()) {
-      const tabs = document.querySelector(".tabs"), lr = view.querySelector(".landr");
+      const lr = view.querySelector(".landr");
       if (lr) {
-        const next = Math.max(120, Math.min(420, innerHeight - tabs.getBoundingClientRect().height - lr.getBoundingClientRect().top - 10));
+        const next = Math.max(120, Math.min(420, view.getBoundingClientRect().bottom - lr.getBoundingClientRect().top - 10));
         if (Math.abs(next - (state.nowH || 200)) > 4) { state.nowH = next; fitting = true; view.innerHTML = screens.now(); fitting = false; }
       }
     } else if (r === "now" && !fitting) {
-      const tabs = document.querySelector(".tabs"), tb = tabs && !wide() ? tabs.getBoundingClientRect().height : 0;
       const nm = wide() && view.querySelector(".nowmain");
       const used = nm ? nm.getBoundingClientRect().bottom - view.getBoundingClientRect().top + view.scrollTop + parseFloat(getComputedStyle(view).paddingBottom)
-        : view.scrollHeight - parseFloat(getComputedStyle(view).paddingBottom) + tb + 8;
-      const next = Math.max(130, Math.min(wide() ? 460 : 340, (state.nowH || 200) + innerHeight - used));
+        : view.scrollHeight - parseFloat(getComputedStyle(view).paddingBottom) + 8;
+      const next = Math.max(130, Math.min(wide() ? 460 : 340, (state.nowH || 200) + view.clientHeight - used));
       if (Math.abs(next - (state.nowH || 200)) > 4) { state.nowH = next; fitting = true; view.innerHTML = screens.now(); fitting = false; }
     }
     document.title = { now: "Now", month: mName(state.month || "2000-01"), history: "History", ask: "Ask", settings: "Settings" }[r] + " · Solar";
@@ -1870,9 +1870,8 @@
   function fitCheck() {
     const last = view.lastElementChild;
     if (!last) return;
-    const tabs = document.querySelector(".tabs"), tb = wide() || !tabs ? 0 : tabs.getBoundingClientRect().height;
     const bottom = last.getBoundingClientRect().bottom - view.getBoundingClientRect().top + view.scrollTop;
-    const fits = bottom <= view.clientHeight - tb + 1;
+    const fits = bottom <= view.clientHeight + 1;
     view.classList.toggle("fits", fits);
     if (fits) view.scrollTop = 0;
   }
