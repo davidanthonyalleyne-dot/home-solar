@@ -138,17 +138,18 @@
   ];
   const wx = (code) => (WX.find(([codes]) => codes.includes(Number(code))) || [[], "—"])[1];
   const deg = (t) => `${Math.round(t)}°`;
-  // weather glyphs drawn like the tab icons: thin rounded strokes, orange only for the sun itself.
-  // Rain, drizzle, snow and lightning move a little (style.css); the cloud stays still
+  // weather glyphs drawn like the tab icons: thin grey strokes, with only the sun in orange.
+  // Each moves a little (style.css): the sun glows, clouds drift, mist thins, rain and snow fall, stars twinkle.
+  // "moon" is the clear-night icon, now just stars
   const WXI = {
-    sun: '<circle cx="12" cy="12" r="4" class="s"/><path class="s" d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>',
-    moon: '<path d="M19 14.5A7.5 7.5 0 1 1 9.5 5a6 6 0 0 0 9.5 9.5z"/>',
-    partly: '<path class="s" d="M8.5 3.5v1.5M3.5 8.5H5M5 5l1 1M12 5l-1 1"/><path class="s" d="M5.6 11.4A3.5 3.5 0 1 1 11.6 8"/><path d="M8.5 20h9a3.5 3.5 0 0 0 0-7h-.3a5 5 0 0 0-9.4 1.2A2.9 2.9 0 0 0 8.5 20z"/>',
-    cloud: '<path d="M7 19h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 12.1 3.5 3.5 0 0 0 7 19z"/>',
+    sun: '<circle class="wa glow" cx="12" cy="12" r="8"/><circle class="sunc" cx="12" cy="12" r="5.6"/>',
+    moon: '<path class="wa st d0" d="M9.5 8.68Q9.65 9.35 10.32 9.5Q9.65 9.65 9.5 10.32Q9.35 9.65 8.68 9.5Q9.35 9.35 9.5 8.68Z"/><path class="wa st d1" d="M16.5 6.08Q16.58 6.42 16.93 6.5Q16.58 6.58 16.5 6.92Q16.42 6.58 16.07 6.5Q16.42 6.42 16.5 6.08Z"/><path class="wa st d2" d="M15.5 14.95Q15.60 15.40 16.05 15.5Q15.60 15.60 15.5 16.05Q15.40 15.60 14.95 15.5Q15.40 15.40 15.5 14.95Z"/><path class="wa st d3" d="M7 16.70Q7.05 16.95 7.30 17Q7.05 17.05 7 17.30Q6.95 17.05 6.70 17Q6.95 16.95 7 16.70Z"/>',
+    partly: '<defs><mask id="wxm@" maskUnits="userSpaceOnUse" x="-4" y="-4" width="32" height="32"><rect x="-4" y="-4" width="32" height="32" fill="#fff"/><g transform="translate(2.2 2.4)"><path class="wa dr" d="M7 19h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 12.1 3.5 3.5 0 0 0 7 19z" fill="#000" stroke="#000" stroke-width="4"/></g></mask></defs><g mask="url(#wxm@)"><circle class="wa glow" cx="9" cy="9" r="6.4"/><circle class="sunc" cx="9" cy="9" r="4.6"/></g><g transform="translate(2.2 2.4)"><path class="wa dr" d="M7 19h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 12.1 3.5 3.5 0 0 0 7 19z"/></g>',
+    cloud: '<path class="wa dr slow" d="M7 19h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 12.1 3.5 3.5 0 0 0 7 19z"/>',
     rain: '<path d="M7 15h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 8.1 3.5 3.5 0 0 0 7 15z"/><path class="wa rn d0" d="M8.5 18l-1 2.5"/><path class="wa rn d1" d="M12.5 18l-1 2.5"/><path class="wa rn d2" d="M16.5 18l-1 2.5"/>',
     drizzle: '<path d="M7 15h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 8.1 3.5 3.5 0 0 0 7 15z"/><path class="wa dz d0" d="M8.5 18.5v.5"/><path class="wa dz d1" d="M12.5 18.5v.5"/><path class="wa dz d2" d="M16.5 18.5v.5"/><path class="wa dz d3" d="M10.5 21v.5"/><path class="wa dz d4" d="M14.5 21v.5"/>',
     snow: '<path d="M7 14h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 7.1 3.5 3.5 0 0 0 7 14z"/><path class="wa sn d0" d="M8.5 18h.01"/><path class="wa sn d1" d="M12.5 18h.01"/><path class="wa sn d2" d="M16.5 18h.01"/><path class="wa sn d3" d="M10.5 21h.01"/><path class="wa sn d4" d="M14.5 21h.01"/>',
-    fog: '<path d="M4 9h16M3 13h18M6 17h12"/>',
+    fog: '<defs><filter id="wxf@" x="-20%" y="-60%" width="140%" height="220%"><feGaussianBlur stdDeviation=".6"/></filter></defs><g filter="url(#wxf@)"><rect class="wa bk" x="3" y="6.5" width="15" height="2.6" rx="1.3"/><rect class="wa bk d1" x="6" y="11.2" width="15" height="2.6" rx="1.3"/><rect class="wa bk d2" x="4" y="15.9" width="13" height="2.6" rx="1.3"/></g>',
     storm: '<path d="M7 14h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 7.1 3.5 3.5 0 0 0 7 14z"/><path class="wa bolt" d="M12.5 15l-2 3.5h3l-2 3.5"/>',
   };
   function wxKind(code, isDay) {
@@ -157,7 +158,8 @@
       : [71, 73, 75, 77, 85, 86].includes(c) ? "snow" : [95, 96, 99].includes(c) ? "storm" : [61, 63, 65, 66, 67, 80, 81, 82].includes(c) ? "rain" : "cloud";
     return !isDay && k === "sun" ? "moon" : !isDay && k === "partly" ? "cloud" : k;
   }
-  const wxIcon = (code, isDay) => `<svg class="wxi" viewBox="0 0 24 24" aria-hidden="true">${WXI[wxKind(code, isDay)]}</svg>`;
+  let wxN = 0;  // masks and filters need ids of their own in each icon
+  const wxIcon = (code, isDay) => { const n = ++wxN; return `<svg class="wxi" viewBox="0 0 24 24" aria-hidden="true">${WXI[wxKind(code, isDay)].replace(/@/g, n)}</svg>`; };
   const weatherDay = (d) => (state.data.weather && state.data.weather.daily && state.data.weather.daily[d]) || null;
 
   // current conditions straight from Open-Meteo when the app opens, falling back to the last build

@@ -644,4 +644,15 @@ body.locked main { padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
 .wxi .rn.d1 { animation-delay: -.35s } .wxi .rn.d2 { animation-delay: -.7s }
 .wxi .dz.d1 { animation-delay: -.6s } .wxi .dz.d2 { animation-delay: -1.2s } .wxi .dz.d3 { animation-delay: -.3s } .wxi .dz.d4 { animation-delay: -.9s }
 .wxi .sn.d1 { animation-delay: -1s } .wxi .sn.d2 { animation-delay: -2s } .wxi .sn.d3 { animation-delay: -.5s } .wxi .sn.d4 { animation-delay: -1.5s }
-@media (prefers-reduced-motion: reduce) { .wxi .wa { animation: none; } }
+.wxi .sunc { fill: var(--sun); stroke: none; }
+.wxi .glow { fill: var(--sun); stroke: none; opacity: 0; animation: wx-glow 2.6s ease-in-out infinite; }
+.wxi .st { fill: var(--muted); stroke-width: 1; animation: wx-tw 3.2s ease-in-out infinite; }
+.wxi .st.d1 { animation-delay: -.8s } .wxi .st.d2 { animation-delay: -1.6s } .wxi .st.d3 { animation-delay: -2.4s }
+.wxi .dr { animation: wx-drift 6s ease-in-out infinite; } .wxi .dr.slow { animation-duration: 8s; }
+.wxi .bk { fill: var(--muted); stroke: none; animation: wx-bank 5s ease-in-out infinite; }
+.wxi .bk.d1 { animation-delay: -1.7s } .wxi .bk.d2 { animation-delay: -3.3s }
+@keyframes wx-glow { 0%, 100% { opacity: 0 } 50% { opacity: .3 } }
+@keyframes wx-tw { 0%, 100% { opacity: .2 } 50% { opacity: 1 } }
+@keyframes wx-drift { 0%, 100% { transform: translateX(-.7px) } 50% { transform: translateX(.9px) } }
+@keyframes wx-bank { 0%, 100% { opacity: .9; transform: translateX(-1px) } 50% { opacity: .25; transform: translateX(1px) } }
+@media (prefers-reduced-motion: reduce) { .wxi .wa { animation: none; } .wxi .glow { opacity: .2; } .wxi .st { opacity: 1; } .wxi .bk { opacity: .8; } }
