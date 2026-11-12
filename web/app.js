@@ -344,7 +344,10 @@
     const d = torontoToday(), sun = sunTimes(d), now = new Date(), wd = weatherDay(d);
     const daylight = now > sun.rise && now < sun.set;
     if (daylight && /FAULT|ERROR|SHUTDOWN|LOCKED/.test(mode)) items.push({ level: "bad", title: "Inverter fault", note: `The inverter reports ${esc(mode.toLowerCase().replace(/_/g, " "))}. Check its light and the SolarEdge app.` });
-    const fresh = s.todayDate === d && !s.needsConnect && !s.authTroubleSince;
+    const age = s.updated ? Date.now() - Date.parse(s.updated) : 0;
+    const fresh = s.todayDate === d && !s.needsConnect && !s.authTroubleSince && age < 75 * 60000;
+    if (!s.needsConnect && !s.authTroubleSince && age > 90 * 60000 && age < 36 * 3600000) items.push({ level: "warn", title: `Numbers are ${esc(ago(s.updated).replace(" ago", ""))} old`,
+      note: `GitHub hasn't run the hourly update since ${when(s.updated)}, so today's figures stop there. Solar has asked it to run now; fresh numbers usually follow within a few minutes. Your panels are probably fine.` });
     const snowy = wd && ((wd[5] || 0) > 0 || [71, 73, 75, 77, 85, 86].includes(wd[2]));
     if (fresh && daylight && now - sun.rise > 3 * 3600000 && (s.today || 0) < 0.05 && !snowy) items.push({ level: "bad", title: "No production today", note: `Nothing since sunrise at ${clock(sun.rise)}. Check the inverter's light and the SolarEdge app.` });
     let connect = false;
@@ -1134,6 +1137,9 @@
   // commits one encrypted file (JSON text) to data/inbox
   async function toInbox(text, kind, message) {
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:]/g, "");
+    return commitFile(`data/inbox/${stamp}-${Math.random().toString(36).slice(2, 6)}-${kind}.json`, text, message);
+  }
+  async function commitFile(path, text, message) {
     // through the Git data API, which takes files of several MB (bill PDFs often are)
     const gh = async (path, method = "GET", data) => {
       const r = await fetch(`https://api.github.com/repos/${repo()}/${path}`, {
@@ -1149,11 +1155,24 @@
       if (attempt) await new Promise((r) => setTimeout(r, 1500 * attempt));
       const head = await gh("git/ref/heads/main");
       const parent = await gh(`git/commits/${head.object.sha}`);
-      const tree = await gh("git/trees", "POST", { base_tree: parent.tree.sha, tree: [{ path: `data/inbox/${stamp}-${Math.random().toString(36).slice(2, 6)}-${kind}.json`, mode: "100644", type: "blob", sha: blob.sha }] });
+      const tree = await gh("git/trees", "POST", { base_tree: parent.tree.sha, tree: [{ path, mode: "100644", type: "blob", sha: blob.sha }] });
       const commit = await gh("git/commits", "POST", { message, tree: tree.sha, parents: [head.object.sha] });
       try { await gh("git/refs/heads/main", "PATCH", { sha: commit.sha }); break; }
       catch (err) { if (attempt >= 5) throw err; }  // someone else pushed in between: try on top of theirs
     }
+  }
+  // GitHub sometimes skips its hourly run for hours. When the numbers are over an hour old, the app
+  // asks for a fresh build itself by touching data/ping.txt (any push rebuilds). At most every 40 minutes per device.
+  let nudging = false;
+  async function maybeNudge() {
+    const s = state.data && state.data.solar, tok = state.data && state.data.uploadToken;
+    if (!s || !s.updated || !tok || nudging || document.hidden) return;
+    const hr = Number(new Date().toLocaleString("en-US", { timeZone: "America/Toronto", hour: "numeric", hour12: false }));
+    if (hr < 6 || hr >= 22 || Date.now() - Date.parse(s.updated) < 65 * 60000) return;
+    if (Date.now() - (lsGet("nudgeAt") || 0) < 40 * 60000) return;
+    nudging = true; lsSet("nudgeAt", Date.now());
+    try { await commitFile("data/ping.txt", new Date().toISOString() + "\n", "Ask for fresh numbers (the hourly run is late)"); } catch (e) { logErr(e); }
+    nudging = false;
   }
   const b64OfText = (t) => { const bytes = new TextEncoder().encode(t); let b = ""; for (let i = 0; i < bytes.length; i += 0x8000) b += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(b); };
   // ---------- phone alerts ----------
@@ -1863,6 +1882,7 @@
     }
     document.title = { now: "Now", month: mName(state.month || "2000-01"), history: "History", ask: "Ask", settings: "Settings" }[r] + " · Solar";
     fitCheck();
+    maybeNudge();
     if (r === "ask") { askAfterRender(); warmVoice(); if (!ask.resumed) { ask.resumed = true; setTimeout(resumeCutOff, 300); } }
   }
 
@@ -1889,7 +1909,7 @@
     document.querySelectorAll(".sheet-wrap:not(.open)").forEach((el) => el.remove());
     if (!document.querySelector(".sheet-wrap")) document.body.classList.remove("noscroll");
   }
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) unstick(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { unstick(); maybeNudge(); } });
   window.addEventListener("pageshow", unstick);
   if (vv) { vv.addEventListener("resize", () => { if (document.body.classList.contains("typing")) kbFit(); }); vv.addEventListener("scroll", () => { if (document.body.classList.contains("typing")) kbFit(); }); }
 
