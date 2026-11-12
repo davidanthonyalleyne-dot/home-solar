@@ -1032,7 +1032,7 @@
     // through the Git data API, which takes files of several MB (bill PDFs often are)
     const gh = async (path, method = "GET", data) => {
       const r = await fetch(`https://api.github.com/repos/${repo()}/${path}`, {
-        method, headers: { Authorization: `Bearer ${state.data.uploadToken}`, Accept: "application/vnd.github+json", ...(data ? { "Content-Type": "application/json" } : {}) },
+        method, cache: "no-store", headers: { Authorization: `Bearer ${state.data.uploadToken}`, Accept: "application/vnd.github+json", ...(data ? { "Content-Type": "application/json" } : {}) },
         body: data ? JSON.stringify(data) : undefined,
       });
       if (!r.ok) throw new Error(r.status === 401 || r.status === 403 || r.status === 404 ? "GitHub refused the upload token." : `GitHub said ${r.status}.`);
@@ -1040,12 +1040,14 @@
     };
     const blob = await gh("git/blobs", "POST", { content: b64OfText(text), encoding: "base64" });
     for (let attempt = 0; ; attempt++) {
+      // GitHub can hand back the old tip for a few seconds after a commit, so wait a little longer each time
+      if (attempt) await new Promise((r) => setTimeout(r, 1500 * attempt));
       const head = await gh("git/ref/heads/main");
       const parent = await gh(`git/commits/${head.object.sha}`);
       const tree = await gh("git/trees", "POST", { base_tree: parent.tree.sha, tree: [{ path: `data/inbox/${stamp}-${Math.random().toString(36).slice(2, 6)}-${kind}.json`, mode: "100644", type: "blob", sha: blob.sha }] });
       const commit = await gh("git/commits", "POST", { message, tree: tree.sha, parents: [head.object.sha] });
       try { await gh("git/refs/heads/main", "PATCH", { sha: commit.sha }); break; }
-      catch (err) { if (attempt >= 2) throw err; }  // someone else pushed in between: try on top of theirs
+      catch (err) { if (attempt >= 5) throw err; }  // someone else pushed in between: try on top of theirs
     }
   }
   const b64OfText = (t) => { const bytes = new TextEncoder().encode(t); let b = ""; for (let i = 0; i < bytes.length; i += 0x8000) b += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(b); };
