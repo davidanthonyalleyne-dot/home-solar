@@ -630,3 +630,18 @@ body.locked main { padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
 }
 .sheetstatus { display: flex; flex-direction: column; width: auto; padding: 4px 0 8px; }
 .sheetstatus .pi span { font-size: 15px; color: var(--muted); }
+
+/* weather icons: only what falls moves; the cloud stays still */
+.wxi { overflow: visible; }
+@keyframes wx-rn { 0% { transform: translate(.6px, -2px); opacity: 0 } 25% { opacity: 1 } 100% { transform: translate(-.6px, 2.4px); opacity: 0 } }
+@keyframes wx-dz { 0% { transform: translateY(-1.5px); opacity: 0 } 35% { opacity: 1 } 100% { transform: translateY(1.8px); opacity: 0 } }
+@keyframes wx-sn { 0% { transform: translate(0, -2px); opacity: 0 } 30% { opacity: 1 } 50% { transform: translate(.8px, 0) } 100% { transform: translate(-.4px, 2.6px); opacity: 0 } }
+@keyframes wx-bolt { 0%, 62%, 72%, 100% { opacity: 1 } 66%, 76% { opacity: .25 } }
+.wxi .rn { animation: wx-rn 1s linear infinite; }
+.wxi .dz { animation: wx-dz 1.8s ease-in-out infinite; }
+.wxi .sn { animation: wx-sn 3s ease-in-out infinite; }
+.wxi .bolt { animation: wx-bolt 3.2s ease-in-out infinite; }
+.wxi .rn.d1 { animation-delay: -.35s } .wxi .rn.d2 { animation-delay: -.7s }
+.wxi .dz.d1 { animation-delay: -.6s } .wxi .dz.d2 { animation-delay: -1.2s } .wxi .dz.d3 { animation-delay: -.3s } .wxi .dz.d4 { animation-delay: -.9s }
+.wxi .sn.d1 { animation-delay: -1s } .wxi .sn.d2 { animation-delay: -2s } .wxi .sn.d3 { animation-delay: -.5s } .wxi .sn.d4 { animation-delay: -1.5s }
+@media (prefers-reduced-motion: reduce) { .wxi .wa { animation: none; } }

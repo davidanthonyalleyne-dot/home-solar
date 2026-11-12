@@ -138,17 +138,18 @@
   ];
   const wx = (code) => (WX.find(([codes]) => codes.includes(Number(code))) || [[], "—"])[1];
   const deg = (t) => `${Math.round(t)}°`;
-  // weather glyphs drawn like the tab icons: thin rounded strokes, orange only for the sun itself
+  // weather glyphs drawn like the tab icons: thin rounded strokes, orange only for the sun itself.
+  // Rain, drizzle, snow and lightning move a little (style.css); the cloud stays still
   const WXI = {
     sun: '<circle cx="12" cy="12" r="4" class="s"/><path class="s" d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>',
     moon: '<path d="M19 14.5A7.5 7.5 0 1 1 9.5 5a6 6 0 0 0 9.5 9.5z"/>',
     partly: '<path class="s" d="M8.5 3.5v1.5M3.5 8.5H5M5 5l1 1M12 5l-1 1"/><path class="s" d="M5.6 11.4A3.5 3.5 0 1 1 11.6 8"/><path d="M8.5 20h9a3.5 3.5 0 0 0 0-7h-.3a5 5 0 0 0-9.4 1.2A2.9 2.9 0 0 0 8.5 20z"/>',
     cloud: '<path d="M7 19h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 12.1 3.5 3.5 0 0 0 7 19z"/>',
-    rain: '<path d="M7 15h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 8.1 3.5 3.5 0 0 0 7 15z"/><path d="M8.5 18l-1 2.5M12.5 18l-1 2.5M16.5 18l-1 2.5"/>',
-    drizzle: '<path d="M7 15h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 8.1 3.5 3.5 0 0 0 7 15z"/><path d="M8.5 18.5v.5M12.5 18.5v.5M16.5 18.5v.5M10.5 21v.5M14.5 21v.5"/>',
-    snow: '<path d="M7 14h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 7.1 3.5 3.5 0 0 0 7 14z"/><path d="M8.5 18h.01M12.5 18h.01M16.5 18h.01M10.5 21h.01M14.5 21h.01"/>',
+    rain: '<path d="M7 15h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 8.1 3.5 3.5 0 0 0 7 15z"/><path class="wa rn d0" d="M8.5 18l-1 2.5"/><path class="wa rn d1" d="M12.5 18l-1 2.5"/><path class="wa rn d2" d="M16.5 18l-1 2.5"/>',
+    drizzle: '<path d="M7 15h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 8.1 3.5 3.5 0 0 0 7 15z"/><path class="wa dz d0" d="M8.5 18.5v.5"/><path class="wa dz d1" d="M12.5 18.5v.5"/><path class="wa dz d2" d="M16.5 18.5v.5"/><path class="wa dz d3" d="M10.5 21v.5"/><path class="wa dz d4" d="M14.5 21v.5"/>',
+    snow: '<path d="M7 14h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 7.1 3.5 3.5 0 0 0 7 14z"/><path class="wa sn d0" d="M8.5 18h.01"/><path class="wa sn d1" d="M12.5 18h.01"/><path class="wa sn d2" d="M16.5 18h.01"/><path class="wa sn d3" d="M10.5 21h.01"/><path class="wa sn d4" d="M14.5 21h.01"/>',
     fog: '<path d="M4 9h16M3 13h18M6 17h12"/>',
-    storm: '<path d="M7 14h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 7.1 3.5 3.5 0 0 0 7 14z"/><path d="M12.5 15l-2 3.5h3l-2 3.5"/>',
+    storm: '<path d="M7 14h10.5a4 4 0 0 0 .4-8A6 6 0 0 0 6.4 7.1 3.5 3.5 0 0 0 7 14z"/><path class="wa bolt" d="M12.5 15l-2 3.5h3l-2 3.5"/>',
   };
   function wxKind(code, isDay) {
     const c = Number(code);
