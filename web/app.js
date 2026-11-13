@@ -1578,30 +1578,99 @@
     return askWx;
   }
 
-  const ASK_SYSTEM = `You are Sunny, the assistant inside Solar, a private app for one home in Toronto with rooftop solar. Answer the owner's questions using only the data provided. Lead with the answer, with the key figure in bold using **double asterisks**. Write two to four short, plain sentences; no headings, no bullet lists, no em dashes. Money in dollars, energy in kWh, temperatures in °C. The data includes live weather and a seven day forecast with expected solar per day; when you use it, say it's a forecast. If live weather is missing, say you couldn't get it right now. If something is estimated or missing, say so in a few words. If the data can't answer the question, say what's missing. When comparing two to six values would help, add one chart block:
+  const ASK_SYSTEM = `You are Sunny, the assistant inside Solar, a private app for one home in Toronto with rooftop solar. Answer the owner's questions using only the data provided. Lead with the answer, with the key figure in bold using **double asterisks**. Write two to four short, plain sentences; no headings, no bullet lists, no em dashes. Money in dollars, energy in kWh, temperatures in °C. The data includes live weather and a seven day forecast with expected solar per day; when you use it, say it's a forecast. If live weather is missing, say you couldn't get it right now. If something is estimated or missing, say so in a few words. If the data can't answer the question, say what's missing. Show, don't just tell: almost every answer with numbers should include a small chart, placed right after the sentence it supports. Use up to two chart blocks, each written exactly like this:
 \`\`\`chart
-{"series":["Grid","Solar"],"rows":[["Sep",1150,540],["Oct",1420,410]]}
+{"type":"bars","unit":"kWh","series":["Grid","Solar"],"rows":[["Sep",1150,540],["Oct",1420,410]]}
 \`\`\`
-(one or two series, kWh or dollars, short row labels). End with a final line that begins "From " and names the data used, like "From your October bill and meter data".`;
+Types: "bars" compares two to eight things (months, years, bills), stacked when there are two series; "columns" shows a run of days, hours or months in order (up to 31); "line" shows a trend over time (up to 31 points); "split" shows how one total divides up, with one row per part (for example where the power came from). Give "unit" as "kWh", "$", "°C", "h" or "%". Use one or two series with plain names (Solar, Grid, Heating, Backup heat, Cooling, Outdoor, Indoor, Cost, Saved), short row labels like "Oct", "Mon", "12th" or "2025", and numbers rounded sensibly. Only chart figures that are in the data. Skip the chart for yes or no answers that have no figures. End with a final line that begins "From " and names the data used, like "From your October bill and meter data".`;
 
+  // Sunny's little charts: bars, columns, a line or a split, drawn in the app's own colours
+  function seriesClass(name, i) {
+    const n = String(name).toLowerCase();
+    if (/backup|aux/.test(n)) return "c-aux";
+    if (/heat/.test(n)) return "c-heat";
+    if (/cool|ac\b/.test(n)) return "c-cool";
+    if (/solar|sun|panel|generat|saved|credit/.test(n)) return "c-sun";
+    if (/grid|bill|cost|paid|used|use/.test(n)) return "c-grid";
+    if (/indoor|inside/.test(n)) return "c-sun";
+    if (/outdoor|outside|temp/.test(n)) return "c-cool";
+    return i ? "c-sun" : "c-grid";
+  }
+  function askChart(c) {
+    const type = ["bars", "columns", "line", "split"].includes(c.type) ? c.type : "bars";
+    const ser = (c.series || []).slice(0, 2).map(String), cls = ser.map(seriesClass);
+    if (cls.length > 1 && cls[0] === cls[1]) cls[1] = cls[0] === "c-sun" ? "c-grid" : "c-sun";
+    const unit = String(c.unit || "").slice(0, 4);
+    const fmtV = (v) => v == null || isNaN(v) ? "" : unit === "$" ? dollars(v) : `${fmt(v, Math.abs(v) < 10 && v % 1 ? 1 : 0)}${unit === "%" ? "%" : unit === "°C" ? "°" : unit ? " " + unit : ""}`;
+    let rows = (c.rows || []).filter((r) => Array.isArray(r) && r.length > 1).map((r) => [String(r[0]).slice(0, 12), Number(r[1]), r[2] == null ? null : Number(r[2])]);
+    const key = ser.length > 1 || type === "split" ? `<div class="k">${(type === "split" ? rows.map((r) => r[0]) : ser).map((n, i) => `<span><i class="${type === "split" ? seriesClass(n, i) : cls[i]}"></i>${esc(n)}</span>`).join("")}</div>` : "";
+    const label = `${esc(ser.join(" and ") || "Chart")}: ${esc(rows.map((r) => `${r[0]} ${fmtV(r[1])}${r[2] != null ? ", " + fmtV(r[2]) : ""}`).join("; "))}`;
+    if (!rows.length) return "";
+    if (type === "split") {
+      rows = rows.slice(0, 4); const tot = rows.reduce((a, r) => a + Math.max(0, r[1] || 0), 0) || 1;
+      return `<div class="askchart share" role="img" aria-label="${label}"><div class="sbar">${rows.map((r, i) => `<span class="${seriesClass(r[0], i)}" style="flex:${Math.max(0, r[1] || 0)} 1 0"></span>`).join("")}</div>
+        <div class="svals">${rows.map((r) => `<span><b class="num">${fmtV(r[1])}</b> ${esc(r[0])} <span class="sub">${Math.round(100 * Math.max(0, r[1] || 0) / tot)}%</span></span>`).join("")}</div></div>`;
+    }
+    if (type === "bars") {
+      rows = rows.slice(0, 8);
+      const stacked = ser.length > 1, max = Math.max(1e-9, ...rows.map((r) => Math.max(0, r[1] || 0) + (stacked ? Math.max(0, r[2] || 0) : 0)));
+      return `<div class="askchart" role="img" aria-label="${label}">${rows.map((r) => {
+        const a = Math.max(0, r[1] || 0), b = stacked ? Math.max(0, r[2] || 0) : 0;
+        return `<div class="r"><span class="l">${esc(r[0])}</span><span class="bars"><span class="${cls[0]}" style="flex:${a} 1 0"></span>${stacked ? `<span class="${cls[1]}" style="flex:${b} 1 0"></span>` : ""}<span style="flex:${max - a - b} 1 0"></span></span><span class="v num">${fmtV(stacked ? a + b : a)}</span></div>`; }).join("")}${key}</div>`;
+    }
+    // columns and line: a small SVG
+    rows = rows.slice(0, 31);
+    const W = Math.min(contentWidth(), 520) - 28, H = 120, top = 16, bot = 20, n = rows.length;
+    const vals = rows.flatMap((r) => [r[1], ser.length > 1 ? r[2] : null]).filter((v) => v != null && !isNaN(v));
+    let lo = Math.min(0, ...vals), hi = Math.max(...vals); if (hi === lo) hi = lo + 1;
+    if (type === "line" && lo < 0 === false && Math.min(...vals) > 0 && unit !== "$" && unit !== "kWh") lo = Math.floor(Math.min(...vals) - (hi - Math.min(...vals)) * .15);
+    const Y = (v) => top + (H - top - bot) * (1 - (v - lo) / (hi - lo));
+    const fmtN = (v) => unit === "$" ? dollars(v) : fmt(v, Math.abs(v) < 10 && v % 1 ? 1 : 0) + (unit === "%" ? "%" : unit === "°C" ? "°" : "");
+    const unitTag = unit && unit !== "$" && unit !== "%" && unit !== "°C" ? `<div class="cu">${esc(unit)}</div>` : "";
+    const step = Math.max(1, Math.ceil(n / 7));
+    let g = `<line x1="0" x2="${W}" y1="${Y(lo).toFixed(1)}" y2="${Y(lo).toFixed(1)}" class="axis"/>`;
+    if (lo < 0) g += `<line x1="0" x2="${W}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" class="axis"/>`;
+    if (type === "columns") {
+      const bw = W / n, w = Math.max(2, Math.min(28, bw * (ser.length > 1 ? .4 : .7)));
+      rows.forEach((r, i) => {
+        [r[1], ser.length > 1 ? r[2] : null].forEach((v, j) => {
+          if (v == null || isNaN(v)) return;
+          const x = i * bw + bw / 2 + (ser.length > 1 ? (j ? 1 : -w - 1) : -w / 2), y0 = Y(Math.max(0, lo)), y1 = Y(v);
+          g += `<rect x="${x.toFixed(1)}" y="${Math.min(y0, y1).toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(1.5, Math.abs(y0 - y1)).toFixed(1)}" rx="2" class="${cls[j]}"/>`;
+          if (n <= 8 && ser.length < 2) g += svgText(x + w / 2, Math.min(y0, y1) - 4, fmtN(v), "val");
+        });
+        if ((i % step === 0 && n - 1 - i >= step) || i === n - 1) g += svgText(i * bw + bw / 2, H - 5, r[0], "", "middle");
+      });
+    } else {
+      const X = (i) => n > 1 ? 6 + (W - 12) * i / (n - 1) : W / 2;
+      [0, 1].slice(0, Math.max(1, ser.length)).forEach((j) => {
+        const pts = rows.map((r, i) => [X(i), r[j + 1]]).filter((p) => p[1] != null && !isNaN(p[1]));
+        if (!pts.length) return;
+        g += `<path d="M${pts.map((p) => `${p[0].toFixed(1)},${Y(p[1]).toFixed(1)}`).join("L")}" class="ln ${cls[j]}"/>`;
+        const last = pts[pts.length - 1];
+        g += `<circle cx="${last[0].toFixed(1)}" cy="${Y(last[1]).toFixed(1)}" r="3.5" class="${cls[j]}"/>`;
+        if (ser.length < 2) g += svgText(last[0], Y(last[1]) - 8, fmtV(last[1]), "val", "end");
+      });
+      rows.forEach((r, i) => { if ((i % step === 0 && n - 1 - i >= step) || i === n - 1) g += svgText(X(i), H - 5, r[0], "", i === 0 ? "start" : i === n - 1 ? "end" : "middle"); });
+      g += svgText(W, top - 4, fmtV(hi), "", "end");
+    }
+    return `<div class="askchart svgc" role="img" aria-label="${label}">${type === "columns" ? unitTag : ""}<svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>${key}</div>`;
+  }
   function mdLite(t) { return esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>"); }
   function askAnswer(text) {
-    let chart = "", source = "";
+    let source = "";
+    const charts = [];
     text = text.replace(/```chart(?![\s\S]*?```)[\s\S]*$/, "");  // a chart cut off mid-way: leave it out
-    text = text.replace(/```chart\s*([\s\S]*?)```/, (_, j) => {
-      try {
-        const c = JSON.parse(j), rows = (c.rows || []).slice(0, 6), ser = (c.series || []).slice(0, 2);
-        const max = Math.max(1, ...rows.map((r) => (r[1] || 0) + (ser.length > 1 ? r[2] || 0 : 0)));
-        chart = `<div class="askchart" role="img" aria-label="${esc(ser.join(" and "))}: ${esc(rows.map((r) => r.join(" ")).join(", "))}">${rows.map((r) =>
-          `<div class="r"><span class="l">${esc(String(r[0]))}</span><span class="bars"><span class="a" style="flex:${r[1] || 0} 1 0"></span>${ser.length > 1 ? `<span class="b" style="flex:${r[2] || 0} 1 0"></span>` : ""}<span style="flex:${max - (r[1] || 0) - (ser.length > 1 ? r[2] || 0 : 0)} 1 0"></span></span></div>`).join("")}
-          <div class="k">${ser.map((n, i) => `<span><i class="${i ? "b" : "a"}"></i>${esc(n)}</span>`).join("")}</div></div>`;
-      } catch (_) {}
-      return "\n\n[[chart]]\n\n";
+    text = text.replace(/```chart\s*([\s\S]*?)```/g, (_, j) => {
+      let h = "";
+      try { h = askChart(JSON.parse(j)); } catch (_) {}
+      charts.push(h);
+      return `\n\n[[chart${charts.length - 1}]]\n\n`;
     });
     const lines = text.trim().split("\n");
     if (/^from /i.test(lines[lines.length - 1].trim())) source = lines.pop().trim();
     const paras = lines.join("\n").split(/\n\s*\n/).map((x) => x.trim()).filter(Boolean)
-      .map((x) => (x === "[[chart]]" ? chart : `<p>${mdLite(x)}</p>`)).join("");
+      .map((x) => { const m = x.match(/^\[\[chart(\d+)\]\]$/); return m ? charts[+m[1]] : `<p>${mdLite(x)}</p>`; }).join("");
     return paras + (source ? `<div class="asksrc">${esc(source)}</div>` : "");
   }
 

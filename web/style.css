@@ -421,8 +421,24 @@ body.locked .tabs { display: none; }
 .askchart .r { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .askchart .l { width: 44px; flex-shrink: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .askchart .bars { display: flex; flex-grow: 1; height: 12px; gap: 2px; }
-.askchart .a, .askchart .k i.a { background: var(--grid); border-radius: 2px; }
-.askchart .b, .askchart .k i.b { background: var(--sun); border-radius: 2px; }
+.askchart .bars > span, .askchart .k i, .askchart .sbar > span { border-radius: 2px; }
+.askchart .c-grid { background: var(--grid); } .askchart .c-sun { background: var(--sun); }
+.askchart .c-heat { background: var(--heat); } .askchart .c-aux { background: var(--aux); } .askchart .c-cool { background: var(--cool); }
+.askchart .v { flex-shrink: 0; min-width: 52px; text-align: right; font-size: 13px; }
+.askchart.svgc { padding: 12px 14px 10px; }
+.askchart.svgc svg { display: block; overflow: visible; }
+.askchart svg text { font-size: 11px; fill: var(--muted); }
+.askchart svg text.val { fill: var(--text); font-weight: 600; }
+.askchart svg .axis { stroke: var(--rule); stroke-width: 1; }
+.askchart svg rect.c-grid, .askchart svg circle.c-grid { fill: var(--grid); } .askchart svg rect.c-sun, .askchart svg circle.c-sun { fill: var(--sun); }
+.askchart svg rect.c-heat, .askchart svg circle.c-heat { fill: var(--heat); } .askchart svg rect.c-aux, .askchart svg circle.c-aux { fill: var(--aux); }
+.askchart svg rect.c-cool, .askchart svg circle.c-cool { fill: var(--cool); }
+.askchart svg .ln { fill: none; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; background: none; }
+.askchart svg .ln.c-grid { stroke: var(--grid); } .askchart svg .ln.c-sun { stroke: var(--sun); } .askchart svg .ln.c-heat { stroke: var(--heat); }
+.askchart svg .ln.c-aux { stroke: var(--aux); } .askchart svg .ln.c-cool { stroke: var(--cool); }
+.askchart.share .sbar { display: flex; gap: 2px; height: 14px; }
+.askchart .cu { font-size: 11px; color: var(--muted); margin-bottom: -6px; }
+.askchart.share .svals { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; }
 .askchart .k { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
 .askchart .k span { display: flex; align-items: center; gap: 5px; }
 .askchart .k i { width: 9px; height: 9px; display: block; }
