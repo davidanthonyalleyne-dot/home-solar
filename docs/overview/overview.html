@@ -73,7 +73,7 @@
     </div>
   </header>
 
-  <p class="intro">Solar joins two sources that never talk to each other: the <b>SolarEdge inverter</b> on the house (17 panels, 7.7 kW) and <b>Toronto Hydro's</b> meter readings and bills. It works out Ontario's net metering rules the way the bills do, so the savings are real dollars, checked against every bill on file. It has five tabs: Now, Month, History, <b>Ask</b>, for questions about your energy by typing or by voice, and Settings. It runs from the Home Screen of an iPhone or iPad.</p>
+  <p class="intro">Solar joins two sources that never talk to each other: the <b>SolarEdge inverter</b> on the house (17 panels, 7.7 kW) and <b>Toronto Hydro's</b> meter readings and bills. It works out Ontario's net metering rules the way the bills do, so the savings are real dollars, checked against every bill on file. It has five tabs: Now, Month, History, <b>Ask</b>, where Sunny, Solar's assistant, answers questions about your energy, typed or spoken, and Settings. It runs from the Home Screen of an iPhone or iPad.</p>
 
   <div class="shots" style="grid-template-columns: repeat(3, minmax(0, 1fr))">
     <figure>
@@ -101,14 +101,14 @@
     </div>
   </div>
 
-  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.7 · App 1.82</span><span>Page 1 of 3</span></span></footer>
+  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.8 · App 1.89</span><span>Page 1 of 3</span></span></footer>
 </div>
 
 <div class="page">
   <div class="cols" style="grid-template-columns: 1fr 2.75fr; column-gap: 22px; align-items: start">
     <figure>
       <img src="shots/ask.png" alt="The Ask tab">
-      <figcaption><b>Ask</b>Type or say a question. Claude answers from the app's own data and the forecast, aloud if you spoke.</figcaption>
+      <figcaption><b>Ask Sunny</b>Sunny is Solar's assistant. Type or say a question; Sunny answers from the app's own data and the forecast, aloud if you spoke.</figcaption>
     </figure>
     <figure>
       <img src="shots/ipad.png" alt="Solar on an iPad in landscape" style="border-radius: 14px">
@@ -129,7 +129,7 @@
     <section><h2>Good to know</h2><p>Meter and thermostat data come from exported files, so costs and heating trail by however long it's been since the last one.</p></section>
   </div>
 
-  <footer><span class="num">Updated November 12, 2026</span><span class="ver"><span>Document 2.7 · App 1.82</span><span>Page 2 of 3</span></span></footer>
+  <footer><span class="num">Updated November 13, 2026</span><span class="ver"><span>Document 2.8 · App 1.89</span><span>Page 2 of 3</span></span></footer>
 </div>
 
 <div class="page tech" style="gap: 12px">
@@ -141,7 +141,7 @@
     <p class="label">Sources and libraries</p>
     <table>
       <tr><th>Piece</th><th>Version</th><th>What it does</th><th>Loaded from</th><th>Licence</th></tr>
-      <tr><td>App code</td><td>App 1.82</td><td>The five tabs, charts, net metering maths, encryption and Ask (<code>app.js</code>, <code>lock.js</code>, <code>style.css</code>, <code>sw.js</code>). No framework; charts and icons are SVG drawn for the app, text in the system font</td><td>GitHub Pages, this repo's <code>web/</code></td><td>Written for the app</td></tr>
+      <tr><td>App code</td><td>App 1.89</td><td>The five tabs, charts, net metering maths, encryption and Sunny, the assistant in Ask (<code>app.js</code>, <code>lock.js</code>, <code>style.css</code>, <code>sw.js</code>). No framework; charts and icons are SVG drawn for the app, text in the system font</td><td>GitHub Pages, this repo's <code>web/</code></td><td>Written for the app</td></tr>
       <tr><td>Build job</td><td>Python 3</td><td>Fetches data, reads bills and meter files, models costs, encrypts, sends alerts (<code>scripts/build.py</code>, <code>money.py</code>, <code>parse_bill.py</code>)</td><td>GitHub Actions</td><td>Written for the app</td></tr>
       <tr><td>Transformers.js</td><td>3.5.1</td><td>Runs the speech model in the browser, with ONNX Runtime Web inside</td><td>cdn.jsdelivr.net</td><td>Apache-2.0</td></tr>
       <tr><td>Whisper tiny.en</td><td>Xenova, 8-bit</td><td>Turns a spoken question into text on the phone (about 40 MB, cached after first use)</td><td>huggingface.co</td><td>MIT</td></tr>
@@ -158,7 +158,7 @@
       <tr><td>ecobee</td><td>Heating history</td><td>No API for new developers; the Download data CSV is added from Settings and kept encrypted in <code>data/ecobee/</code></td></tr>
       <tr><td>Toronto Hydro</td><td>Bills and hourly meter readings</td><td>No API. Bill PDFs and MyTorontoHydro spreadsheets are added from Settings; kept encrypted, the PDF isn't kept</td></tr>
       <tr><td>Open-Meteo</td><td>Weather now, forecast, past weather</td><td><code>api.open-meteo.com</code> and <code>archive-api.open-meteo.com</code>, no key. Called by the build, the Now screen (a week ahead on iPad), and Ask for each question</td></tr>
-      <tr><td>Anthropic Claude API</td><td>Answers in Ask</td><td><code>api.anthropic.com/v1/messages</code>, model <code>claude-haiku-5-5</code>, called from the phone. Sends the question, recent conversation and a summary of months, bills, 120 days and the forecast. Key in the <code>ANTHROPIC_API_KEY</code> secret, carried inside the encrypted data</td></tr>
+      <tr><td>Anthropic Claude API</td><td>Sunny's answers in Ask</td><td><code>api.anthropic.com/v1/messages</code>, model <code>claude-haiku-5-5</code>, called from the phone. Sends the question, recent conversation and a summary of months, bills, 120 days and the forecast. Key in the <code>ANTHROPIC_API_KEY</code> secret, carried inside the encrypted data</td></tr>
       <tr><td>GitHub</td><td>Hosting, the hourly job, uploads</td><td>Pages serves the site, Actions runs the build hourly, and files from the phone arrive encrypted in <code>data/inbox/</code> via the Git Data API (<code>UPLOAD_TOKEN</code>)</td></tr>
       <tr><td>Web Push (Apple)</td><td>Alerts on the phone</td><td>VAPID-signed pushes from the build; subscriptions kept encrypted in <code>data/push.enc</code></td></tr>
       <tr><td>Browser features</td><td>Unlock, voice, offline</td><td>Web Crypto (PBKDF2-SHA256, AES-GCM), passkeys for Face ID unlock, microphone and Web Audio for recording, speech synthesis to read answers, a service worker, and local storage for Ask conversations</td></tr>
@@ -171,7 +171,7 @@
     <p>This document: <code>docs/overview/</code>. Make sample data with <code>fake_data.py</code>, take screenshots with <code>shoot.js</code>, print with <code>pdf.js</code>.</p>
   </section>
 
-  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.7 · App 1.82</span><span>Page 3 of 3</span></span></footer>
+  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.8 · App 1.89</span><span>Page 3 of 3</span></span></footer>
 </div>
 
 </body>
