@@ -1321,7 +1321,7 @@
     ask: '<path d="M4 5h16v11H10l-5 4v-4H4z"/>',
     security: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>',
   };
-  const SET_TITLES = { solaredge: "SolarEdge", hydro: "Toronto Hydro", thermostat: "ecobee thermostat", system: "Solar system", heating: "Heating and cooling", alerts: "Alerts", ask: "Ask", security: "Security" };
+  const SET_TITLES = { solaredge: "SolarEdge", hydro: "Toronto Hydro", thermostat: "ecobee thermostat", system: "Solar system", heating: "Heating and cooling", alerts: "Alerts", ask: "Sunny", security: "Security" };
   const setIcon = (k) => `<svg class="sicon" viewBox="0 0 24 24" aria-hidden="true">${SET_ICONS[k]}</svg>`;
   const setChev = '<svg class="schev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
   const setRow = (k, value) => `<button type="button" class="srow" data-setpage="${k}">${setIcon(k)}<span class="st">${SET_TITLES[k]}</span><span class="sv">${value}</span>${setChev}</button>`;
@@ -1412,8 +1412,8 @@
       body = alertsBlock().replace(/^\s*<section[^>]*>/, '<div class="scard pad">').replace(/<\/section>\s*$/, "</div>").replace(/<div class="group-label">Alerts<\/div>/, "");
     } else if (k === "ask") {
       const n = loadChats().length;
-      body = card(rows([["Answers by", d.askKey ? "Claude Haiku" : "Not set up"], ["Saved conversations", n ? `${fmt(n)} on this phone` : "None"], ["Voice", "Turned into text on this phone"]]))
-        + `<p class="sfoot">${d.askKey ? "Each question sends Claude a summary of the app's data and the forecast. Conversations stay on this phone." : "Add an ANTHROPIC_API_KEY secret in GitHub to turn Ask on."}</p>`
+      body = card(rows([["Powered by", d.askKey ? "Claude Haiku" : "Not set up"], ["Saved conversations", n ? `${fmt(n)} on this phone` : "None"], ["Voice", "Turned into text on this phone"]]))
+        + `<p class="sfoot">${d.askKey ? "Each question to Sunny sends Claude a summary of the app's data and the forecast. Conversations stay on this phone." : "Add an ANTHROPIC_API_KEY secret in GitHub to turn Sunny on."}</p>`
         + (n ? card(`<button type="button" class="linkline danger" data-chatclear>Delete all conversations</button>`) : "");
     } else if (k === "security") {
       body = card(rows([["Data", state.encrypted ? "Encrypted" : "Not encrypted"], state.encrypted && ["Unlock", esc(HomeSolarLock.status())]]))
@@ -1578,7 +1578,7 @@
     return askWx;
   }
 
-  const ASK_SYSTEM = `You are Ask, part of Solar, a private app for one home in Toronto with rooftop solar. Answer the owner's questions using only the data provided. Lead with the answer, with the key figure in bold using **double asterisks**. Write two to four short, plain sentences; no headings, no bullet lists, no em dashes. Money in dollars, energy in kWh, temperatures in °C. The data includes live weather and a seven day forecast with expected solar per day; when you use it, say it's a forecast. If live weather is missing, say you couldn't get it right now. If something is estimated or missing, say so in a few words. If the data can't answer the question, say what's missing. When comparing two to six values would help, add one chart block:
+  const ASK_SYSTEM = `You are Sunny, the assistant inside Solar, a private app for one home in Toronto with rooftop solar. Answer the owner's questions using only the data provided. Lead with the answer, with the key figure in bold using **double asterisks**. Write two to four short, plain sentences; no headings, no bullet lists, no em dashes. Money in dollars, energy in kWh, temperatures in °C. The data includes live weather and a seven day forecast with expected solar per day; when you use it, say it's a forecast. If live weather is missing, say you couldn't get it right now. If something is estimated or missing, say so in a few words. If the data can't answer the question, say what's missing. When comparing two to six values would help, add one chart block:
 \`\`\`chart
 {"series":["Grid","Solar"],"rows":[["Sep",1150,540],["Oct",1420,410]]}
 \`\`\`
@@ -1620,13 +1620,13 @@
     const key = state.data.askKey;
     const mic = canRecord ? `<button type="button" class="askmic${ask.listening ? " on" : ""}" id="askmic" aria-label="${ask.listening ? "Stop and ask" : "Ask out loud"}">${ask.listening ? '<span class="stop"></span>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>'}</button>` : "";
     const bar = key ? `<div class="askdock"><form class="askbar" id="askform">
-        <label class="askfield"><span class="vh">Your question</span><input id="askin" type="text" autocomplete="off" enterkeyhint="send" placeholder="${ask.msgs.length ? "Ask a follow-up" : "Ask about your energy"}" value="${esc(ask.draft)}"${ask.listening ? " disabled" : ""}></label>
+        <label class="askfield"><span class="vh">Your question</span><input id="askin" type="text" autocomplete="off" enterkeyhint="send" placeholder="${ask.msgs.length ? "Ask Sunny a follow-up" : "Ask Sunny about your energy"}" value="${esc(ask.draft)}"${ask.listening ? " disabled" : ""}></label>
         ${mic}<button type="submit" class="vh">Ask</button>
-      </form>${ask.listening ? `<div class="asklisten" role="status"><span class="wave" aria-hidden="true">${"<i></i>".repeat(9)}</span>Listening. Pause or tap to send.</div>` : `<p class="askby">Answers by Claude, from your app's data</p>`}</div><div class="askspacer"></div>` : "";
-    const head = `<div class="top"><div><div class="eyebrow">About your home's energy</div><h1>Ask</h1></div><div class="askhead">${loadChats().length ? `<button type="button" class="textbtn" id="askpast">Past</button>` : ""}${ask.msgs.length ? `<button type="button" class="textbtn" id="asknew">New</button>` : ""}</div></div>`;
+      </form>${ask.listening ? `<div class="asklisten" role="status"><span class="wave" aria-hidden="true">${"<i></i>".repeat(9)}</span>Listening. Pause or tap to send.</div>` : `<p class="askby">Sunny answers from your app's data, using Claude</p>`}</div><div class="askspacer"></div>` : "";
+    const head = `<div class="top"><div><div class="eyebrow">About your home's energy</div><h1>Ask Sunny</h1></div><div class="askhead">${loadChats().length ? `<button type="button" class="textbtn" id="askpast">Past</button>` : ""}${ask.msgs.length ? `<button type="button" class="textbtn" id="asknew">New</button>` : ""}</div></div>`;
     if (!key) return head + `<section class="first"><p>Ask needs a Claude API key. Create one in the Anthropic Console and add it to the repository as a GitHub secret named ANTHROPIC_API_KEY. It's kept inside the encrypted data, so only your unlocked app can use it.</p></section>`;
     if (!ask.msgs.length && !ask.listening) {
-      return head + `<section class="first"><p class="asklede">Ask anything about what the panels make, what you pay, and why. Answers come from the app's own data: every day of production, your meter readings and your bills.</p></section>
+      return head + `<section class="first"><p class="asklede">Sunny is Solar's assistant. Ask about what the panels make, what you pay, and why. Sunny answers from the app's own data: every day of production, your meter readings and your bills.</p></section>
         <section><div class="label">Try asking</div>${askSuggestions().map((q) => `<button type="button" class="asksug" data-askq="${esc(q)}"><span>${esc(q)}</span>${chev}</button>`).join("")}</section>
         ${loadChats().length ? `<section><div class="label">Recent</div><div class="chatlist">${loadChats().slice(0, 3).map(chatRow).join("")}</div></section>` : ""}${bar}`;
     }
@@ -1881,7 +1881,7 @@
       const next = Math.max(130, Math.min(wide() ? 460 : 340, (state.nowH || 200) + view.clientHeight - used));
       if (Math.abs(next - (state.nowH || 200)) > 4) { state.nowH = next; fitting = true; view.innerHTML = screens.now(); fitting = false; }
     }
-    document.title = { now: "Now", month: mName(state.month || "2000-01"), history: "History", ask: "Ask", settings: "Settings" }[r] + " · Solar";
+    document.title = { now: "Now", month: mName(state.month || "2000-01"), history: "History", ask: "Ask Sunny", settings: "Settings" }[r] + " · Solar";
     fitCheck();
     maybeNudge();
     if (r === "ask") { askAfterRender(); warmVoice(); if (!ask.resumed) { ask.resumed = true; setTimeout(resumeCutOff, 300); } }
