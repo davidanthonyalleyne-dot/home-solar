@@ -2053,21 +2053,30 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
     if (!sys) return;
     openSheet("System", `<div class="status-pop sheetstatus">${sys.items.map((x) => `<div class="pi ${x.level}"><i></i><div><b>${esc(x.title)}</b>${x.note ? `<span>${x.note}</span>` : ""}</div></div>`).join("")}${sys.connect ? connectBtn() : ""}</div>`);
   });
-  // a tab answers the moment a finger lifts off it, not only on the click iOS makes afterwards:
-  // after the phone turns, iOS sometimes stops sending those clicks and the tab bar seemed dead
-  let tabTouch = null;
-  document.querySelector(".tabs").addEventListener("touchstart", (e) => { const t = e.touches[0]; tabTouch = t ? { x: t.clientX, y: t.clientY } : null; }, { passive: true });
-  document.querySelector(".tabs").addEventListener("touchend", (e) => {
-    const t = e.target.closest("a[data-tab]"), c = e.changedTouches[0];
-    if (!t || !tabTouch || !c || Math.hypot(c.clientX - tabTouch.x, c.clientY - tabTouch.y) > 12) return;
-    e.preventDefault();  // no click follows, so it can't fire twice
-    crumb(`tab touch ${t.dataset.tab}`);
-    if (t.dataset.tab !== route()) {
-      const want = t.dataset.tab;
+  // Tabs switch the moment a finger touches them, the way iOS tab bars do, and the tab is found from
+  // where the finger is, not from what iOS says was touched. After the phone turns, iOS can keep using
+  // the old layout to decide what a touch hit, so touches on the tab bar went to the chart that used to
+  // be there and the tab bar seemed dead until the app was quit.
+  const tabAt = (x, y) => {
+    const tabs = document.querySelector(".tabs");
+    if (!tabs || document.body.classList.contains("locked") || document.body.classList.contains("typing") || document.querySelector(".sheet-wrap.open")) return null;
+    const r = tabs.getBoundingClientRect();
+    if (!r.height || y < r.top || y > r.bottom || x < r.left || x > r.right) return null;
+    return [...tabs.querySelectorAll("a[data-tab]")].find((a) => { const b = a.getBoundingClientRect(); return y >= b.top - 8 && y <= b.bottom + 8 && x >= b.left && x <= b.right; }) || null;
+  };
+  document.addEventListener("touchstart", (e) => {
+    const c = e.touches[0];
+    if (!c || e.touches.length > 1) return;
+    const t = tabAt(c.clientX, c.clientY);
+    if (!t) return;
+    e.preventDefault();  // no click or scroll follows, so it can't fire twice
+    const want = t.dataset.tab;
+    crumb(`tab touch ${want}${t.contains(e.target) ? "" : " (iOS sent it to " + (e.target.tagName || "?").toLowerCase() + ")"}`);
+    if (want !== route()) {
       unstick(); location.hash = want;
       setTimeout(() => { if (route() !== want) diag("tab ignored", `tapped ${want}, still on ${route()}`); }, 900);
     } else t.click();
-  });
+  }, { capture: true, passive: false });
   document.querySelector(".tabs").addEventListener("click", (e) => {
     const t = e.target.closest("a[data-tab]");
     if (t && t.dataset.tab !== route()) {
