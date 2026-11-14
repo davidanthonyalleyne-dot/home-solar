@@ -425,7 +425,7 @@
     const cw = currentWeather();
     const wxNow = cw ? `<span class="wxnow">${wxIcon(cw.code, cw.isDay ?? 1)}${deg(cw.temp)} ${esc(wx(cw.code).toLowerCase())}</span>` : "";
     const head = `<div class="top nowhead"><div><div class="eyebrow">${esc(today)}${wxNow}</div><h1>Now</h1></div>
-      <div class="topright">${dot}</div></div>`;
+      <div class="topright">${alertBell()}${dot}</div></div>`;
     const s = solar();
     if (!s) {
       return head + `<section class="first"><p class="lead">SolarEdge isn't connected yet.</p>
@@ -1190,6 +1190,13 @@
   async function deviceIdOf(endpoint) {
     const h = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(endpoint)));
     return [...h].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 12);
+  }
+  // a quiet bell on Now: whether alerts are on for this phone; tapping it opens the Alerts settings
+  function alertBell() {
+    const p = state.data.push;
+    if (!state.data.uploadToken || !p || !p.publicKey || !pushCapable()) return "";
+    const mine = lsGet("alertsDevice"), on = !!(mine && mine.prefs && Object.values(mine.prefs).some(Boolean));
+    return `<button type="button" class="alertbell${on ? "" : " off"}" data-alertbell aria-label="Alerts are ${on ? "on" : "off"} on this phone"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>${on ? "" : '<path d="M3.5 3.5l17 17"/>'}</svg></button>`;
   }
   function alertsBlock() {
     const p = state.data.push, mine = lsGet("alertsDevice");
@@ -2156,6 +2163,7 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
       if (m.dataset.go === "month" && route() !== "month") { location.hash = "#month"; return; }
       render(); return;
     }
+    if (e.target.closest("[data-alertbell]")) { state.setPage = "alerts"; location.hash = "#settings"; return; }
     if (e.target.closest("[data-back]")) { state.setPage = null; location.hash = "#" + (state.lastTab || "now"); return; }
     const sp = e.target.closest("[data-setpage]");
     if (sp) { state.setPage = sp.dataset.setpage; render(); view.scrollTop = 0; return; }

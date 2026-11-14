@@ -262,6 +262,10 @@ body.locked .tabs { display: none; }
 
 /* status dot and its popover */
 .topright { display: flex; align-items: center; gap: 6px; padding-bottom: 4px; }
+.alertbell { width: 30px; height: 36px; border: 0; background: transparent; padding: 0; display: grid; place-items: center; cursor: pointer; position: relative; }
+.alertbell::after { content: ""; position: absolute; inset: -4px 0; }
+.alertbell svg { width: 17px; height: 17px; fill: none; stroke: var(--muted); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.alertbell.off svg { stroke: var(--faint); }
 .statuswrap { position: relative; }
 .statusdot { width: 36px; height: 36px; border: 0; background: transparent; display: grid; place-items: center; cursor: pointer; padding: 0; position: relative; }
 .statusdot::after { content: ""; position: absolute; inset: -4px; }
