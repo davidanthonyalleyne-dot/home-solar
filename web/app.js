@@ -2135,7 +2135,7 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
     ptr.classList.add("spin"); ptr.style.opacity = 1; ptr.style.transform = `translateY(${PULL}px)`;
     const finish = () => { refreshing = false; ptr.classList.remove("spin", "ready"); ptr.style.opacity = 0; ptr.style.transform = ""; };
     checkVersion();
-    fetch("data.json", { cache: "no-store" })
+    fetch(`data.json?t=${Date.now()}`, { cache: "no-store" })
       .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
       .then((data) => HomeSolarLock.isEncrypted(data) ? HomeSolarLock.reopen(data).catch(() => HomeSolarLock.unlock(view, data)) : data)
       .then((data) => {
@@ -2163,7 +2163,7 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
   document.addEventListener("visibilitychange", () => { if (!document.hidden) checkVersion(); });
 
   view.innerHTML = '<p class="loading">Loading…</p>';
-  fetch("data.json", { cache: "no-store" })
+  fetch(`data.json?t=${Date.now()}`, { cache: "no-store" })
     .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then((data) => { state.encrypted = HomeSolarLock.isEncrypted(data); return state.encrypted ? HomeSolarLock.unlock(view, data) : data; })
     .then((data) => {

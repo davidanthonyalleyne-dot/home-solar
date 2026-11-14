@@ -5,7 +5,10 @@ on:
     branches: [main]
   schedule:
     # hourly; the build skips SolarEdge overnight to save API credits
-    - cron: "7,22,37,52 * * * *"   # every 15 min; GitHub often skips some, and SolarEdge is left alone overnight
+    # every 10 minutes from about sunrise to sunset all year (9:00 to 01:59 UTC), hourly overnight.
+    # The build only calls SolarEdge when its monthly credits allow (see SE_CREDITS in build.py).
+    - cron: "2,12,22,32,42,52 9-23,0,1 * * *"
+    - cron: "17 2-8 * * *"
   workflow_dispatch:
 
 permissions:

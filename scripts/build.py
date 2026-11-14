@@ -40,6 +40,10 @@ API = "https://monitoringapi.solaredge.com/v2"
 TOKEN_URL = API + "/oauth2/token"
 AUTHORIZE_URL = "https://connect.solaredge.com/authorize"
 NIGHT = (22, 5)  # scheduled runs skip SolarEdge between 10 pm and 5 am
+# SolarEdge's newer API charges a credit per request; the free plan has 2,000 a month. Live checks
+# are spread over the daylight hours so the month never runs out (SE_CREDITS overrides the allowance).
+SE_CREDITS = int(os.environ.get("SE_CREDITS") or 2000)
+SE_RESERVE = 10  # a day's worth for history, alerts and inverter readings
 
 
 def log(msg):
@@ -473,7 +477,8 @@ def read_solaredge(prev):
     """Returns (solar block, token_lost).
 
     Calls are spread out to fit the free tier (about 2,000 a month):
-      daylight, every run   today's quarter hours and live power (2)
+      daylight              today's quarter hours (1), as often as the month's credits allow
+                            (every 10 minutes at best; see SE_CREDITS)
       every 3 hours         open alerts (5 am to 11 pm), inverter readings (daylight)
       once a day            site details, daily history, lifetime, equipment, benefits (5)
       once after sunset     final quarter hours for the day (1)
@@ -499,17 +504,27 @@ def read_solaredge(prev):
         return not t or (now - dt.datetime.fromisoformat(t)) >= dt.timedelta(hours=hours, minutes=-10)
     daylight = rise - dt.timedelta(minutes=30) <= now <= sset + dt.timedelta(minutes=45)
     fresh = not prev.get("daily")
+    # how often today's numbers can be refreshed and still stay inside the month's credits
+    cr = dict(prev.get("credits") or {})
+    if cr.get("month") != today.strftime("%Y-%m"):
+        # a new month starts at zero; the first month this counter runs, assume a generous 40 a day so far
+        cr = {"month": today.strftime("%Y-%m"), "used": 0 if prev.get("credits") else 40 * (today.day - 1)}
+    days_left = (dt.date(today.year + (today.month == 12), today.month % 12 + 1, 1) - today).days
+    per_day = (SE_CREDITS - cr["used"]) / max(1, days_left) - SE_RESERVE
+    span = ((sset + dt.timedelta(minutes=45)) - (rise - dt.timedelta(minutes=30))).total_seconds() / 60
+    every = max(10, min(90, span / max(1, per_day)))
+    live_due = not fetched.get("today") or (now - dt.datetime.fromisoformat(fetched["today"])).total_seconds() / 60 >= every - 2
     need = {
         "history": fresh or "equipment" not in prev or not prev.get("backfilled")
                    or (prev.get("historyDate") != today.isoformat() and now.hour >= NIGHT[1]),
-        "today": fresh or daylight or prev.get("todayDate") != today.isoformat()
+        "today": fresh or (daylight and live_due) or prev.get("todayDate") != today.isoformat()
                  or (now > sset + dt.timedelta(minutes=45) and prev.get("finalDate") != today.isoformat()),
-        "power": daylight,
+        "power": False,  # the quarter-hour energy already gives "generating now"; saves a credit a run
         "alerts": NIGHT[1] <= now.hour < 23 and due("alerts", 3),
         "telemetry": daylight and due("telemetry", 3),
     }
     if not any(need.values()):
-        log("solaredge: nothing due, reusing the last data")
+        log(f"solaredge: nothing due (live checks every {every:.0f} min, {cr['used']} of {SE_CREDITS} credits used this month)")
         return prev, False
 
     # GitHub can take a little while to hand a just-updated secret to the next run, so the
@@ -601,6 +616,7 @@ def read_solaredge(prev):
             solar["nowKw"] = round(last[1] * 4 / 1000, 2) if last and (now - last[0]) < dt.timedelta(minutes=45) else 0
             solar["updated"] = last[0].isoformat() if last else solar.get("updated")
             solar["today"], solar["todayDate"] = today_kwh, today.isoformat()
+            fetched["today"] = stamp
             if now > sset + dt.timedelta(minutes=45):
                 solar["finalDate"] = today.isoformat()
 
@@ -651,6 +667,8 @@ def read_solaredge(prev):
         return {**(prev or {}), "error": str(e)[:200]}, False
 
     solar["fetched"] = fetched
+    cr["used"] += CALLS
+    solar["credits"], solar["liveEvery"] = cr, round(every)
     daily = solar["daily"]
     if solar.get("todayDate") == today.isoformat():
         daily[today.isoformat()] = solar["today"]
@@ -658,7 +676,7 @@ def read_solaredge(prev):
     solar["month"] = round(sum(v for k, v in daily.items() if k.startswith(ym)), 1)
     solar["year"] = round(sum(v for k, v in daily.items() if k.startswith(y)), 1)
     solar["lifetime"] = round(solar.get("lifetimeBase", 0) - solar.get("lifetimeBaseToday", 0) + daily.get(today.isoformat(), 0), 1)
-    log(f"solaredge: {CALLS} API calls ({', '.join(k for k, v in need.items() if v)})")
+    log(f"solaredge: {CALLS} API calls ({', '.join(k for k, v in need.items() if v)}); {cr['used']} of {SE_CREDITS} credits this month, live every {every:.0f} min")
     return solar, False
 
 
