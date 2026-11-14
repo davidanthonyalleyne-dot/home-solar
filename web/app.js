@@ -1942,6 +1942,9 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
       if (lr) {
         const next = Math.max(120, Math.min(420, view.getBoundingClientRect().bottom - lr.getBoundingClientRect().top - 10));
         if (Math.abs(next - (state.nowH || 200)) > 4) { state.nowH = next; fitting = true; view.innerHTML = screens.now(); fitting = false; }
+        // anything still spilling past the bottom (the moon at night, a tall left column) comes off the chart
+        const over = view.scrollHeight - view.clientHeight;
+        if (over > 1 && state.nowH > 120) { state.nowH = Math.max(120, state.nowH - over - 2); fitting = true; view.innerHTML = screens.now(); fitting = false; }
       }
     } else if (r === "now" && !fitting) {
       const nm = wide() && view.querySelector(".nowmain");
@@ -1961,7 +1964,7 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
     const last = view.lastElementChild;
     if (!last) return;
     const bottom = last.getBoundingClientRect().bottom - view.getBoundingClientRect().top + view.scrollTop;
-    const fits = bottom <= view.clientHeight + 1;
+    const fits = bottom <= view.clientHeight + 1 && view.scrollHeight <= view.clientHeight + 1;
     view.classList.toggle("fits", fits);
     if (fits) view.scrollTop = 0;
   }

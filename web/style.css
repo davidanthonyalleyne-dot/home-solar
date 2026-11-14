@@ -718,7 +718,7 @@ body.typing .askdock { bottom: var(--kb, 0px); padding-bottom: 8px; }
 
 /* landscape Now: the left column fills the height, top to bottom, with no scrolling */
 body.land.r-now main { display: flex; flex-direction: column; }
-body.land.r-now .landgrid { flex: 1 1 auto; min-height: 0; align-items: stretch; }
+body.land.r-now .landgrid { flex: 1 0 auto; align-items: stretch; }
 body.land.r-now .landl { display: flex; flex-direction: column; justify-content: space-between; min-height: 0; }
 body.land.r-now .landr { display: flex; align-items: flex-end; }
 body.land.r-now .landl .big { font-size: clamp(34px, 10.5vh, 48px); white-space: nowrap; }
