@@ -24,7 +24,7 @@ const server = http.createServer((q, r) => {
       { role: "user", text: "Will tomorrow be a good day for solar?" },
       { role: "assistant", text: "**Fairly good, about 9 kWh.** Mostly sunny until mid-afternoon, when cloud moves in, with a high of 7°C. That's a forecast, so it could shift.\nFrom the forecast for tomorrow" },
     ];
-    try { localStorage.setItem("askCurrent", JSON.stringify("sample")); localStorage.setItem("askChats", JSON.stringify([{ id: "sample", started: "2026-11-06T15:20:00Z", updated: "2026-11-06T15:30:00Z", msgs }])); } catch (_) {}
+    try { localStorage.setItem("alertsDevice", JSON.stringify({ id: "sample", prefs: { production: true, connection: true } })); localStorage.setItem("askCurrent", JSON.stringify("sample")); localStorage.setItem("askChats", JSON.stringify([{ id: "sample", started: "2026-11-06T15:20:00Z", updated: "2026-11-06T15:30:00Z", msgs }])); } catch (_) {}
   });
   // a sample data.json may be encrypted with the passphrase "sample", to show the parts that need it
   await p.goto(url); await p.waitForTimeout(700);

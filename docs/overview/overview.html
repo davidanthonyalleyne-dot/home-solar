@@ -78,7 +78,7 @@
   <div class="shots" style="grid-template-columns: repeat(3, minmax(0, 1fr))">
     <figure>
       <img src="shots/now.png" alt="The Now screen">
-      <figcaption><b>Now</b>What the panels are making, today so far against the expected curve, sunrise and sunset, weather and the totals since 2023. A dot shows the system's health.</figcaption>
+      <figcaption><b>Now</b>What the panels are making, today so far against the expected curve, sunrise and sunset, weather and the totals since 2023. A dot shows the system's health, and a bell beside it whether alerts are on for this phone.</figcaption>
     </figure>
     <figure>
       <img src="shots/month.png" alt="The Month screen">
@@ -101,7 +101,7 @@
     </div>
   </div>
 
-  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.9 · App 1.90</span><span>Page 1 of 3</span></span></footer>
+  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.10 · App 1.98</span><span>Page 1 of 3</span></span></footer>
 </div>
 
 <div class="page">
@@ -129,7 +129,7 @@
     <section><h2>Good to know</h2><p>Meter and thermostat data come from exported files, so costs and heating trail by however long it's been since the last one.</p></section>
   </div>
 
-  <footer><span class="num">Updated November 13, 2026</span><span class="ver"><span>Document 2.9 · App 1.90</span><span>Page 2 of 3</span></span></footer>
+  <footer><span class="num">Updated November 14, 2026</span><span class="ver"><span>Document 2.10 · App 1.98</span><span>Page 2 of 3</span></span></footer>
 </div>
 
 <div class="page tech" style="gap: 12px">
@@ -141,7 +141,7 @@
     <p class="label">Sources and libraries</p>
     <table>
       <tr><th>Piece</th><th>Version</th><th>What it does</th><th>Loaded from</th><th>Licence</th></tr>
-      <tr><td>App code</td><td>App 1.90</td><td>The five tabs, charts, net metering maths, encryption and Sunny, the assistant in Ask (<code>app.js</code>, <code>lock.js</code>, <code>style.css</code>, <code>sw.js</code>). No framework; charts and icons are SVG drawn for the app, text in the system font</td><td>GitHub Pages, this repo's <code>web/</code></td><td>Written for the app</td></tr>
+      <tr><td>App code</td><td>App 1.98</td><td>The five tabs, charts, net metering maths, encryption and Sunny, the assistant in Ask (<code>app.js</code>, <code>lock.js</code>, <code>style.css</code>, <code>sw.js</code>). No framework; charts and icons are SVG drawn for the app, text in the system font</td><td>GitHub Pages, this repo's <code>web/</code></td><td>Written for the app</td></tr>
       <tr><td>Build job</td><td>Python 3</td><td>Fetches data, reads bills and meter files, models costs, encrypts, sends alerts (<code>scripts/build.py</code>, <code>money.py</code>, <code>parse_bill.py</code>)</td><td>GitHub Actions</td><td>Written for the app</td></tr>
       <tr><td>Transformers.js</td><td>3.5.1</td><td>Runs the speech model in the browser, with ONNX Runtime Web inside</td><td>cdn.jsdelivr.net</td><td>Apache-2.0</td></tr>
       <tr><td>Whisper tiny.en</td><td>Xenova, 8-bit</td><td>Turns a spoken question into text on the phone (about 40 MB, cached after first use)</td><td>huggingface.co</td><td>MIT</td></tr>
@@ -171,7 +171,7 @@
     <p>This document: <code>docs/overview/</code>. Make sample data with <code>fake_data.py</code>, take screenshots with <code>shoot.js</code>, print with <code>pdf.js</code>.</p>
   </section>
 
-  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.9 · App 1.90</span><span>Page 3 of 3</span></span></footer>
+  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.10 · App 1.98</span><span>Page 3 of 3</span></span></footer>
 </div>
 
 </body>
