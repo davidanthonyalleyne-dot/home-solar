@@ -1162,15 +1162,15 @@
       catch (err) { if (attempt >= 5) throw err; }  // someone else pushed in between: try on top of theirs
     }
   }
-  // GitHub sometimes skips its hourly run for hours. When the numbers are over an hour old, the app
-  // asks for a fresh build itself by touching data/ping.txt (any push rebuilds). At most every 40 minutes per device.
+  // GitHub often skips its scheduled runs for hours. When the numbers are over 25 minutes old, the app
+  // asks for a fresh build itself by touching data/ping.txt (any push rebuilds). At most every 15 minutes per device.
   let nudging = false;
   async function maybeNudge() {
     const s = state.data && state.data.solar, tok = state.data && state.data.uploadToken;
     if (!s || !s.updated || !tok || nudging || document.hidden) return;
     const hr = Number(new Date().toLocaleString("en-US", { timeZone: "America/Toronto", hour: "numeric", hour12: false }));
-    if (hr < 6 || hr >= 22 || Date.now() - Date.parse(s.updated) < 65 * 60000) return;
-    if (Date.now() - (lsGet("nudgeAt") || 0) < 40 * 60000) return;
+    if (hr < 6 || hr >= 22 || Date.now() - Date.parse(s.updated) < 25 * 60000) return;
+    if (Date.now() - (lsGet("nudgeAt") || 0) < 15 * 60000) return;
     nudging = true; lsSet("nudgeAt", Date.now());
     try { await commitFile("data/ping.txt", new Date().toISOString() + "\n", "Ask for fresh numbers (the hourly run is late)"); } catch (e) { logErr(e); }
     nudging = false;
