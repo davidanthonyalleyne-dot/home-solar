@@ -2097,6 +2097,16 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
   window.addEventListener("hashchange", () => { closeSheet(true); render(); view.scrollTo(0, 0); });
   let lastW = innerWidth;
   window.addEventListener("resize", () => { if (state.data && Math.abs(innerWidth - lastW) > 20) { lastW = innerWidth; render(); } });
+  // iOS reports the new size during the rotation, before the layout has settled, so the chart was
+  // sized (and "fits, no scrolling" decided) for the old shape. Measure again once <main> has its final size.
+  let settleT = 0, lastBox = "";
+  if (window.ResizeObserver) new ResizeObserver(() => {
+    const box = `${view.clientWidth}x${view.clientHeight}`;
+    if (box === lastBox) return;
+    lastBox = box;
+    clearTimeout(settleT);
+    settleT = setTimeout(() => { if (!state.data || document.body.classList.contains("locked")) return; if (route() === "now") render(); else fitCheck(); }, 180);
+  }).observe(view);
   document.addEventListener("visibilitychange", () => { if (!document.hidden && state.data) { refreshLive(); render(); } });
 
   // pull to refresh: the page scrolls inside <main>, so the tab bar never moves with it
