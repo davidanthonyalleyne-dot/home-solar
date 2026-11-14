@@ -1913,7 +1913,44 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
   let fitting = false;
   // a screen that fails to draw shouldn't leave the app stuck: say so, keep the tabs working, and note it for Settings
   function logErr(err) {
-    try { const l = JSON.parse(localStorage.getItem("errlog") || "[]"); l.push({ t: new Date().toISOString(), m: String((err && (err.stack || err.message)) || err).slice(0, 300) }); localStorage.setItem("errlog", JSON.stringify(l.slice(-10))); } catch (e) { /* storage off */ }
+    const m = String((err && (err.stack || err.message)) || err).slice(0, 600);
+    try { const l = JSON.parse(localStorage.getItem("errlog") || "[]"); l.push({ t: new Date().toISOString(), m: m.slice(0, 300) }); localStorage.setItem("errlog", JSON.stringify(l.slice(-10))); } catch (e) { /* storage off */ }
+    diag("error", m);
+  }
+
+  // ---------- diagnostics Claude can read ----------
+  // Problems (errors, a tab tap that went nowhere, a tap on the tab bar that something else caught) are
+  // kept with the last few things that happened before them, and sent to data/diag/ in the repository
+  // at most every 10 minutes. Only app details go in: version, screen, size, what was tapped. No energy
+  // numbers, bills or personal data, since the repository is public.
+  const crumbs = [];
+  function crumb(ev) { crumbs.push(`${new Date().toISOString().slice(11, 19)} ${ev}`); if (crumbs.length > 25) crumbs.shift(); }
+  function diagState() {
+    const v = window.visualViewport, b = document.body.classList;
+    return { v: state.version || "", r: (location.hash || "#").slice(1, 20), w: innerWidth, h: innerHeight,
+      vv: v ? [Math.round(v.width), Math.round(v.height), Math.round(v.offsetTop), Math.round(v.scale * 100) / 100] : null,
+      sy: Math.round(window.scrollY), body: [...b].filter((c) => !c.startsWith("r-")).join(" "), sheets: document.querySelectorAll(".sheet-wrap").length,
+      ios: (navigator.userAgent.match(/OS (\d+_\d+)/) || [])[1] || "", standalone: !!navigator.standalone };
+  }
+  function diag(kind, msg, extra) {
+    try {
+      const l = JSON.parse(localStorage.getItem("diag") || "[]");
+      l.push({ t: new Date().toISOString(), kind, msg: String(msg || "").slice(0, 600), ...diagState(), ...(extra || {}), crumbs: crumbs.slice(-12) });
+      localStorage.setItem("diag", JSON.stringify(l.slice(-30)));
+    } catch (e) { /* storage off */ }
+    setTimeout(sendDiag, 1500);
+  }
+  let diagSending = false;
+  async function sendDiag() {
+    if (diagSending || !(state.data && state.data.uploadToken)) return;
+    let l; try { l = JSON.parse(localStorage.getItem("diag") || "[]"); } catch (e) { return; }
+    if (!l.length || Date.now() - (lsGet("diagAt") || 0) < 10 * 60000) return;
+    diagSending = true; lsSet("diagAt", Date.now());
+    try {
+      await commitFile(`data/diag/${new Date().toISOString().slice(0, 19).replace(/:/g, "")}-${Math.random().toString(36).slice(2, 6)}.json`, JSON.stringify(l, null, 1) + "\n", "App diagnostics");
+      localStorage.setItem("diag", "[]");
+    } catch (e) { /* try again later; never log this failure as a new problem */ }
+    diagSending = false;
   }
   window.addEventListener("error", (e) => logErr(e.error || e.message));
   window.addEventListener("unhandledrejection", (e) => logErr(e.reason));
@@ -1927,6 +1964,7 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
   }
   function renderScreen() {
     const r = route();
+    crumb(`render ${r} ${innerWidth}x${innerHeight}${land() ? " land" : ""}${wide() ? " wide" : ""}`);
     if (OLD[location.hash.slice(1)]) { history.replaceState(null, "", "#" + r); }
     if (r !== "settings") { state.lastTab = r; state.setPage = null; }
     if (r !== "history") state.coldView = false;
@@ -1996,6 +2034,18 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
     f.innerHTML = `<div class="sfst ${sys.level}"><i></i>${esc(label)}</div>${s && s.updated ? `<div class="sfup">Updated ${esc(ago(s.updated))}</div>` : ""}`;
   }
   const recentErr = () => { try { const l = JSON.parse(localStorage.getItem("errlog") || "[]"), e = l[l.length - 1]; return e && Date.now() - Date.parse(e.t) < 7 * 864e5 ? e : null; } catch (x) { return null; } };
+  // a tap that lands where the tab bar is drawn but reaches something else means something is covering it
+  document.addEventListener("touchend", (e) => {
+    const tabs = document.querySelector(".tabs"), c = e.changedTouches[0];
+    if (!tabs || !c || document.body.classList.contains("locked") || document.body.classList.contains("typing")) return;
+    const r = tabs.getBoundingClientRect();
+    if (c.clientY >= r.top && c.clientY <= r.bottom && c.clientX >= r.left && c.clientX <= r.right && !tabs.contains(e.target)) {
+      const el = e.target, what = `${el.tagName.toLowerCase()}${el.id ? "#" + el.id : ""}${el.className && typeof el.className === "string" ? "." + el.className.split(" ").join(".") : ""}`;
+      diag("tab bar covered", `tap at ${Math.round(c.clientX)},${Math.round(c.clientY)} hit ${what.slice(0, 80)}`, { tabsRect: [Math.round(r.top), Math.round(r.bottom)] });
+    }
+  }, { capture: true, passive: true });
+  window.addEventListener("orientationchange", () => crumb("orientation change"));
+  document.addEventListener("visibilitychange", () => { crumb(document.hidden ? "hidden" : "visible"); if (document.hidden) sendDiag(); });
   WIDE.addEventListener("change", () => { if (state.data) render(); });
   LAND.addEventListener("change", () => { if (state.data) render(); });
   document.getElementById("sidefoot").addEventListener("click", () => {
@@ -2011,8 +2061,12 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
     const t = e.target.closest("a[data-tab]"), c = e.changedTouches[0];
     if (!t || !tabTouch || !c || Math.hypot(c.clientX - tabTouch.x, c.clientY - tabTouch.y) > 12) return;
     e.preventDefault();  // no click follows, so it can't fire twice
-    if (t.dataset.tab !== route()) { unstick(); location.hash = t.dataset.tab; }
-    else t.click();
+    crumb(`tab touch ${t.dataset.tab}`);
+    if (t.dataset.tab !== route()) {
+      const want = t.dataset.tab;
+      unstick(); location.hash = want;
+      setTimeout(() => { if (route() !== want) diag("tab ignored", `tapped ${want}, still on ${route()}`); }, 900);
+    } else t.click();
   });
   document.querySelector(".tabs").addEventListener("click", (e) => {
     const t = e.target.closest("a[data-tab]");
