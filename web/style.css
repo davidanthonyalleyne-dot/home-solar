@@ -734,3 +734,5 @@ body.land.r-now .landl .pair { grid-template-columns: auto auto; justify-content
 .landtotl { font-size: 12px; color: var(--muted); padding-top: 10px; border-top: 1px solid var(--rule); }
 body.land.r-now .landtot { border-top: 0; padding-top: 4px; }
 body.land.r-now .landtot .n { font-size: 21px; }
+/* landscape History uses the whole width */
+body.land.r-history main { padding-left: max(24px, calc(env(safe-area-inset-left) + 6px)) !important; padding-right: max(24px, calc(env(safe-area-inset-right) + 6px)) !important; }

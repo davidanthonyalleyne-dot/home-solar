@@ -36,7 +36,7 @@
   const contentWidth = () => {
     if (land()) {
       const cs = getComputedStyle(view), inner = view.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-      return Math.round(landCol ? inner - LAND_LEFT - LAND_GAP : Math.min(620, inner));
+      return Math.round(landCol ? inner - LAND_LEFT - LAND_GAP : route() === "history" ? inner : Math.min(620, inner));
     }
     if (!wide()) return Math.max(280, Math.min(560, document.documentElement.clientWidth || innerWidth) - 40);
     const cs = getComputedStyle(view), inner = view.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
@@ -2002,6 +2002,17 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
     const sys = state.data && systemStatus();
     if (!sys) return;
     openSheet("System", `<div class="status-pop sheetstatus">${sys.items.map((x) => `<div class="pi ${x.level}"><i></i><div><b>${esc(x.title)}</b>${x.note ? `<span>${x.note}</span>` : ""}</div></div>`).join("")}${sys.connect ? connectBtn() : ""}</div>`);
+  });
+  // a tab answers the moment a finger lifts off it, not only on the click iOS makes afterwards:
+  // after the phone turns, iOS sometimes stops sending those clicks and the tab bar seemed dead
+  let tabTouch = null;
+  document.querySelector(".tabs").addEventListener("touchstart", (e) => { const t = e.touches[0]; tabTouch = t ? { x: t.clientX, y: t.clientY } : null; }, { passive: true });
+  document.querySelector(".tabs").addEventListener("touchend", (e) => {
+    const t = e.target.closest("a[data-tab]"), c = e.changedTouches[0];
+    if (!t || !tabTouch || !c || Math.hypot(c.clientX - tabTouch.x, c.clientY - tabTouch.y) > 12) return;
+    e.preventDefault();  // no click follows, so it can't fire twice
+    if (t.dataset.tab !== route()) { unstick(); location.hash = t.dataset.tab; }
+    else t.click();
   });
   document.querySelector(".tabs").addEventListener("click", (e) => {
     const t = e.target.closest("a[data-tab]");
