@@ -420,8 +420,7 @@
   function nowScreen() {
     const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: TZNAME });
     const sys = systemStatus();
-    const dot = sys ? `<div class="statuswrap"><button type="button" class="statusdot ${sys.level}" data-pop aria-label="${esc(sys.label)}" aria-expanded="false"><i></i></button>
-      <div class="popover status-pop" role="status" hidden>${sys.items.map((x) => `<div class="pi ${x.level}"><i></i><div><b>${esc(x.title)}</b>${x.note ? `<span>${x.note}</span>` : ""}</div></div>`).join("")}${sys.connect ? connectBtn() : ""}</div></div>` : "";
+    const dot = sys ? `<div class="statuswrap"><button type="button" class="statusdot ${sys.level}" data-gosolar aria-label="${esc(sys.label)}. Open SolarEdge settings"><i></i></button></div>` : "";
     const cw = currentWeather();
     const wxNow = cw ? `<span class="wxnow">${wxIcon(cw.code, cw.isDay ?? 1)}${deg(cw.temp)} ${esc(wx(cw.code).toLowerCase())}</span>` : "";
     const head = `<div class="top nowhead"><div><div class="eyebrow">${esc(today)}${wxNow}</div><h1>Now</h1></div>
@@ -1391,6 +1390,32 @@
       ;
   }
 
+  // the top of the SolarEdge page: is the link working, how fresh the numbers are, and anything wrong
+  function solarStatusCard() {
+    const s = state.data.solar, sys = systemStatus();
+    if (!sys) return "";
+    const linkOk = !s.needsConnect && !s.authTroubleSince && s.connected !== false;
+    const firstOf = (lv) => sys.items.find((x) => x.level === lv);
+    const head = sys.level === "bad" ? firstOf("bad").title : sys.level === "warn" ? firstOf("warn").title
+      : linkOk ? "Connected" : "Not connected";
+    const sub = sys.level === "ok" ? "Everything is working" : sys.level === "unknown" ? "Waiting for the first check" : linkOk ? "Connected, but something needs a look" : "Not getting new numbers";
+    const d = torontoToday(), sun = sunTimes(d), now = new Date();
+    const facts = [];
+    if (s.updated) facts.push(["Latest numbers", esc(ago(s.updated))]);
+    if (linkOk && s.liveEvery) facts.push(["Checks SolarEdge", now > sun.rise && now < sun.set ? `About every ${fmt(s.liveEvery)} min until sunset` : `Every ${fmt(s.liveEvery)} min from sunrise at ${clock(sun.rise)}`]);
+    if (state.data.generated) facts.push(["App last updated", esc(ago(state.data.generated))]);
+    if (s.alertsChecked) facts.push(["System alerts", sys.items.some((x) => x.level === "bad" && /alert/i.test(x.title)) ? `<span class="bad">Open</span>` : `None, checked ${esc(ago(s.alertsChecked))}`]);
+    const issues = sys.items.filter((x) => x.level === "bad" || x.level === "warn");
+    const lead = issues.find((x) => x.title === head), rest = issues.filter((x) => x !== lead);
+    return `<div class="scard pad sestatus ${sys.level}">
+      <div class="seh"><span class="seicon" aria-hidden="true">${sys.level === "ok" ? '<svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>' : sys.level === "unknown" ? '<svg viewBox="0 0 24 24"><path d="M12 7v5l3 2"/></svg>' : '<svg viewBox="0 0 24 24"><path d="M12 7v6M12 16.5v.5"/></svg>'}</span>
+        <div><div class="setitle">${esc(head)}</div><div class="sesub">${esc(sub)}</div></div></div>
+      ${lead && lead.note ? `<p class="senote">${lead.note}</p>` : ""}
+      ${rest.length ? `<div class="status-pop sheetstatus seissues">${rest.map((x) => `<div class="pi ${x.level}"><i></i><div><b>${esc(x.title)}</b>${x.note ? `<span>${x.note}</span>` : ""}</div></div>`).join("")}</div>` : ""}
+      ${sys.connect ? connectBtn() : ""}
+      ${rows(facts)}</div>`;
+  }
+
   function settingsPage(k) {
     const d = state.data, s = d.solar, h = Object.keys(hydro()).sort();
     const bills = (d.bills || []).filter((b) => !b.preSolar);
@@ -1399,7 +1424,7 @@
     let body = "";
     if (k === "solaredge") {
       const { ok, sol } = solarRows();
-      body = card(rows(sol) + (ok ? `<p class="sub">Refreshes every hour during the day.${s.error ? " The last refresh failed, so these are the previous numbers." : ""}</p>`
+      body = (s ? solarStatusCard() : "") + card(rows(s ? sol.slice(1).filter((r) => r && r[0] !== "Alerts checked") : sol) + (ok ? (s.error ? `<p class="sub">The last refresh failed, so these are the previous numbers.</p>` : "")
         : connectBtn() + `<p class="sub">${d.connectUrl ? "You'll sign in with SolarEdge, then paste a one-time code into GitHub." : "Add SOLAREDGE_CLIENT_ID, SOLAREDGE_CLIENT_SECRET, SOLAREDGE_SITE_ID and GH_PAT under Settings, Secrets and variables, Actions in your GitHub repository."}</p>`)) + (inverterRows() ? card(inverterRows()) : "");
     } else if (k === "hydro") {
       body = card(rows([
@@ -2055,11 +2080,7 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
   document.addEventListener("visibilitychange", () => { crumb(document.hidden ? "hidden" : "visible"); if (document.hidden) sendDiag(); });
   WIDE.addEventListener("change", () => { if (state.data) render(); });
   LAND.addEventListener("change", () => { if (state.data) render(); });
-  document.getElementById("sidefoot").addEventListener("click", () => {
-    const sys = state.data && systemStatus();
-    if (!sys) return;
-    openSheet("System", `<div class="status-pop sheetstatus">${sys.items.map((x) => `<div class="pi ${x.level}"><i></i><div><b>${esc(x.title)}</b>${x.note ? `<span>${x.note}</span>` : ""}</div></div>`).join("")}${sys.connect ? connectBtn() : ""}</div>`);
-  });
+  document.getElementById("sidefoot").addEventListener("click", () => { if (!state.data) return; state.setPage = "solaredge"; if (route() === "settings") render(); else location.hash = "#settings"; });
   // Tabs switch the moment a finger touches them, the way iOS tab bars do, and the tab is found from
   // where the finger is, not from what iOS says was touched. After the phone turns, iOS can keep using
   // the old layout to decide what a touch hit, so touches on the tab bar went to the chart that used to
@@ -2163,6 +2184,7 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
       if (m.dataset.go === "month" && route() !== "month") { location.hash = "#month"; return; }
       render(); return;
     }
+    if (e.target.closest("[data-gosolar]")) { state.setPage = "solaredge"; location.hash = "#settings"; return; }
     if (e.target.closest("[data-alertbell]")) { state.setPage = "alerts"; location.hash = "#settings"; return; }
     if (e.target.closest("[data-back]")) { state.setPage = null; location.hash = "#" + (state.lastTab || "now"); return; }
     const sp = e.target.closest("[data-setpage]");

@@ -740,3 +740,15 @@ body.land.r-now .landtot { border-top: 0; padding-top: 4px; }
 body.land.r-now .landtot .n { font-size: 21px; }
 /* landscape History uses the whole width */
 body.land.r-history main { padding-left: max(24px, calc(env(safe-area-inset-left) + 6px)) !important; padding-right: max(24px, calc(env(safe-area-inset-right) + 6px)) !important; }
+
+/* SolarEdge settings: the status card at the top */
+.sestatus .seh { display: flex; align-items: center; gap: 14px; padding: 4px 0 14px; }
+.sestatus .seicon { width: 40px; height: 40px; border-radius: 20px; display: grid; place-items: center; background: var(--ok); flex: none; }
+.sestatus.warn .seicon { background: var(--warn); } .sestatus.bad .seicon { background: var(--bad); } .sestatus.unknown .seicon { background: var(--faint); }
+.sestatus .seicon svg { width: 22px; height: 22px; fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.sestatus .setitle { font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
+.sestatus .sesub { font-size: 15px; color: var(--muted); margin-top: 1px; }
+.sestatus .seissues { padding: 0 0 12px; gap: 12px; }
+.sestatus .seissues .pi b { font-weight: 600; }
+.sestatus .btn { margin: 0 0 12px; }
+.sestatus .senote { margin: 0 0 12px; font-size: 15px; line-height: 1.4; color: var(--muted); }
