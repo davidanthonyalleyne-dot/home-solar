@@ -1,0 +1,40 @@
+[
+ {
+  "t": "2026-11-14T16:13:31.732Z",
+  "kind": "tab bar covered",
+  "msg": "tap at 672,375 hit svg",
+  "v": "1.96",
+  "r": "now",
+  "w": 874,
+  "h": 402,
+  "vv": [
+   874,
+   402,
+   0,
+   1
+  ],
+  "sy": 0,
+  "body": "land",
+  "sheets": 0,
+  "ios": "18_7",
+  "standalone": true,
+  "tabsRect": [
+   339,
+   402
+  ],
+  "crumbs": [
+   "16:13:14 render now 402x812 land",
+   "16:13:14 render now 874x402 land",
+   "16:13:14 render now 874x402 land",
+   "16:13:14 orientation change",
+   "16:13:17 tab touch month",
+   "16:13:17 render month 874x402 land",
+   "16:13:20 tab touch history",
+   "16:13:20 render history 874x402 land",
+   "16:13:28 tab touch ask",
+   "16:13:28 render ask 874x402 land",
+   "16:13:30 tab touch now",
+   "16:13:30 render now 874x402 land"
+  ]
+ }
+]
