@@ -41,7 +41,7 @@ jobs:
       # pdftotext, to read bill PDFs. If Ubuntu's mirrors are down the build still runs;
       # bills wait in the inbox until a later run has it.
       - run: timeout 240 sh -c 'sudo apt-get install -y -q -o Acquire::Retries=1 -o Acquire::http::Timeout=20 poppler-utils || (sudo apt-get update -q && sudo apt-get install -y -q poppler-utils)' || echo "::warning::poppler-utils didn't install; bill PDFs will wait"
-      - run: pip install openpyxl cryptography pywebpush
+      - run: pip install openpyxl cryptography pywebpush "httpx[http2]" pyjwt
       - id: build
         run: python scripts/build.py
         env:
@@ -57,6 +57,8 @@ jobs:
           UPLOAD_TOKEN: ${{ secrets.UPLOAD_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           VAPID_PRIVATE: ${{ secrets.VAPID_PRIVATE }}
+          APNS_KEY_P8: ${{ secrets.APNS_KEY_P8 }}
+          APNS_KEY_ID: ${{ secrets.APNS_KEY_ID }}
       - name: Save files added from the app
         if: steps.build.outcome == 'success'
         run: |

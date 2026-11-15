@@ -12,6 +12,7 @@ let solarURL = URL(string: "https://davidanthonyalleyne-dot.github.io/home-solar
 
 @main
 struct SolarApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var gate = Gate()
     @Environment(\.scenePhase) private var phase
 

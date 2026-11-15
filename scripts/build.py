@@ -1010,18 +1010,64 @@ def save_push_devices(devices):
     PUSH_F.write_text(json.dumps(encrypt_data({"devices": devices})))
 
 
-def device_id(sub):
+def device_id(d):
+    """A short id for a phone: from its Web Push endpoint, or from its APNs token (the iPhone app)."""
+    if d.get("apns"):
+        return hashlib.sha256(("apns:" + d["apns"]).encode()).hexdigest()[:12]
+    sub = d.get("subscription", d)
     return hashlib.sha256(sub.get("endpoint", "").encode()).hexdigest()[:12]
 
 
 def add_push_device(msg):
-    """msg: {subscription, prefs} from the app; prefs all off removes the phone."""
-    sub, prefs = msg.get("subscription") or {}, msg.get("prefs") or {}
-    devices = [d for d in push_devices() if device_id(d["subscription"]) != device_id(sub)]
-    if sub.get("endpoint") and any(prefs.values()):
-        devices.append({"subscription": sub, "prefs": prefs, "added": dt.datetime.now(TZ).isoformat(timespec="minutes"), "welcome": True})
+    """msg from the app: {subscription, prefs} (Home Screen web app) or {apns, prefs} (iPhone app).
+    prefs all off removes the phone."""
+    prefs = msg.get("prefs") or {}
+    if msg.get("apns"):
+        new = {"apns": str(msg["apns"]).lower(), "name": str(msg.get("name") or "iPhone")[:40]}
+    else:
+        new = {"subscription": msg.get("subscription") or {}}
+    ok = bool((new.get("apns") or new.get("subscription", {}).get("endpoint")) and any(prefs.values()))
+    devices = [d for d in push_devices() if device_id(d) != device_id(new)]
+    if ok:
+        devices.append({**new, "prefs": prefs, "added": dt.datetime.now(TZ).isoformat(timespec="minutes"), "welcome": True})
     save_push_devices(devices)
-    return bool(sub.get("endpoint") and any(prefs.values()))
+    return ok
+
+
+# ---------- iPhone app alerts (Apple Push Notification service) ----------
+# The key is made by the account holder in the Apple Developer site and kept as the secrets
+# APNS_KEY_P8 and APNS_KEY_ID. TestFlight and App Store builds use the production server.
+APNS_TOPIC = "ca.davidalleyne.solar"
+APNS_TEAM = "M8GX2N7YR2"
+
+
+def apns_client():
+    """An HTTP/2 client and a signed token, or None when there's no key."""
+    p8, kid = os.environ.get("APNS_KEY_P8", "").strip(), os.environ.get("APNS_KEY_ID", "").strip()
+    if not p8 or not kid:
+        return None
+    import httpx
+    import jwt
+    tok = jwt.encode({"iss": APNS_TEAM, "iat": int(time.time())}, p8, algorithm="ES256", headers={"kid": kid})
+    return httpx.Client(http2=True, timeout=20), tok
+
+
+def apns_send(client, token, title, body):
+    """Sends one alert. Returns 'ok', 'gone' (the app was removed or the token is stale) or 'retry'."""
+    http, tok = client
+    r = http.post(f"https://api.push.apple.com/3/device/{token}",
+                  json={"aps": {"alert": {"title": title, "body": body}, "sound": "default"}},
+                  headers={"authorization": f"bearer {tok}", "apns-topic": APNS_TOPIC, "apns-push-type": "alert",
+                           "apns-priority": "10", "apns-expiration": str(int(time.time()) + 6 * 3600)})
+    if r.status_code == 200:
+        return "ok"
+    reason = ""
+    try:
+        reason = r.json().get("reason", "")
+    except Exception:
+        pass
+    print(f"push: apns {r.status_code} {reason}")
+    return "gone" if r.status_code == 410 or reason in ("BadDeviceToken", "Unregistered", "DeviceTokenNotForTopic") else "retry"
 
 
 def _deg(v):
@@ -1085,7 +1131,11 @@ def insight_alerts(money, solar, hydro, weather, today):
 
 def send_alerts(problems, solar, pem, extra=()):
     """Sends each new problem once to every phone that asked for that kind of alert."""
-    devices = push_devices() if pem else []
+    devices = push_devices()
+    apns = apns_client() if any(d.get("apns") for d in devices) else None
+    devices = [d for d in devices if (d.get("apns") and apns) or (d.get("subscription") and pem)]
+    if any(d.get("apns") for d in push_devices()) and not apns:
+        print("push: an iPhone app asked for alerts, but APNS_KEY_P8 / APNS_KEY_ID aren't set")
     state = json.loads(ALERT_STATE_F.read_text()) if ALERT_STATE_F.exists() else {"sent": []}
     sent = set(state["sent"])
     out = []
@@ -1110,7 +1160,7 @@ def send_alerts(problems, solar, pem, extra=()):
         body = {"added": "is in the app now.", "duplicate": "was already in the app."}.get(u.get("result"), f"wasn't added: {u.get('note', '')}")
         out.append(("files", f"file-{u['when']}-{what}", f"{what} {'added' if u.get('result') == 'added' else 'not added' if u.get('result') == 'refused' else 'already there'}", f"{what} {body}"))
     keep, changed, failed = [], False, False
-    if devices:
+    if any(d.get("subscription") for d in devices):
         from pywebpush import webpush, WebPushException
         from py_vapid import Vapid
         signer = Vapid.from_pem(pem.encode())
@@ -1122,6 +1172,17 @@ def send_alerts(problems, solar, pem, extra=()):
         msgs += [(t, b) for kind, key, t, b in out if key not in sent and d.get("prefs", {}).get(kind)]
         gone = False
         for i, (title, body) in enumerate(msgs):
+            if d.get("apns"):
+                res = apns_send(apns, d["apns"], title, body)
+                if res == "ok" and i == 0 and welcome:
+                    d["welcomed"] = dt.datetime.now(TZ).isoformat(timespec="minutes")
+                    changed = True
+                if res == "gone":
+                    gone = changed = True
+                if res != "ok":
+                    failed = failed or res == "retry"
+                    break
+                continue
             try:
                 webpush(d["subscription"], json.dumps({"title": title, "body": body, "url": "./"}),
                         vapid_private_key=signer, vapid_claims={"sub": PUSH_CONTACT, "exp": int(time.time()) + 12 * 3600}, ttl=6 * 3600)
@@ -1139,7 +1200,9 @@ def send_alerts(problems, solar, pem, extra=()):
         if not gone:
             keep.append(d)
     if changed:
-        save_push_devices(keep)
+        # phones skipped this run (no key for their kind) stay on the list
+        ids = {device_id(d) for d in keep} | {device_id(d) for d in devices}
+        save_push_devices(keep + [d for d in push_devices() if device_id(d) not in ids])
     # a summary nobody has asked for yet is kept back, so switching it on later still brings this month's
     wanted = lambda kind: any(d.get("prefs", {}).get(kind) for d in devices)
     new = [key for kind, key, _, _ in out if key not in sent and (kind != "summary" or wanted("summary"))]
@@ -1334,7 +1397,7 @@ def main():
         "hydro": {d: [round(v[0], 2), round(v[1], 2)] for d, v in sorted(hydro.items())},
         "solar": solar,
         "weather": weather,
-        "push": {"publicKey": push_pub, "devices": [{"id": device_id(d["subscription"]), "prefs": d.get("prefs", {})} for d in push_devices()]} if push_pub else None,
+        "push": {"publicKey": push_pub, "devices": [{"id": device_id(d), "prefs": d.get("prefs", {}), "app": bool(d.get("apns"))} for d in push_devices()]} if push_pub else None,
         "bills": (read_private("data/bills.json") or {}).get("bills"),
         "uploads": (read_private("data/uploads.json") or [])[-10:],
         "thermostat": read_thermostat(),

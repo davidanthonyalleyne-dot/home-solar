@@ -83,6 +83,7 @@ final class NowModel: ObservableObject {
         Task.detached { await GitHub.nudgeIfLate(updated: SK.iso(s?["updated"] as? String), token: json["uploadToken"] as? String) }
         #if os(iOS)
         Task.detached { await CrashReports.send(token: json["uploadToken"] as? String) }
+        Task { await Alerts.shared.resendIfNeeded(json) }
         #endif
     }
 

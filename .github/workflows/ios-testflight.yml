@@ -64,6 +64,30 @@ jobs:
               print("already registered" if e.code == 409 else f"{e.code} {e.read()[:300]}")
           PY
 
+      - name: Turn on Push Notifications for the app's ID (no-op once it's on)
+        run: |
+          python3 - <<'PY'
+          import json, os, time, urllib.request, urllib.error, jwt
+          tok = jwt.encode({"iss": os.environ["ASC_ISSUER_ID"], "exp": int(time.time()) + 900, "aud": "appstoreconnect-v1"},
+                           open(os.environ["KEY_PATH"]).read(), algorithm="ES256", headers={"kid": os.environ["ASC_KEY_ID"], "typ": "JWT"})
+          def call(path, body=None):
+              r = urllib.request.Request("https://api.appstoreconnect.apple.com" + path, json.dumps(body).encode() if body else None,
+                                         {"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+              try:
+                  return json.loads(urllib.request.urlopen(r).read() or b"{}")
+              except urllib.error.HTTPError as e:
+                  print(path, e.code, e.read()[:300].decode(errors="ignore")); return None
+          b = call("/v1/bundleIds?filter[identifier]=ca.davidalleyne.solar")
+          bid = next(x["id"] for x in b["data"] if x["attributes"]["identifier"] == "ca.davidalleyne.solar")
+          caps = call(f"/v1/bundleIds/{bid}/bundleIdCapabilities") or {"data": []}
+          if any(c["attributes"]["capabilityType"] == "PUSH_NOTIFICATIONS" for c in caps["data"]):
+              print("push already on")
+          else:
+              r = call("/v1/bundleIdCapabilities", {"data": {"type": "bundleIdCapabilities", "attributes": {"capabilityType": "PUSH_NOTIFICATIONS"},
+                       "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": bid}}}}})
+              print("push turned on" if r else "couldn't turn push on")
+          PY
+
       - name: Generate the Xcode project
         run: |
           brew install xcodegen
@@ -119,6 +143,7 @@ jobs:
           echo "$ENT" | tail -20
           echo "$ENT" | grep -q applesignin || { echo "::error::Sign in with Apple entitlement missing from the signed app"; exit 1; }
           echo "$ENT" | grep -q "solar.shared" || { echo "::error::The keychain group the widgets share is missing from the signed app"; exit 1; }
+          echo "$ENT" | grep -q "aps-environment" || { echo "::error::Push notifications are missing from the signed app"; exit 1; }
           WENT=$(codesign -d --entitlements - "$RUNNER_TEMP/ipa/Payload/Solar.app/PlugIns/SolarWidgets.appex" 2>&1)
           echo "$WENT" | grep -q "solar.shared" || { echo "::error::The keychain group is missing from the signed widgets"; echo "$WENT"; exit 1; }
 

@@ -84,7 +84,7 @@ struct SettingsScreen: View {
                 .tint(SK.sunColor)
             } header: { Text("Display") } footer: { Text("On an iPhone turned sideways, Now and Month split into two columns. The Live Activity shows the live number on the Lock Screen and in the Dynamic Island while the sun is up; it starts when you open Solar after sunrise and ends at sunset.") }
             Section("App") {
-                NavigationLink(value: "alerts") { SetRow(icon: "bell", title: "Alerts") { Text("Home Screen app") } }
+                NavigationLink(value: "alerts") { SetRow(icon: "bell", title: "Alerts") { Text(Alerts.shared.on ? "On" : "Off") } }
                 NavigationLink(value: "ask") { SetRow(icon: "bubble.left", title: "Sunny") { Text(j["askKey"] != nil ? "Claude" : "Not set up") } }
                 NavigationLink(value: "security") { SetRow(icon: "lock", title: "Security") { Text("Face ID") } }
             }
@@ -226,10 +226,7 @@ struct SettingsPage: View {
             }
         case "heating": heating(y, pv)
         case "alerts":
-            Section {
-                Text("Alerts reach this iPhone through the Home Screen version of Solar for now: no output on a sunny day, an inverter fault, SolarEdge going quiet, files you add, the monthly summary and heavy winter days.")
-                Text("To turn them on, open Solar in Safari, tap Share, then Add to Home Screen, and open Settings, Alerts there.").foregroundStyle(.secondary)
-            }
+            AlertsPage(json: json)
         case "ask":
             let count = ChatStore.load().count
             Section {
