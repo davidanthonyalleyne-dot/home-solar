@@ -101,7 +101,7 @@
     </div>
   </div>
 
-  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.17 · App 1.100</span><span>Page 1 of 3</span></span></footer>
+  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.18 · App 1.100</span><span>Page 1 of 3</span></span></footer>
 </div>
 
 <div class="page">
@@ -127,10 +127,10 @@
     <section><h2>Private by design</h2><p>Everything is encrypted with a passphrase before it's published. Face ID unlocks it on a trusted device; the passphrase shows only if Face ID fails.</p></section>
     <section><h2>How it runs</h2><p>A scheduled GitHub job fetches SolarEdge and the weather about every hour, reads new files, rebuilds the site and sends alerts. No server to maintain.</p></section>
     <section><h2>Good to know</h2><p>Meter and thermostat data come from exported files, so costs and heating trail by however long it's been since the last one.</p></section>
-    <section><h2>iPhone app</h2><p>From TestFlight, with Sign in with Apple and Face ID, native Now, Month and History and a native tab bar, and widgets in every size, Lock Screen and StandBy too. Alerts need the Home Screen version.</p></section>
+    <section><h2>iPhone app</h2><p>From TestFlight: every screen native, Sign in with Apple and Face ID, Sunny with the iPhone's own voice, and widgets in every size. Alerts need the Home Screen version.</p></section>
   </div>
 
-  <footer><span class="num">Updated November 15, 2026</span><span class="ver"><span>Document 2.17 · App 1.100</span><span>Page 2 of 3</span></span></footer>
+  <footer><span class="num">Updated November 15, 2026</span><span class="ver"><span>Document 2.18 · App 1.100</span><span>Page 2 of 3</span></span></footer>
 </div>
 
 <div class="page tech" style="gap: 12px">
@@ -143,7 +143,7 @@
     <table>
       <tr><th>Piece</th><th>Version</th><th>What it does</th><th>Loaded from</th><th>Licence</th></tr>
       <tr><td>App code</td><td>App 1.100</td><td>The five tabs, charts, net metering maths, encryption and Sunny (<code>app.js</code>, <code>lock.js</code>, <code>style.css</code>, <code>sw.js</code>). No framework; SVG charts and icons, system font</td><td>GitHub Pages, this repo's <code>web/</code></td><td>Written for the app</td></tr>
-      <tr><td>iPhone app</td><td>1.5</td><td>Sign in with Apple and Face ID; Now, Month and History in SwiftUI, the other tabs from the live site; WidgetKit widgets. Those screens and the widgets open <code>data.json</code> and the forecast themselves (<code>ios/</code>)</td><td>TestFlight</td><td>Written for the app</td></tr>
+      <tr><td>iPhone app</td><td>1.6</td><td>Sign in with Apple and Face ID; every tab in SwiftUI, with on-device speech recognition and speech for Sunny; WidgetKit widgets. The app and widgets open <code>data.json</code> and the forecast themselves; uploads and Sunny use the same key and token as the site (<code>ios/</code>)</td><td>TestFlight</td><td>Written for the app</td></tr>
       <tr><td>Build job</td><td>Python 3</td><td>Fetches data, reads bills and meter files, models costs, encrypts, sends alerts (<code>scripts/build.py</code>, <code>money.py</code>, <code>parse_bill.py</code>)</td><td>GitHub Actions</td><td>Written for the app</td></tr>
       <tr><td>Transformers.js</td><td>3.5.1</td><td>Runs the speech model in the browser, with ONNX Runtime Web inside</td><td>cdn.jsdelivr.net</td><td>Apache-2.0</td></tr>
       <tr><td>Whisper tiny.en</td><td>Xenova, 8-bit</td><td>Turns a spoken question into text on the phone (about 40 MB, cached after first use)</td><td>huggingface.co</td><td>MIT</td></tr>
@@ -174,7 +174,7 @@
     <p>This document: <code>docs/overview/</code>. Make sample data with <code>fake_data.py</code>, take screenshots with <code>shoot.js</code>, print with <code>pdf.js</code>.</p>
   </section>
 
-  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.17 · App 1.100</span><span>Page 3 of 3</span></span></footer>
+  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.18 · App 1.100</span><span>Page 3 of 3</span></span></footer>
 </div>
 
 </body>
