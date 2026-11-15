@@ -234,6 +234,13 @@ enum SK {
             f.formatOptions = o
             if let d = f.date(from: s) { return d }
         }
+        // the build writes some times to the minute, like 2026-11-06T10:51-05:00
+        let g = DateFormatter(); g.locale = Locale(identifier: "en_US_POSIX")
+        for fmt in ["yyyy-MM-dd'T'HH:mmXXXXX", "yyyy-MM-dd'T'HH:mm:ssXXXXX", "yyyy-MM-dd'T'HH:mm"] {
+            g.dateFormat = fmt
+            if fmt.hasSuffix("mm") { g.timeZone = SolarConfig.tz }
+            if let d = g.date(from: s) { return d }
+        }
         return nil
     }
     /// Sunrise and sunset, the same formula the web app uses.
