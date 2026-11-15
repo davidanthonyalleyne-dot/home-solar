@@ -25,5 +25,5 @@ jobs:
           xcodegen generate
           DEV=$(xcrun simctl list devices available | awk '/^-- iOS 2[6-9]/{f=1;next} /^--/{f=0} f' | grep -E "iPhone 1[6-9] Pro \(" | tail -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
           xcrun simctl boot "$DEV"; xcrun simctl bootstatus "$DEV" -b
-          xcodebuild test -project Solar.xcodeproj -scheme Solar -configuration Release -destination "id=$DEV" \
+          xcodebuild test -project Solar.xcodeproj -scheme Solar -configuration Debug -destination "id=$DEV" \
             -only-testing:SolarUITests/TabSpeedTests CODE_SIGNING_ALLOWED=NO 2>&1 | grep -E "SOLAR_TAB_MS|error:|\*\* TEST" || true
