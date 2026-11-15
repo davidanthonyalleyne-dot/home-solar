@@ -86,7 +86,7 @@ struct SettingsScreen: View {
             Section("App") {
                 NavigationLink(value: "alerts") { SetRow(icon: "bell", title: "Alerts") { Text(Alerts.shared.on ? "On" : "Off") } }
                 NavigationLink(value: "ask") { SetRow(icon: "bubble.left", title: "Sunny") { Text(j["askKey"] != nil ? "Claude" : "Not set up") } }
-                NavigationLink(value: "security") { SetRow(icon: "lock", title: "Security") { Text(Bio.name) } }
+                NavigationLink(value: "security") { SetRow(icon: "lock", title: "Security") { Text("Sign in with Apple") } }
             }
             Section {
             } footer: {
@@ -243,9 +243,9 @@ struct SettingsPage: View {
         case "security":
             Section {
                 row("Data", "Encrypted")
-                row("Unlock", "Sign in with Apple and \(Bio.name)")
+                row("Unlock", "Sign in with Apple")
                 row("Passphrase", SharedVault.passphrase != nil ? "In this iPhone's keychain" : "Not entered")
-            } footer: { Text("Everything Solar publishes is encrypted with your passphrase. This \(Bio.device) keeps it in its keychain, shared only with Solar's widgets, so the app opens with \(Bio.name).") }
+            } footer: { Text("Everything Solar publishes is encrypted with your passphrase. This \(Bio.device) keeps it in its keychain, shared only with Solar's widgets, so the app opens without asking again. The \(Bio.device)'s own passcode is what protects it.") }
             Section { Button("Lock Solar now", action: onLock) }
             Section {
                 Button(armed ? "Tap again to forget it" : "Forget the passphrase on this iPhone", role: .destructive) {

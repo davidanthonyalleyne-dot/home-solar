@@ -189,31 +189,13 @@ final class Gate: ObservableObject {
             message = "Sign in with Apple again to open Solar."
             return
         default:
-            // offline or Apple unreachable: Face ID still guards it
+            // offline or Apple unreachable: open anyway
             break
         }
 
-        let ctx = LAContext()
-        ctx.localizedCancelTitle = "Not now"
-        var err: NSError?
-        guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else {
-            message = "Turn on \(Bio.name) or a passcode for this \(Bio.device) to open Solar."
-            return
-        }
-        do {
-            try await ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock Solar")
-            if SharedVault.passphrase == nil { needsPassphrase = true } else { unlocked = true }
-        } catch let e as LAError {
-            switch e.code {
-            case .userCancel, .appCancel: message = nil   // the button stays there to try again
-            case .systemCancel, .notInteractive: message = "\(Bio.name) was interrupted. Tap to try again."
-            case .biometryLockout: message = "\(Bio.name) is locked after too many tries. Unlock the \(Bio.device) with its passcode, then try again."
-            case .passcodeNotSet: message = "Set a passcode for this \(Bio.device) to open Solar."
-            default: message = "\(Bio.name) didn't work: \(e.localizedDescription)"
-            }
-        } catch {
-            message = "\(Bio.name) didn't work: \(error.localizedDescription)"
-        }
+        // No Face ID or Touch ID: once the Apple Account checks out, Solar opens. The device's
+        // own passcode is what guards it.
+        if SharedVault.passphrase == nil { needsPassphrase = true } else { unlocked = true }
     }
 }
 
@@ -234,7 +216,7 @@ struct LockView: View {
                 Button {
                     Task { await gate.unlock() }
                 } label: {
-                    Label("Unlock with \(Bio.name)", systemImage: Bio.symbol)
+                    Label("Open Solar", systemImage: "lock.open")
                         .font(.headline)
                         .frame(maxWidth: .infinity, minHeight: 50)
                 }
@@ -269,7 +251,7 @@ struct PassphraseEntry: View {
     @FocusState private var focused: Bool
     var body: some View {
         VStack(spacing: 12) {
-            Text("Enter your passphrase once. Solar keeps it in this \(Bio.device)'s keychain, so after this \(Bio.name) is enough, and the widgets can read your numbers.")
+            Text("Enter your passphrase once. Solar keeps it in this \(Bio.device)'s keychain, so after this it opens straight away, and the widgets can read your numbers.")
                 .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
             SecureField("Passphrase", text: $pass)
                 .textContentType(.password).submitLabel(.go).focused($focused)
