@@ -101,7 +101,7 @@
     </div>
   </div>
 
-  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.19 · App 1.100</span><span>Page 1 of 3</span></span></footer>
+  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.20 · App 1.101</span><span>Page 1 of 3</span></span></footer>
 </div>
 
 <div class="page">
@@ -124,13 +124,13 @@
     <section><h2>Bills, meter, thermostat</h2><p>Add bill PDFs, meter spreadsheets or the ecobee's history from Settings, several at once or in a zip. The ecobee data adds heating to Month and a Climate view to History.</p></section>
     <section><h2>Alerts</h2><p>When production stops on a sunny day, the inverter faults, SolarEdge goes quiet or a file is added, plus a monthly summary and heavy winter days.</p></section>
     <section><h2>Your home</h2><p>The solar system and the Bosch heat pump, with part and serial numbers for warranty or service, and what to do in an emergency.</p></section>
-    <section><h2>Private by design</h2><p>Everything is encrypted with a passphrase before it's published. Face ID unlocks it on a trusted device; the passphrase shows only if Face ID fails.</p></section>
+    <section><h2>Private by design</h2><p>Everything is encrypted with a passphrase before it's published. Face ID or Touch ID unlocks it on a trusted device; the passphrase shows only if that fails.</p></section>
     <section><h2>How it runs</h2><p>A scheduled GitHub job fetches SolarEdge and the weather about every hour, reads new files, rebuilds the site and sends alerts. No server to maintain.</p></section>
     <section><h2>Good to know</h2><p>Meter and thermostat data come from exported files, so costs and heating trail by however long it's been since the last one.</p></section>
-    <section><h2>iPhone, iPad and Apple TV</h2><p>Native apps from TestFlight, with widgets, Siri, a Live Activity and Control Center. Alerts need the Home Screen version.</p></section>
+    <section><h2>iPhone, iPad and Apple TV</h2><p>Native apps from TestFlight, with alerts, widgets, Siri, a Live Activity and Control Center.</p></section>
   </div>
 
-  <footer><span class="num">Updated November 15, 2026</span><span class="ver"><span>Document 2.19 · App 1.100</span><span>Page 2 of 3</span></span></footer>
+  <footer><span class="num">Updated November 15, 2026</span><span class="ver"><span>Document 2.20 · App 1.101</span><span>Page 2 of 3</span></span></footer>
 </div>
 
 <div class="page tech" style="gap: 12px">
@@ -142,9 +142,9 @@
     <p class="label">Sources and libraries</p>
     <table>
       <tr><th>Piece</th><th>Version</th><th>What it does</th><th>Loaded from</th><th>Licence</th></tr>
-      <tr><td>App code</td><td>App 1.100</td><td>The five tabs, charts, net metering maths, encryption and Sunny (<code>app.js</code>, <code>lock.js</code>, <code>style.css</code>, <code>sw.js</code>). No framework; SVG charts and icons, system font</td><td>GitHub Pages, this repo's <code>web/</code></td><td>Written for the app</td></tr>
-      <tr><td>iPhone and iPad app</td><td>1.7</td><td>SwiftUI, Face ID, keychain passphrase; widgets, Live Activity, Control Center, Siri (<code>ios/Solar</code>)</td><td>TestFlight</td><td>Written for the app</td></tr>
-      <tr><td>Apple TV app</td><td>1.7</td><td>Shared model code with tvOS screens and Top Shelf (<code>ios/TV</code>)</td><td>TestFlight</td><td>Written for the app</td></tr>
+      <tr><td>App code</td><td>App 1.101</td><td>The five tabs, charts, net metering maths, encryption and Sunny (<code>app.js</code>, <code>lock.js</code>, <code>style.css</code>, <code>sw.js</code>). No framework; SVG charts and icons, system font</td><td>GitHub Pages, this repo's <code>web/</code></td><td>Written for the app</td></tr>
+      <tr><td>iPhone and iPad app</td><td>1.8.1</td><td>SwiftUI, Face ID or Touch ID, keychain passphrase; widgets, alerts, Live Activity, Control Center, Siri (<code>ios/Solar</code>)</td><td>TestFlight</td><td>Written for the app</td></tr>
+      <tr><td>Apple TV app</td><td>1.8</td><td>Shared model code with tvOS screens and Top Shelf (<code>ios/TV</code>)</td><td>TestFlight</td><td>Written for the app</td></tr>
       <tr><td>Build job</td><td>Python 3</td><td>Fetches data, reads bills and meter files, models costs, encrypts, sends alerts (<code>scripts/build.py</code>, <code>money.py</code>, <code>parse_bill.py</code>)</td><td>GitHub Actions</td><td>Written for the app</td></tr>
       <tr><td>Transformers.js</td><td>3.5.1</td><td>Runs the speech model in the browser, with ONNX Runtime Web inside</td><td>cdn.jsdelivr.net</td><td>Apache-2.0</td></tr>
       <tr><td>Whisper tiny.en</td><td>Xenova, 8-bit</td><td>Turns a spoken question into text in the browser (about 40 MB)</td><td>huggingface.co</td><td>MIT</td></tr>
@@ -164,7 +164,7 @@
       <tr><td>Anthropic Claude API</td><td>Sunny's answers in Ask</td><td><code>api.anthropic.com/v1/messages</code>, model <code>claude-haiku-5-5</code>, called from the device with a summary of your data; key carried inside the encrypted data</td></tr>
       <tr><td>GitHub</td><td>Hosting, the hourly job, uploads</td><td>Pages serves the site, Actions runs the build; phone uploads arrive encrypted in <code>data/inbox/</code> (<code>UPLOAD_TOKEN</code>)</td></tr>
       <tr><td>App Store Connect</td><td>iPhone, iPad and Apple TV builds</td><td>Xcode 26 on GitHub when <code>ios/</code> changes; signed for M8GX2N7YR2 with a team API key</td></tr>
-      <tr><td>Web Push (Apple)</td><td>Alerts on the phone</td><td>VAPID-signed pushes from the build; subscriptions kept encrypted in <code>data/push.enc</code></td></tr>
+      <tr><td>Apple push</td><td>Alerts on the phone</td><td>Web Push (VAPID) for the Home Screen app, APNs for the iPhone app (<code>APNS_KEY_P8</code>); devices kept encrypted in <code>data/push.enc</code></td></tr>
       <tr><td>Browser features</td><td>Unlock, voice, offline</td><td>Web Crypto, passkeys, microphone, speech, a service worker</td></tr>
     </table>
   </div>
@@ -175,7 +175,7 @@
     <p>This document: <code>docs/overview/</code>. Make sample data with <code>fake_data.py</code>, take screenshots with <code>shoot.js</code>, print with <code>pdf.js</code>.</p>
   </section>
 
-  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.19 · App 1.100</span><span>Page 3 of 3</span></span></footer>
+  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.20 · App 1.101</span><span>Page 3 of 3</span></span></footer>
 </div>
 
 </body>
