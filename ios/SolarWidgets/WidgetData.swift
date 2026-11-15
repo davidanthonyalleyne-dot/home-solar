@@ -52,6 +52,13 @@ enum SolarCrypto {
         }
         return r == kCCSuccess ? Data(out) : nil
     }
+    /// Encrypts bytes the way web/lock.js seal() does, so the build can read them.
+    static func seal(_ bytes: Data) throws -> [String: Any] {
+        guard let box = lastBox, let key = lastKey else { throw CocoaError(.userCancelled) }
+        let sealed = try AES.GCM.seal(bytes, using: SymmetricKey(data: key))
+        return ["v": 1, "kdf": "PBKDF2-SHA256", "iter": box.iter, "salt": box.salt,
+                "iv": Data(sealed.nonce).base64EncodedString(), "ct": (sealed.ciphertext + sealed.tag).base64EncodedString()]
+    }
     static func open(_ box: Box, key: Data) throws -> Data {
         guard let iv = Data(base64Encoded: box.iv), let ct = Data(base64Encoded: box.ct), ct.count > 16 else { throw CocoaError(.coderInvalidValue) }
         let sealed = try AES.GCM.SealedBox(nonce: AES.GCM.Nonce(data: iv), ciphertext: ct.dropLast(16), tag: ct.suffix(16))
@@ -60,6 +67,9 @@ enum SolarCrypto {
     /// Downloads and opens data.json. Nil when there's no passphrase in this build or it no longer fits.
     /// The last data.json opened, for the app's Now screen, which needs more of it than the widgets.
     nonisolated(unsafe) static var lastJSON: [String: Any]?
+    /// The salt, rounds and key of the last data.json opened; the app seals uploads with them.
+    nonisolated(unsafe) static var lastBox: Box?
+    nonisolated(unsafe) static var lastKey: Data?
     static func latest() async -> [String: Any]? {
         var req = URLRequest(url: SolarConfig.dataURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         req.setValue("no-store", forHTTPHeaderField: "Cache-Control")
@@ -71,6 +81,7 @@ enum SolarCrypto {
             key = k; KeyCache.save(k, salt: box.salt)
         }
         guard let key, let raw = try? SolarCrypto.open(box, key: key) else { return nil }
+        lastBox = box; lastKey = key
         let json = try? JSONSerialization.jsonObject(with: raw) as? [String: Any]
         if json != nil { lastJSON = json }
         return json

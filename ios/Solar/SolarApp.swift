@@ -39,28 +39,14 @@ struct SolarApp: App {
 struct Unlocked: View {
     let onLock: () -> Void
     @Environment(\.horizontalSizeClass) private var size
-    @StateObject private var host = WebHost()
 
     var body: some View {
         if size == .compact {
-            MainTabs(web: host.web(onLock: onLock))
+            MainTabs(onLock: onLock)
         } else {
             SolarWebView(url: solarURL, passphrase: Secrets.passphrase, onLock: onLock)
                 .ignoresSafeArea()
         }
-    }
-}
-
-/// The one web view the iPhone's Month, History, Ask and Settings tabs share.
-@MainActor
-final class WebHost: ObservableObject {
-    private var made: (WKWebView, SolarWebView.Coordinator)?
-    func web(onLock: @escaping () -> Void) -> WKWebView {
-        if let made { return made.0 }
-        let c = SolarWebView.Coordinator(onLock: onLock)
-        let w = SolarWebView.build(url: solarURL, passphrase: Secrets.passphrase, coordinator: c, nativeTabs: true)
-        made = (w, c)
-        return w
     }
 }
 

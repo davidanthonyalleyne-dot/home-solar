@@ -11,16 +11,16 @@ import WidgetKit
 enum SolarTab: String, CaseIterable { case now, month, history, ask, settings }
 
 struct MainTabs: View {
-    let web: WKWebView
+    let onLock: () -> Void
     @State private var tab: SolarTab = .now
     @StateObject private var now = NowModel()
 
     var body: some View {
         TabView(selection: $tab) {
-            NowScreen(model: now) { open in
+            NowScreen(model: now) { _ in
                 // the status dot opens the SolarEdge page in Settings
+                now.settingsPath = ["solaredge"]
                 tab = .settings
-                if open { WebTabs.openSolarEdge(web) }
             }
             .tabItem { Label("Now", systemImage: "sun.max") }
             .tag(SolarTab.now)
@@ -30,12 +30,12 @@ struct MainTabs: View {
             HistoryScreen(model: now) { ym in now.selectedMonth = ym; tab = .month }
                 .tabItem { Label("History", systemImage: "chart.bar") }
                 .tag(SolarTab.history)
-            ForEach([SolarTab.ask, .settings], id: \.self) { t in
-                WebTab(web: web, tab: t, active: tab == t)
-                    .ignoresSafeArea(edges: .top)
-                    .tabItem { Label(t.title, systemImage: t.symbol) }
-                    .tag(t)
-            }
+            AskScreen(model: now)
+                .tabItem { Label("Ask", systemImage: "bubble.left") }
+                .tag(SolarTab.ask)
+            SettingsScreen(model: now, onLock: onLock)
+                .tabItem { Label("Settings", systemImage: "gearshape") }
+                .tag(SolarTab.settings)
         }
         .tint(.primary)
     }
@@ -51,44 +51,6 @@ extension SolarTab {
         case .ask: return "bubble.left"
         case .settings: return "gearshape"
         }
-    }
-}
-
-enum WebTabs {
-    static func show(_ web: WKWebView, _ tab: SolarTab) {
-        web.evaluateJavaScript("if (location.hash !== '#\(tab.rawValue)') location.hash = '#\(tab.rawValue)';")
-    }
-    static func openSolarEdge(_ web: WKWebView) {
-        // the page's own handler: Settings, opened on SolarEdge
-        let js = """
-        (() => { const v = document.getElementById('view') || document.querySelector('main'); if (!v) return;
-          const b = document.createElement('button'); b.setAttribute('data-gosolar', ''); b.hidden = true;
-          v.appendChild(b); b.click(); b.remove(); })();
-        """
-        web.evaluateJavaScript(js)
-    }
-}
-
-/// Holds the one web view; whichever web tab is showing takes it.
-struct WebTab: UIViewRepresentable {
-    let web: WKWebView
-    let tab: SolarTab
-    let active: Bool
-
-    func makeUIView(context: Context) -> UIView {
-        let v = UIView(); v.backgroundColor = .systemBackground
-        return v
-    }
-    func updateUIView(_ host: UIView, context: Context) {
-        guard active else { return }
-        if web.superview !== host {
-            web.removeFromSuperview()
-            web.translatesAutoresizingMaskIntoConstraints = false
-            host.addSubview(web)
-            NSLayoutConstraint.activate([web.topAnchor.constraint(equalTo: host.topAnchor), web.bottomAnchor.constraint(equalTo: host.bottomAnchor),
-                                         web.leadingAnchor.constraint(equalTo: host.leadingAnchor), web.trailingAnchor.constraint(equalTo: host.trailingAnchor)])
-        }
-        WebTabs.show(web, tab)
     }
 }
 
@@ -122,6 +84,7 @@ final class NowModel: ObservableObject {
     @Published var failed = false
     @Published var json: [String: Any]?
     @Published var selectedMonth: String?   // Month's month; History sets it when you tap a month
+    @Published var settingsPath: [String] = []   // the Settings page that's open; the status dot opens SolarEdge
     var preview = false
     private var loadedAt: Date?
 
@@ -135,6 +98,8 @@ final class NowModel: ObservableObject {
         failed = false
         self.json = json
         data = NowModel.make(snap, json)
+        let s = json["solar"] as? [String: Any]
+        Task.detached { await GitHub.nudgeIfLate(updated: SK.iso(s?["updated"] as? String), token: json["uploadToken"] as? String) }
     }
 
     static func make(_ snap: Snapshot, _ json: [String: Any]) -> NowData {
@@ -498,7 +463,8 @@ struct PreviewNow: View {
     }
     static var startTab: SolarTab {
         let a = ProcessInfo.processInfo.arguments
-        return a.contains("-month") ? .month : a.contains("-history") ? .history : a.contains("-energy") ? .history : .now
+        return a.contains("-month") ? .month : a.contains("-history") || a.contains("-energy") ? .history : a.contains("-ask") ? .ask
+            : a.contains("-settings") || a.contains("-solaredge") ? .settings : .now
     }
     @StateObject private var model: NowModel = {
         let m = NowModel()
@@ -508,6 +474,7 @@ struct PreviewNow: View {
                          peakKw: 7.74, acKw: 6, month: 138.2, year: 3452, lifetime: 14828, since: "2023", curve: s.curve, expected: 11,
                          lat: 43.64, lon: -79.43, weather: s.weather, tomorrow: (0, 4, -2), status: ("ok", "System normal"))
         m.preview = true
+        if ProcessInfo.processInfo.arguments.contains("-solaredge") { m.settingsPath = ["solaredge"] }
         if let u = Bundle.main.url(forResource: "sample-data", withExtension: "json"), let d = try? Data(contentsOf: u) {
             m.json = try? JSONSerialization.jsonObject(with: d) as? [String: Any]
         }
@@ -519,9 +486,8 @@ struct PreviewNow: View {
             NowScreen(model: model) { _ in }.tabItem { Label("Now", systemImage: "sun.max") }.tag(SolarTab.now)
             MonthScreen(model: model).tabItem { Label("Month", systemImage: "calendar") }.tag(SolarTab.month)
             HistoryScreen(model: model) { ym in model.selectedMonth = ym; tab = .month }.tabItem { Label("History", systemImage: "chart.bar") }.tag(SolarTab.history)
-            ForEach([SolarTab.ask, .settings], id: \.self) { t in
-                Color(uiColor: .systemBackground).tabItem { Label(t.title, systemImage: t.symbol) }.tag(t)
-            }
+            AskScreen(model: model).tabItem { Label("Ask", systemImage: "bubble.left") }.tag(SolarTab.ask)
+            SettingsScreen(model: model, onLock: {}).tabItem { Label("Settings", systemImage: "gearshape") }.tag(SolarTab.settings)
         }
         .tint(.primary)
     }
