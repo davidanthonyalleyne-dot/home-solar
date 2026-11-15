@@ -145,6 +145,21 @@ jobs:
               a = g["attributes"]
               res = call(f"/v1/betaGroups/{g['id']}/relationships/builds", {"data": [{"type": "builds", "id": b["id"]}]}, "POST")
               print("group", a.get("name"), "internal" if a.get("isInternalGroup") else "external", "ok" if res is not None else "not added")
+          # what TestFlight sees: each group, its testers, and every tester given this build directly
+          for g in groups.get("data", []):
+              a = g["attributes"]
+              print("group", a.get("name"), {k: a.get(k) for k in ("isInternalGroup", "hasAccessToAllBuilds", "publicLinkEnabled")})
+              ts = call(f"/v1/betaGroups/{g['id']}/betaTesters?limit=50") or {}
+              ids = []
+              for t in ts.get("data", []):
+                  ta = t["attributes"]; ids.append(t["id"])
+                  print("  tester", ta.get("firstName"), (ta.get("email") or "")[:3] + "…", ta.get("inviteType"), ta.get("state"))
+              if ids:
+                  r = call(f"/v1/builds/{b['id']}/relationships/individualTesters", {"data": [{"type": "betaTesters", "id": i} for i in ids]}, "POST")
+                  print("  testers given this build directly:", "yes" if r is not None else "no")
+          pv = call(f"/v1/builds/{b['id']}/preReleaseVersion") or {}
+          print("version", json.dumps((pv.get("data") or {}).get("attributes", {})))
+          print("expired", b["attributes"].get("expired"), "min OS", b["attributes"].get("minOsVersion"))
           d = call(f"/v1/builds/{b['id']}/buildBetaDetail") or {}
           print("TestFlight state:", json.dumps((d.get("data") or {}).get("attributes", {})))
           PY
