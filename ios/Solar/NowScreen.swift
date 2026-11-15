@@ -490,5 +490,15 @@ struct PreviewNow: View {
             SettingsScreen(model: model, onLock: {}).tabItem { Label("Settings", systemImage: "gearshape") }.tag(SolarTab.settings)
         }
         .tint(.primary)
+        .task {
+            // -cycle: switch tabs quickly for a while, the way a thumb does, so CI can catch a crash
+            guard ProcessInfo.processInfo.arguments.contains("-cycle") else { return }
+            for i in 0..<240 {
+                try? await Task.sleep(for: .milliseconds(i % 3 == 0 ? 90 : 260))
+                tab = SolarTab.allCases[(i * 3 + i / 5) % SolarTab.allCases.count]
+                if i % 40 == 39 { model.settingsPath = ["solaredge"]; tab = .settings }
+            }
+            print("SOLAR_CYCLE_DONE")
+        }
     }
 }

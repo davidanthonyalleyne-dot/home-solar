@@ -1,0 +1,84 @@
+name: iOS crash check
+
+# Two ways to find why the app crashed. First, any crash reports sent from TestFlight
+# (App Store Connect API). Second, the app is run in the iOS 26 simulator with its tab bar
+# switching quickly for about a minute, and any crash report the simulator writes is kept.
+# Run by hand; results are attached as "crashes" (kept one day).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  crashes:
+    runs-on: macos-15
+    timeout-minutes: 40
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: TestFlight crash reports
+        continue-on-error: true
+        run: |
+          mkdir -p "$RUNNER_TEMP/crashes/testflight" "$RUNNER_TEMP/keys"
+          echo "${{ secrets.ASC_KEY_P8 }}" > "$RUNNER_TEMP/keys/key.p8"
+          python3 -m pip install --quiet --break-system-packages pyjwt cryptography 2>/dev/null || python3 -m pip install --quiet pyjwt cryptography
+          KEY="$RUNNER_TEMP/keys/key.p8" OUT="$RUNNER_TEMP/crashes/testflight" python3 - <<'PY'
+          import json, os, time, urllib.request, urllib.error, jwt
+          tok = jwt.encode({"iss": os.environ["ASC_ISSUER_ID"], "exp": int(time.time()) + 900, "aud": "appstoreconnect-v1"},
+                           open(os.environ["KEY"]).read(), algorithm="ES256", headers={"kid": os.environ["ASC_KEY_ID"], "typ": "JWT"})
+          def get(path):
+              r = urllib.request.Request("https://api.appstoreconnect.apple.com" + path, headers={"Authorization": f"Bearer {tok}"})
+              try:
+                  return json.load(urllib.request.urlopen(r))
+              except urllib.error.HTTPError as e:
+                  print(path, e.code, e.read()[:300]); return None
+          apps = get("/v1/apps?filter[bundleId]=ca.davidalleyne.solar") or {}
+          for app in apps.get("data", []):
+              subs = get(f"/v1/apps/{app['id']}/betaFeedbackCrashSubmissions?limit=10&sort=-createdDate") or {}
+              print(len(subs.get("data", [])), "crash submissions")
+              for s in subs.get("data", []):
+                  a = s["attributes"]
+                  print(a.get("createdDate"), a.get("deviceModel"), a.get("osVersion"), a.get("appBuildVersion") if "appBuildVersion" in a else "", (a.get("comment") or "")[:200])
+                  log = get(f"/v1/betaFeedbackCrashSubmissions/{s['id']}/crashLog") or {}
+                  text = (log.get("data") or {}).get("attributes", {}).get("logText") or ""
+                  open(os.path.join(os.environ["OUT"], s["id"] + ".crash"), "w").write(text)
+                  print("\n".join(text.splitlines()[:60]))
+          PY
+          rm -rf "$RUNNER_TEMP/keys"
+      - name: Use the newest Xcode 26 or later
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+      - name: Build for the simulator
+        working-directory: ios
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild build -project Solar.xcodeproj -scheme Solar -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO | tail -5
+      - name: Switch tabs quickly in the simulator
+        run: |
+          DEV=$(xcrun simctl list devices available | grep -E "iPhone 1[6-9] Pro \(" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          xcrun simctl list runtimes | tail -3
+          xcrun simctl boot "$DEV"; xcrun simctl bootstatus "$DEV" -b
+          APP=$(find "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator" -maxdepth 1 -name "Solar.app")
+          xcrun simctl install "$DEV" "$APP"
+          mkdir -p "$RUNNER_TEMP/crashes/sim"
+          for mode in light dark; do
+            xcrun simctl ui "$DEV" appearance $mode
+            xcrun simctl launch --console-pty "$DEV" ca.davidalleyne.solar -previewNow -cycle > "$RUNNER_TEMP/crashes/sim/console-$mode.txt" 2>&1 &
+            sleep 75
+            xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/crashes/sim/end-$mode.png" || true
+            if xcrun simctl spawn "$DEV" launchctl list | grep -q ca.davidalleyne.solar; then echo "$mode: still running"; else echo "$mode: NOT RUNNING (crashed?)"; fi
+            grep -E "SOLAR_CYCLE_DONE|Fatal|fatal|crash|Terminating|exception" "$RUNNER_TEMP/crashes/sim/console-$mode.txt" | head -20 || true
+            xcrun simctl terminate "$DEV" ca.davidalleyne.solar || true
+          done
+          find ~/Library/Logs/DiagnosticReports -name "Solar*" -newer "$APP" -exec cp {} "$RUNNER_TEMP/crashes/sim/" \; 2>/dev/null || true
+          for f in "$RUNNER_TEMP"/crashes/sim/*.ips; do [ -f "$f" ] && head -c 6000 "$f"; done || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: crashes
+          path: ${{ runner.temp }}/crashes
+          retention-days: 1
