@@ -16,7 +16,10 @@ window.HomeSolarLock = (() => {
 
   const load = () => { try { return JSON.parse(localStorage.getItem(STORE) || "null"); } catch { return null; } };
   const save = (v) => { try { localStorage.setItem(STORE, JSON.stringify(v)); } catch {} };
-  const forget = () => { sessionKey = null; try { localStorage.removeItem(STORE); } catch {} idbDel(); };
+  const forget = () => {
+    // in the iPhone app, Lock hands back to its own lock screen
+    try { if (window.SolarNative) window.webkit.messageHandlers.solar.postMessage("lock"); } catch {}
+    sessionKey = null; try { localStorage.removeItem(STORE); } catch {} idbDel(); };
   // the key that opened the data this session, kept in memory only, so a refresh needn't ask again
   let sessionKey = null, sessionBox = null;
 
@@ -170,6 +173,15 @@ window.HomeSolarLock = (() => {
         };
       };
 
+      // the iPhone app: it has already checked Sign in with Apple and Face ID, and hands over the passphrase
+      const nat = window.SolarNative;
+      if (nat && nat.passphrase) {
+        shell(view, `<p class="small" style="text-align:center;margin:0">Unlocking…</p>`);
+        return keyFromPassphrase(nat.passphrase, box)
+          .then((k) => decryptWith(k, box).then((d) => { rawKey = k; done(d); }))
+          .catch(() => askPassphrase("The passphrase has changed. Enter the new one, then rebuild the iPhone app."));
+      }
+
       const s = load();
       if (s && s.kind === "passkey") return askFaceId(s);
       if (s && s.kind === "device") {
@@ -181,6 +193,7 @@ window.HomeSolarLock = (() => {
   }
 
   function status() {
+    if (window.SolarNative && window.SolarNative.passphrase) return "Sign in with Apple and Face ID";
     const s = load();
     return s && s.kind === "passkey" ? "Face ID" : s && s.kind === "device" ? "Kept unlocked on this device" : "Passphrase each time";
   }

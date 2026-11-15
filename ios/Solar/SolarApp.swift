@@ -1,33 +1,237 @@
 import SwiftUI
 import WebKit
+import AuthenticationServices
+import LocalAuthentication
 
 // Solar for iPhone: a native shell around the Solar web app on GitHub Pages.
 // The web app stays the single source of truth; every build of the site shows up here
 // on the next launch or pull to refresh, with no new TestFlight build needed.
+//
+// Opening it takes Sign in with Apple (once, then checked on every launch) and Face ID.
+// After that the app hands the site its passphrase, so it's never typed here.
 
 let solarURL = URL(string: "https://davidanthonyalleyne-dot.github.io/home-solar/")!
 
 @main
 struct SolarApp: App {
+    @StateObject private var gate = Gate()
+    @Environment(\.scenePhase) private var phase
+
     var body: some Scene {
         WindowGroup {
-            SolarWebView(url: solarURL)
-                .ignoresSafeArea()
-                .background(Color(uiColor: .systemBackground))
+            Group {
+                if gate.unlocked {
+                    SolarWebView(url: solarURL, passphrase: Secrets.passphrase) { gate.lock() }
+                        .ignoresSafeArea()
+                } else {
+                    LockView(gate: gate)
+                }
+            }
+            .background(Color(uiColor: .systemBackground))
+        }
+        .onChange(of: phase) { _, now in gate.phaseChanged(now) }
+    }
+}
+
+// MARK: - Sign in with Apple + Face ID
+
+@MainActor
+final class Gate: ObservableObject {
+    @Published var unlocked = false
+    @Published var signedIn = Keychain.get("appleUser") != nil
+    @Published var message: String?
+    @Published var busy = false
+    var autoPrompt = true   // Face ID comes up by itself on launch and on return, not right after Lock
+    private var backgroundedAt: Date?
+    private let relockAfter: TimeInterval = 120
+
+    func phaseChanged(_ phase: ScenePhase) {
+        switch phase {
+        case .background:
+            backgroundedAt = Date()
+            autoPrompt = true
+        case .active:
+            if let t = backgroundedAt, unlocked, Date().timeIntervalSince(t) > relockAfter { lock() }
+            backgroundedAt = nil
+            if !unlocked && signedIn && !busy && autoPrompt { Task { await unlock() } }
+        default: break
+        }
+    }
+
+    func lock() {
+        autoPrompt = false
+        unlocked = false
+        message = nil
+    }
+
+    // Sign in with Apple finished: remember which Apple Account this is, then Face ID.
+    func finishSignIn(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let auth):
+            guard let cred = auth.credential as? ASAuthorizationAppleIDCredential else { return }
+            if let pinned = Keychain.get("appleUser"), pinned != cred.user {
+                message = "That Apple Account isn't the one Solar is set up for."
+                return
+            }
+            Keychain.set("appleUser", cred.user)
+            signedIn = true
+            Task { await unlock() }
+        case .failure(let error):
+            if (error as? ASAuthorizationError)?.code != .canceled {
+                message = "Sign in with Apple didn't finish. Try again."
+            }
+        }
+    }
+
+    // Every launch: is the Apple Account still signed in and still allowed, then Face ID.
+    func unlock() async {
+        guard let user = Keychain.get("appleUser") else { signedIn = false; return }
+        busy = true
+        defer { busy = false }
+        message = nil
+
+        let state = await withCheckedContinuation { (c: CheckedContinuation<ASAuthorizationAppleIDProvider.CredentialState, Never>) in
+            ASAuthorizationAppleIDProvider().getCredentialState(forUserID: user) { s, _ in c.resume(returning: s) }
+        }
+        switch state {
+        case .authorized:
+            break
+        case .revoked, .notFound:
+            Keychain.delete("appleUser")
+            signedIn = false
+            message = "Sign in with Apple again to open Solar."
+            return
+        default:
+            // offline or Apple unreachable: Face ID still guards it
+            break
+        }
+
+        let ctx = LAContext()
+        ctx.localizedCancelTitle = "Not now"
+        var err: NSError?
+        guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else {
+            message = "Turn on Face ID or a passcode for this iPhone to open Solar."
+            return
+        }
+        do {
+            try await ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock Solar")
+            unlocked = true
+        } catch {
+            message = nil   // cancelled: the button stays there to try again
         }
     }
 }
 
+struct LockView: View {
+    @ObservedObject var gate: Gate
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Spacer()
+            SunMark().frame(width: 92, height: 92)
+            Text("Solar").font(.largeTitle.weight(.bold))
+            Spacer()
+            if gate.signedIn {
+                Button {
+                    Task { await gate.unlock() }
+                } label: {
+                    Label("Unlock with Face ID", systemImage: "faceid")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+                .disabled(gate.busy)
+            } else {
+                SignInWithAppleButton(.signIn) { req in
+                    req.requestedScopes = []
+                } onCompletion: { gate.finishSignIn($0) }
+                .signInWithAppleButtonStyle(scheme == .dark ? .white : .black)
+                .frame(height: 50)
+            }
+            Text(gate.message ?? " ")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(minHeight: 36)
+        }
+        .padding(.horizontal, 32)
+        .padding(.bottom, 24)
+        .task { if gate.signedIn && !gate.unlocked && !gate.busy && gate.autoPrompt { await gate.unlock() } }
+    }
+}
+
+// Solar's mark: the sun on the horizon
+struct SunMark: View {
+    var body: some View {
+        GeometryReader { g in
+            let w = g.size.width, cy = w * 0.63, r = w * 0.23
+            ZStack {
+                Path { p in
+                    p.addArc(center: CGPoint(x: w / 2, y: cy), radius: r, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
+                    p.closeSubpath()
+                }.fill(Color.orange)
+                Path { p in
+                    p.move(to: CGPoint(x: w * 0.16, y: cy)); p.addLine(to: CGPoint(x: w * 0.84, y: cy))
+                }.stroke(Color.primary, style: StrokeStyle(lineWidth: w * 0.04, lineCap: .round))
+            }
+        }
+    }
+}
+
+// MARK: - Keychain (this device only, never synced or backed up elsewhere)
+
+enum Keychain {
+    private static let service = "ca.davidalleyne.solar"
+    static func get(_ key: String) -> String? {
+        let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+                                kSecAttrAccount as String: key, kSecReturnData as String: true]
+        var out: AnyObject?
+        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
+        return String(data: d, encoding: .utf8)
+    }
+    static func set(_ key: String, _ value: String) {
+        delete(key)
+        let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+                                kSecAttrAccount as String: key, kSecValueData as String: Data(value.utf8),
+                                kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
+        SecItemAdd(q as CFDictionary, nil)
+    }
+    static func delete(_ key: String) {
+        let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+                                kSecAttrAccount as String: key]
+        SecItemDelete(q as CFDictionary)
+    }
+}
+
+// MARK: - The web app
+
 struct SolarWebView: UIViewRepresentable {
     let url: URL
+    let passphrase: String
+    let onLock: () -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> Coordinator { Coordinator(onLock: onLock) }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
-        config.websiteDataStore = .default()   // keeps the unlock and saved chats between launches
+        config.websiteDataStore = .default()   // keeps saved Ask chats between launches
+
+        // hand the site its passphrase (lock.js uses it instead of asking) and a way to lock
+        let ctl = WKUserContentController()
+        if !passphrase.isEmpty, let json = try? JSONSerialization.data(withJSONObject: [passphrase]),
+           let arr = String(data: json, encoding: .utf8) {
+            let js = "window.SolarNative = Object.freeze({ app: true, passphrase: \(arr)[0] });"
+            ctl.addUserScript(WKUserScript(source: js, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        } else {
+            ctl.addUserScript(WKUserScript(source: "window.SolarNative = Object.freeze({ app: true });",
+                                           injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
+        ctl.add(context.coordinator, name: "solar")
+        config.userContentController = ctl
 
         let web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = context.coordinator
@@ -39,9 +243,6 @@ struct SolarWebView: UIViewRepresentable {
         // the page handles the notch and home bar itself (viewport-fit=cover)
         web.scrollView.contentInsetAdjustmentBehavior = .never
         web.scrollView.bounces = true
-        #if DEBUG
-        if #available(iOS 16.4, *) { web.isInspectable = true }
-        #endif
 
         let refresh = UIRefreshControl()
         refresh.addTarget(context.coordinator, action: #selector(Coordinator.reload(_:)), for: .valueChanged)
@@ -54,8 +255,18 @@ struct SolarWebView: UIViewRepresentable {
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
+        uiView.configuration.userContentController.removeScriptMessageHandler(forName: "solar")
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         weak var webView: WKWebView?
+        let onLock: () -> Void
+        init(onLock: @escaping () -> Void) { self.onLock = onLock }
+
+        func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.body as? String == "lock" { DispatchQueue.main.async { self.onLock() } }
+        }
 
         @objc func reload(_ sender: UIRefreshControl) {
             webView?.reload()
@@ -116,7 +327,7 @@ struct SolarWebView: UIViewRepresentable {
             top.present(alert, animated: true)
         }
 
-        // if the page fails to load (offline), try again when the app comes back
+        // if the page fails to load (offline), offer to try again
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             let html = """
             <meta name="viewport" content="width=device-width,initial-scale=1">

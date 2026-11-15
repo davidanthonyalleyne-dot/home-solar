@@ -98,4 +98,4 @@ Then open http://localhost:8000. Locally it builds with Toronto Hydro data only,
 
 It needs three repository secrets from the App Store Connect API key "GitHub Actions": `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_P8` (the whole .p8 file).
 
-Inside the app, Solar's phone alerts and Face ID unlock don't work, because Apple only offers web push and passkeys to Safari and home-screen web apps. The app asks for the passphrase once instead, and the home-screen version keeps working alongside it for alerts.
+Opening the app takes Sign in with Apple (the first time, and it checks on every launch that the Apple Account is still allowed) and then Face ID. The app holds the site's passphrase, put in at build time from the `SITE_PASSPHRASE` secret, and hands it to the page, so it's never typed there. If the passphrase changes, run the workflow again. It locks after two minutes in the background, or from Settings. Phone alerts don't work inside the app, because Apple only offers web push to Safari and home-screen web apps, so the home-screen version keeps working alongside it for alerts.
