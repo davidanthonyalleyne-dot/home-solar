@@ -27,7 +27,10 @@ struct MainTabs: View {
             MonthScreen(model: now)
                 .tabItem { Label("Month", systemImage: "calendar") }
                 .tag(SolarTab.month)
-            ForEach([SolarTab.history, .ask, .settings], id: \.self) { t in
+            HistoryScreen(model: now) { ym in now.selectedMonth = ym; tab = .month }
+                .tabItem { Label("History", systemImage: "chart.bar") }
+                .tag(SolarTab.history)
+            ForEach([SolarTab.ask, .settings], id: \.self) { t in
                 WebTab(web: web, tab: t, active: tab == t)
                     .ignoresSafeArea(edges: .top)
                     .tabItem { Label(t.title, systemImage: t.symbol) }
@@ -118,6 +121,7 @@ final class NowModel: ObservableObject {
     @Published var data: NowData?
     @Published var failed = false
     @Published var json: [String: Any]?
+    @Published var selectedMonth: String?   // Month's month; History sets it when you tap a month
     var preview = false
     private var loadedAt: Date?
 
@@ -492,7 +496,10 @@ struct PreviewNow: View {
         return false
         #endif
     }
-    static var startTab: SolarTab { ProcessInfo.processInfo.arguments.contains("-month") ? .month : .now }
+    static var startTab: SolarTab {
+        let a = ProcessInfo.processInfo.arguments
+        return a.contains("-month") ? .month : a.contains("-history") ? .history : a.contains("-energy") ? .history : .now
+    }
     @StateObject private var model: NowModel = {
         let m = NowModel()
         let s = Snapshot.sample
@@ -511,7 +518,8 @@ struct PreviewNow: View {
         TabView(selection: $tab) {
             NowScreen(model: model) { _ in }.tabItem { Label("Now", systemImage: "sun.max") }.tag(SolarTab.now)
             MonthScreen(model: model).tabItem { Label("Month", systemImage: "calendar") }.tag(SolarTab.month)
-            ForEach([SolarTab.history, .ask, .settings], id: \.self) { t in
+            HistoryScreen(model: model) { ym in model.selectedMonth = ym; tab = .month }.tabItem { Label("History", systemImage: "chart.bar") }.tag(SolarTab.history)
+            ForEach([SolarTab.ask, .settings], id: \.self) { t in
                 Color(uiColor: .systemBackground).tabItem { Label(t.title, systemImage: t.symbol) }.tag(t)
             }
         }

@@ -37,9 +37,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/screens"
           for mode in light dark; do
             xcrun simctl ui "$DEV" appearance $mode
-            for screen in now month; do
+            for screen in now month history energy; do
               xcrun simctl terminate "$DEV" ca.davidalleyne.solar || true
-              xcrun simctl launch "$DEV" ca.davidalleyne.solar -previewNow -$screen
+              HV=cost; [ "$screen" = energy ] && HV=energy
+              xcrun simctl launch "$DEV" ca.davidalleyne.solar -previewNow -$screen -histView $HV
               sleep 6
               xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/screens/$screen-$mode.png"
             done

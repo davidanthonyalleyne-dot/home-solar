@@ -164,7 +164,7 @@ func richText(_ s: String, size: CGFloat = 15) -> Text {
 
 struct MonthScreen: View {
     @ObservedObject var model: NowModel
-    @State private var ym: String? = nil
+    private var ym: String? { model.selectedMonth }
     @State private var day: String? = nil
     @State private var sheet: SheetKind? = nil
     @State private var ledgerOpen = false
@@ -177,7 +177,7 @@ struct MonthScreen: View {
                 let db = SolarDB(j)
                 if let cur = ym ?? db.defaultMonth {
                     MonthBody(db: db, ym: cur, day: day, ledgerOpen: $ledgerOpen,
-                              go: { ym = $0; day = nil },
+                              go: { model.selectedMonth = $0; day = nil },
                               tapDay: { day = $0; sheet = .day($0) },
                               openBill: { sheet = .bill(cur) })
                         .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 28)
