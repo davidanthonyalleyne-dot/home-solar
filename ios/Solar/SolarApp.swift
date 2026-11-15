@@ -161,13 +161,24 @@ final class Gate: ObservableObject {
 
     // Every launch: is the Apple Account still signed in and still allowed, then Face ID.
     func unlock() async {
+        guard !busy else { return }   // one prompt at a time
         guard let user = Keychain.get("appleUser") else { signedIn = false; return }
         busy = true
         defer { busy = false }
         message = nil
 
-        let state = await withCheckedContinuation { (c: CheckedContinuation<ASAuthorizationAppleIDProvider.CredentialState, Never>) in
-            ASAuthorizationAppleIDProvider().getCredentialState(forUserID: user) { s, _ in c.resume(returning: s) }
+        // Apple's check can hang with no answer (seen on an iPad); after a few seconds go on to
+        // Touch ID or Face ID anyway, which still guards the app
+        let state: ASAuthorizationAppleIDProvider.CredentialState = await withTaskGroup(of: ASAuthorizationAppleIDProvider.CredentialState?.self) { g in
+            g.addTask {
+                await withCheckedContinuation { (c: CheckedContinuation<ASAuthorizationAppleIDProvider.CredentialState?, Never>) in
+                    ASAuthorizationAppleIDProvider().getCredentialState(forUserID: user) { s, _ in c.resume(returning: s) }
+                }
+            }
+            g.addTask { try? await Task.sleep(for: .seconds(4)); return nil }
+            let first = await g.next() ?? nil
+            g.cancelAll()
+            return first ?? .transferred   // unknown: treated as "couldn't check"
         }
         switch state {
         case .authorized:
@@ -192,8 +203,16 @@ final class Gate: ObservableObject {
         do {
             try await ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock Solar")
             if SharedVault.passphrase == nil { needsPassphrase = true } else { unlocked = true }
+        } catch let e as LAError {
+            switch e.code {
+            case .userCancel, .appCancel: message = nil   // the button stays there to try again
+            case .systemCancel, .notInteractive: message = "\(Bio.name) was interrupted. Tap to try again."
+            case .biometryLockout: message = "\(Bio.name) is locked after too many tries. Unlock the \(Bio.device) with its passcode, then try again."
+            case .passcodeNotSet: message = "Set a passcode for this \(Bio.device) to open Solar."
+            default: message = "\(Bio.name) didn't work: \(e.localizedDescription)"
+            }
         } catch {
-            message = nil   // cancelled: the button stays there to try again
+            message = "\(Bio.name) didn't work: \(error.localizedDescription)"
         }
     }
 }
@@ -201,6 +220,7 @@ final class Gate: ObservableObject {
 struct LockView: View {
     @ObservedObject var gate: Gate
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.scenePhase) private var phase
 
     var body: some View {
         VStack(spacing: 18) {
@@ -236,7 +256,10 @@ struct LockView: View {
         }
         .padding(.horizontal, 32)
         .padding(.bottom, 24)
-        .task { if gate.signedIn && !gate.unlocked && !gate.busy && gate.autoPrompt { await gate.unlock() } }
+        // only once the app is really on screen; asked earlier, iOS cancels the prompt
+        .onChange(of: phase, initial: true) { _, p in
+            if p == .active, gate.signedIn, !gate.unlocked, !gate.busy, gate.autoPrompt { Task { await gate.unlock() } }
+        }
     }
 }
 
