@@ -91,3 +91,11 @@ python3 -m http.server -d _site 8000
 ```
 
 Then open http://localhost:8000. Locally it builds with Toronto Hydro data only, because the SolarEdge sign-in lives in GitHub.
+
+## iPhone app (TestFlight)
+
+`ios/` holds a small native app that opens the Solar site full screen, so it lives on the phone like any other app and installs through TestFlight. It loads the live site, so changes to the site show up without a new app build. The workflow `iOS app to TestFlight` builds it on a GitHub-hosted Mac with Xcode 26 or later and uploads it, signed with David's Apple Developer team (M8GX2N7YR2, bundle ID `ca.davidalleyne.solar`). It runs when anything under `ios/` changes.
+
+It needs three repository secrets from the App Store Connect API key "GitHub Actions": `ASC_KEY_ID`, `ASC_ISSUER_ID` and `ASC_KEY_P8` (the whole .p8 file).
+
+Inside the app, Solar's phone alerts and Face ID unlock don't work, because Apple only offers web push and passkeys to Safari and home-screen web apps. The app asks for the passphrase once instead, and the home-screen version keeps working alongside it for alerts.

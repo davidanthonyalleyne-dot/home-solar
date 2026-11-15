@@ -3,6 +3,7 @@ name: Build and deploy
 on:
   push:
     branches: [main]
+    paths-ignore: ["ios/**", ".github/workflows/ios-testflight.yml"]  # the iPhone app has its own build
   schedule:
     # hourly; the build skips SolarEdge overnight to save API credits
     # every 10 minutes from about sunrise to sunset all year (9:00 to 01:59 UTC), hourly overnight.
