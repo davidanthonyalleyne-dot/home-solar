@@ -111,6 +111,46 @@ jobs:
             -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tail -40
           test ${PIPESTATUS[0]} -eq 0
 
+      - name: Wait for processing, then give the build to every TestFlight group
+        continue-on-error: true
+        run: |
+          python3 - <<'PY'
+          import json, os, time, urllib.request, urllib.error, jwt
+          def tok():
+              return jwt.encode({"iss": os.environ["ASC_ISSUER_ID"], "exp": int(time.time()) + 900, "aud": "appstoreconnect-v1"},
+                                open(os.environ["KEY_PATH"]).read(), algorithm="ES256", headers={"kid": os.environ["ASC_KEY_ID"], "typ": "JWT"})
+          def call(path, body=None, method=None):
+              r = urllib.request.Request("https://api.appstoreconnect.apple.com" + path, json.dumps(body).encode() if body else None,
+                                         {"Authorization": f"Bearer {tok()}", "Content-Type": "application/json"}, method=method)
+              try:
+                  d = urllib.request.urlopen(r).read(); return json.loads(d) if d else {}
+              except urllib.error.HTTPError as e:
+                  print(path, e.code, e.read()[:400].decode(errors="ignore")); return None
+          app = call("/v1/apps?filter[bundleId]=ca.davidalleyne.solar")["data"][0]["id"]
+          want = os.environ["BUILD"]
+          b = None
+          for i in range(40):
+              r = call(f"/v1/builds?filter[app]={app}&filter[version]={want}&filter[preReleaseVersion.platform]=TV_OS&limit=1") or {}
+              if r.get("data"):
+                  b = r["data"][0]; st = b["attributes"]["processingState"]; print("build", want, st)
+                  if st != "PROCESSING": break
+              else:
+                  print("waiting for the build to appear")
+              time.sleep(30)
+          if not b: raise SystemExit("build not found")
+          if b["attributes"].get("usesNonExemptEncryption") is None:
+              call(f"/v1/builds/{b['id']}", {"data": {"type": "builds", "id": b["id"], "attributes": {"usesNonExemptEncryption": False}}}, "PATCH")
+          groups = call(f"/v1/apps/{app}/betaGroups?limit=50") or {}
+          for g in groups.get("data", []):
+              a = g["attributes"]
+              res = call(f"/v1/betaGroups/{g['id']}/relationships/builds", {"data": [{"type": "builds", "id": b["id"]}]}, "POST")
+              print("group", a.get("name"), "internal" if a.get("isInternalGroup") else "external", "ok" if res is not None else "not added")
+          d = call(f"/v1/builds/{b['id']}/buildBetaDetail") or {}
+          print("TestFlight state:", json.dumps((d.get("data") or {}).get("attributes", {})))
+          PY
+        env:
+          BUILD: ${{ github.run_number }}
+
       - name: Remove the key
         if: always()
         run: rm -rf "$RUNNER_TEMP/keys"
