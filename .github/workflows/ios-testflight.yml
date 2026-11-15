@@ -105,6 +105,13 @@ jobs:
           echo "Entitlements in the archive:"
           codesign -d --entitlements - "$RUNNER_TEMP/Solar.xcarchive/Products/Applications/Solar.app" 2>&1 | tail -20
 
+      - name: Keep the debug symbols, to turn crash reports from the iPhone into line numbers
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsyms-${{ github.run_number }}
+          path: ${{ runner.temp }}/Solar.xcarchive/dSYMs
+          retention-days: 90
+
       - name: Sign and upload to TestFlight
         run: |
           # first export locally to check Sign in with Apple survived the distribution signing

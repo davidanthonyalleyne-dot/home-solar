@@ -18,7 +18,7 @@ enum SolarStatus {
         for x in (s["alerts"] as? [[String: Any]] ?? []) {
             var parts: [String] = []
             if let c = x["component"] as? String { parts.append(c) }
-            if let i = n(x["impact"]) { parts.append("impact \(Int(i)) of 9") }
+            if let i = n(x["impact"]) { parts.append("impact \(iInt(i)) of 9") }
             if let f = x["first"] { parts.append("since \(when(f))") }
             items.append(StatusItem(level: "bad", title: x["type"] as? String ?? "SolarEdge alert",
                                     note: parts.joined(separator: " · ") + ". SolarEdge also opened an issue in your GitHub repo, which emails you."))
@@ -69,7 +69,7 @@ enum Fmt {
         let m = Int(Date().timeIntervalSince(t) / 60)
         if m < 1 { return "just now" }
         if m < 60 { return "\(m) min ago" }
-        if m < 24 * 60 { return "\(Int((Double(m) / 60).rounded())) hr ago" }
+        if m < 24 * 60 { return "\(iInt((Double(m) / 60).rounded())) hr ago" }
         let f = DateFormatter(); f.timeZone = SolarConfig.tz; f.dateFormat = "MMMM d, h:mm a"; f.amSymbol = "am"; f.pmSymbol = "pm"
         return f.string(from: t)
     }

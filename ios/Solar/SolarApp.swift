@@ -18,6 +18,8 @@ struct SolarApp: App {
     @StateObject private var gate = Gate()
     @Environment(\.scenePhase) private var phase
 
+    init() { CrashReports.shared.start() }
+
     var body: some Scene {
         WindowGroup {
             Group {

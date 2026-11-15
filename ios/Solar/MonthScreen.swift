@@ -85,7 +85,7 @@ struct SolarDB {
         guard let t = SK.date(d) else { return factor }
         var r: [Double] = []
         for (day, p) in daily {
-            guard let rad = w(day, 4), rad >= 2, p >= 0.5, (w(day, 5) ?? 0) <= 0, ![71, 73, 75, 77, 85, 86].contains(Int(w(day, 2) ?? 0)),
+            guard let rad = w(day, 4), rad >= 2, p >= 0.5, (w(day, 5) ?? 0) <= 0, ![71, 73, 75, 77, 85, 86].contains(iInt(w(day, 2) ?? 0)),
                   let dt = SK.date(day), abs(dt.timeIntervalSince(t)) <= 30 * 86400 else { continue }
             r.append(p / rad)
         }
@@ -103,8 +103,8 @@ enum MonthMath {
         guard p.count == 2, let d = c.date(from: DateComponents(year: p[0], month: p[1])) else { return 30 }
         return c.range(of: .day, in: .month, for: d)?.count ?? 30
     }
-    static func pct(_ a: Double, _ b: Double) -> Int { b > 0 ? Int((a / b * 100).rounded()) : 0 }
-    static func change(_ a: Double, _ b: Double) -> Int { Int(((a - b) / b * 100).rounded()) }
+    static func pct(_ a: Double, _ b: Double) -> Int { b > 0 ? iInt((a / b * 100).rounded()) : 0 }
+    static func change(_ a: Double, _ b: Double) -> Int { iInt(((a - b) / b * 100).rounded()) }
     static func niceStep(_ mx: Double) -> Double {
         let raw = max(mx, 0.0001) / 4, p = pow(10, floor(log10(raw))), f = raw / p
         return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p
@@ -436,7 +436,7 @@ struct DayChart: View {
                     }
                     .contentShape(Rectangle())
                     .onTapGesture { p in
-                        let i = Int(p.x / bw)
+                        let i = iInt(p.x / bw)
                         if i >= 0, i < days.count { tap(days[i].d) }
                     }
                 }
@@ -694,10 +694,10 @@ struct DaySheet: View {
         let clock = { (t: Date) -> String in let f = DateFormatter(); f.timeZone = SolarConfig.tz; f.dateFormat = "h:mm a"; f.amSymbol = "am"; f.pmSymbol = "pm"; return f.string(from: t) }
         var w: [(String, String, Color?)] = []
         if let hi = db.w(d, 0), let lo = db.w(d, 1) {
-            w.append((describe(db.w(d, 2).map { Int($0) }), "H \(Int(hi.rounded()))°  L \(Int(lo.rounded()))°", nil))
+            w.append((describe(db.w(d, 2).map { iInt($0) }), "H \(iInt(hi.rounded()))°  L \(iInt(lo.rounded()))°", nil))
             if let sh = db.w(d, 3) { w.append(("Sunshine", "\(MonthMath.fmt(sh, 1)) h", nil)) }
         }
-        let mins = Int(sun.set.timeIntervalSince(sun.rise) / 60)
+        let mins = iInt(sun.set.timeIntervalSince(sun.rise) / 60)
         w.append(("Sunrise and sunset", "\(clock(sun.rise)) · \(clock(sun.set))", nil))
         w.append(("Daylight", "\(mins / 60) h \(mins % 60) min", nil))
         var t: [(String, String, Color?)] = []
@@ -727,7 +727,7 @@ struct BillSheet: View {
             let pBuy = lineSum(buy), pCredit = lineSum(credit), kwh = buy.values.reduce(0) { $0 + ($1.first ?? 0) }
             let current = ((n(b["due"]) - n(b["previous"])) * 100).rounded() / 100
             let from = b["from"] as? String ?? "", to = b["to"] as? String ?? ""
-            let days = Int(((SK.date(to)?.timeIntervalSince(SK.date(from) ?? Date()) ?? 0) / 86400).rounded())
+            let days = iInt(((SK.date(to)?.timeIntervalSince(SK.date(from) ?? Date()) ?? 0) / 86400).rounded())
             var r: [(String, String, Color?)] = [("Electricity bought, \(MonthMath.fmt(kwh)) kWh", MonthMath.money(pBuy), .primary)]
             for (k, name) in [("on", "On-peak"), ("mid", "Mid-peak"), ("off", "Off-peak")] {
                 if let x = buy[k], x.count > 1 { r.append(("   \(name), \(MonthMath.fmt(x[0])) kWh at \(MonthMath.fmt(x[1] * 100, 1))¢", MonthMath.money(x[0] * x[1]), nil)) }

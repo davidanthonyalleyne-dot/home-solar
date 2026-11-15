@@ -100,6 +100,7 @@ final class NowModel: ObservableObject {
         data = NowModel.make(snap, json)
         let s = json["solar"] as? [String: Any]
         Task.detached { await GitHub.nudgeIfLate(updated: SK.iso(s?["updated"] as? String), token: json["uploadToken"] as? String) }
+        Task.detached { await CrashReports.send(token: json["uploadToken"] as? String) }
     }
 
     static func make(_ snap: Snapshot, _ json: [String: Any]) -> NowData {
@@ -199,7 +200,7 @@ struct NowContent: View {
                         if let w = d.weather, let t = w.temp {
                             HStack(spacing: 4) {
                                 WeatherGlyph(code: w.code, day: (w.isDay ?? 1) == 1, size: 13)
-                                Text("\(Int(t.rounded()))° \(describe(w.code).lowercased())")
+                                Text("\(iInt(t.rounded()))° \(describe(w.code).lowercased())")
                             }
                             .font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
                         }
@@ -232,8 +233,8 @@ struct NowContent: View {
                     WeatherGlyph(code: t.code, size: 17)
                     Text("Tomorrow, \(describe(t.code).lowercased())").font(.system(size: 17))
                     Spacer()
-                    if let hi = t.hi { Text("H \(Int(hi.rounded()))°").font(.system(size: 17)) }
-                    if let lo = t.lo { Text("L \(Int(lo.rounded()))°").font(.system(size: 17)).foregroundStyle(.secondary) }
+                    if let hi = t.hi { Text("H \(iInt(hi.rounded()))°").font(.system(size: 17)) }
+                    if let lo = t.lo { Text("L \(iInt(lo.rounded()))°").font(.system(size: 17)).foregroundStyle(.secondary) }
                 }
                 .padding(.vertical, 12)
                 Divider()
@@ -271,13 +272,13 @@ struct NowContent: View {
         let f = DateFormatter(); f.timeZone = SolarConfig.tz; f.dateFormat = "h:mm a"; f.amSymbol = "am"; f.pmSymbol = "pm"; return f.string(from: t)
     }
     private func grouped(_ v: Double) -> String {
-        let f = NumberFormatter(); f.numberStyle = .decimal; f.maximumFractionDigits = 0; return f.string(from: NSNumber(value: v)) ?? "\(Int(v))"
+        let f = NumberFormatter(); f.numberStyle = .decimal; f.maximumFractionDigits = 0; return f.string(from: NSNumber(value: v)) ?? "\(iInt(v))"
     }
     private func ago(_ t: Date) -> String {
         let m = Int(Date().timeIntervalSince(t) / 60)
         if m < 1 { return "just now" }
         if m < 60 { return "\(m) min ago" }
-        if m < 24 * 60 { return "\(Int((Double(m) / 60).rounded())) hr ago" }
+        if m < 24 * 60 { return "\(iInt((Double(m) / 60).rounded())) hr ago" }
         let f = DateFormatter(); f.timeZone = SolarConfig.tz; f.dateFormat = "MMMM d, h:mm a"; f.amSymbol = "am"; f.pmSymbol = "pm"
         return f.string(from: t)
     }
@@ -372,7 +373,7 @@ struct TodayChart: View {
             while v < ymax {
                 var g = Path(); g.move(to: CGPoint(x: 0, y: Y(v))); g.addLine(to: CGPoint(x: W, y: Y(v)))
                 ctx.stroke(g, with: .color(muted.opacity(0.25)), lineWidth: 0.5)
-                ctx.draw(Text("\(Int(v)) kW").font(.system(size: 11)).foregroundStyle(muted), at: CGPoint(x: 0, y: Y(v) - 4), anchor: .bottomLeading)
+                ctx.draw(Text("\(iInt(v)) kW").font(.system(size: 11)).foregroundStyle(muted), at: CGPoint(x: 0, y: Y(v) - 4), anchor: .bottomLeading)
                 v += step
             }
             var axis = Path(); axis.move(to: CGPoint(x: 0, y: Y(0))); axis.addLine(to: CGPoint(x: W, y: Y(0)))
@@ -401,7 +402,7 @@ struct TodayChart: View {
                 if let l = lastPt {
                     let c = CGPoint(x: X(l[0]), y: Y(l[1]))
                     ctx.fill(Path(ellipseIn: CGRect(x: c.x - 4.5, y: c.y - 4.5, width: 9, height: 9)), with: .color(SK.sunColor))
-                    let hh = Int(l[0]), mm = Int(((l[0] - Double(hh)) * 60).rounded())
+                    let hh = iInt(l[0]), mm = iInt(((l[0] - Double(hh)) * 60).rounded())
                     let lab = "\(hh % 12 == 0 ? 12 : hh % 12):\(String(format: "%02d", mm))"
                     let right = c.x > W - 50
                     ctx.draw(Text(lab).font(.system(size: 12, weight: .semibold)).foregroundStyle(SK.sunColor),

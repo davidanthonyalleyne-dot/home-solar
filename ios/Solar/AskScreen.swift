@@ -373,7 +373,7 @@ enum AskData {
             row.append(words(hv("weather_code", j), true))
             row.append(r1(hv("temperature_2m", j)))
             row.append(hv("cloud_cover", j))
-            let sw: Int = n(hv("shortwave_radiation", j)).map { Int($0.rounded()) } ?? 0
+            let sw: Int = n(hv("shortwave_radiation", j)).map { iInt($0.rounded()) } ?? 0
             row.append(sw)
             row.append(hv("precipitation_probability", j))
             hrs.append(row)
@@ -716,7 +716,7 @@ struct AskChartView: View {
                         }
                     }
                     .frame(height: 12).clipShape(Capsule())
-                    FlowRow(items: rs.enumerated().map { i, r in (AskChartView.color(r.0, i), "\(fmtV(r.1)) \(r.0)", "\(Int((100 * max(0, r.1) / tot).rounded()))%") })
+                    FlowRow(items: rs.enumerated().map { i, r in (AskChartView.color(r.0, i), "\(fmtV(r.1)) \(r.0)", "\(iInt((100 * max(0, r.1) / tot).rounded()))%") })
                 } else if type == "bars" {
                     let rs = Array(rows.prefix(8)), stacked = ser.count > 1
                     let mx = max(1e-9, rs.map { max(0, $0.1) + (stacked ? max(0, $0.2 ?? 0) : 0) }.max() ?? 1)
@@ -781,7 +781,7 @@ struct SmallPlot: View {
             let Y = { (v: Double) in top + (H - top - bot) * CGFloat(1 - (v - lo) / (hi - lo)) }
             var axis = Path(); axis.move(to: CGPoint(x: 0, y: Y(lo))); axis.addLine(to: CGPoint(x: W, y: Y(lo)))
             ctx.stroke(axis, with: .color(Palette.rule), lineWidth: 1)
-            let step = max(1, Int(ceil(Double(n) / 7)))
+            let step = max(1, iInt(ceil(Double(n) / 7)))
             let label = { (i: Int) -> Bool in (i % step == 0 && n - 1 - i >= step) || i == n - 1 }
             if type == "columns" {
                 let bw = W / CGFloat(n), w = max(2, min(28, bw * (two ? 0.4 : 0.7)))

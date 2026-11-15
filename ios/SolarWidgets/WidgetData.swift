@@ -4,6 +4,10 @@
 // of sunlight on similar days within a month of the date.
 
 import Foundation
+
+/// A whole number from a Double that may be NaN or infinite (a zero in the data it was divided by).
+/// Int() traps on those and takes the app down; this gives 0 instead.
+func iInt<T: BinaryFloatingPoint>(_ v: T) -> Int { v.isFinite ? Int(Swift.max(Swift.min(v, 1e12), -1e12)) : 0 }
 import CryptoKit
 import CommonCrypto
 import Security
@@ -143,7 +147,7 @@ struct Snapshot: Codable {
             var r: [Double] = []
             for (k, p) in daily {
                 guard let row = wd[k], row.count > 4, let rad = num(row[4]), rad >= 2, p >= 0.5,
-                      (num(row.count > 5 ? row[5] : nil) ?? 0) <= 0, ![71, 73, 75, 77, 85, 86].contains(Int(num(row[2]) ?? 0)),
+                      (num(row.count > 5 ? row[5] : nil) ?? 0) <= 0, ![71, 73, 75, 77, 85, 86].contains(iInt(num(row[2]) ?? 0)),
                       let kt = SK.date(k), abs(kt.timeIntervalSince(t)) <= 30 * 86400 else { continue }
                 r.append(p / rad)
             }

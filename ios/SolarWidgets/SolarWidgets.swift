@@ -264,7 +264,7 @@ struct MediumView: View {
                     Spacer()
                     if let w = r.s.weather {
                         WeatherGlyph(code: w.code, day: (w.isDay ?? 1) == 1, size: 13)
-                        if let t = w.temp { Text("\(Int(t.rounded()))°").font(.caption2).foregroundStyle(.secondary) }
+                        if let t = w.temp { Text("\(iInt(t.rounded()))°").font(.caption2).foregroundStyle(.secondary) }
                     }
                 }
                 CurveView(r: r)
@@ -342,7 +342,7 @@ struct LiveHeader: View {
                 if let w = r.s.weather {
                     HStack(spacing: 4) {
                         WeatherGlyph(code: w.code, day: (w.isDay ?? 1) == 1, size: 15)
-                        if let t = w.temp { Text("\(Int(t.rounded()))°").font(.caption).foregroundStyle(.secondary) }
+                        if let t = w.temp { Text("\(iInt(t.rounded()))°").font(.caption).foregroundStyle(.secondary) }
                     }
                     .padding(.bottom, 6)
                 }
