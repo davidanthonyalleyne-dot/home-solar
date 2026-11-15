@@ -3,31 +3,6 @@ import SwiftUI
 // Phase four: History in SwiftUI, ported from web/app.js (historyScreen, historyChart, energyView,
 // climateView, coldView, methodSheet). Cost, Energy and Climate, with the same arithmetic.
 
-extension SolarDB {
-    struct YearTotal { var grid = 0.0, saved = 0.0, gridN = 0; var last: String? = nil, first: String? = nil; var prod: Double? = nil }
-    func yearTotals() -> [String: YearTotal] {
-        var ys: [String: YearTotal] = [:]
-        for k in money.keys.sorted() {
-            let y = String(k.prefix(4))
-            var t = ys[y] ?? YearTotal()
-            t.grid += num(k, "grid") ?? 0; t.saved += num(k, "saved") ?? 0
-            if num(k, "grid") != nil { t.gridN += 1; t.last = k; if t.first == nil { t.first = k } }
-            ys[y] = t
-        }
-        for (d, v) in daily { let y = String(d.prefix(4)); var t = ys[y] ?? YearTotal(); t.prod = (t.prod ?? 0) + v; ys[y] = t }
-        return ys
-    }
-    func prodByMonth() -> [String: Double] {
-        var out: [String: Double] = [:]
-        for (d, v) in daily { out[String(d.prefix(7)), default: 0] += v }
-        return out
-    }
-    var solarJSON: [String: Any] { json["solar"] as? [String: Any] ?? [:] }
-    var installed: String? { solarJSON["installed"] as? String }
-    var lifetime: Double { (solarJSON["lifetime"] as? NSNumber)?.doubleValue ?? daily.values.reduce(0, +) }
-    var hasClimate: Bool { thermostat.count >= 20 }
-    var isEstimate: (String) -> Bool { { money[$0]?["gridSource"] as? String == "estimate" } }
-}
 
 struct HistoryScreen: View {
     @ObservedObject var model: NowModel
@@ -277,10 +252,6 @@ struct YearRows: View {
     }
 }
 
-extension Palette {
-    static let gridEst = dyn(0x8E8E93, 0x6E6E73)
-    static let cool = dyn(0x4F7FA8, 0x6FA3D6)
-}
 
 struct MethodSheet: View {
     let db: SolarDB
@@ -363,29 +334,6 @@ struct EnergyView: View {
 }
 
 // MARK: - Climate
-
-struct ClimDay { var d: String; var heat, aux, cool, fan: Double; var set, inside, out, grid: Double? }
-
-extension SolarDB {
-    var climYears: [String] { Set(thermostat.keys.map { String($0.prefix(4)) }).sorted() }
-    /// a calendar year, or the last 12 months when year is nil
-    func climateData(_ year: String?) -> (days: [ClimDay], auxKw: Double, rate: Double) {
-        let ks = thermostat.keys.sorted()
-        var from = "", last = ""
-        if let year { from = "\(year)-01-01"; last = "\(year)-12-31" }
-        else if let l = ks.last, let t = SK.date(l) { last = l; from = SK.day(t.addingTimeInterval(-364 * 86400)) }
-        let days = ks.filter { $0 >= from && $0 <= last }.map { d -> ClimDay in
-            let out = th(d, 6) ?? { guard let a = w(d, 0), let b = w(d, 1) else { return nil }; return (a + b) / 2 }()
-            return ClimDay(d: d, heat: th(d, 0) ?? 0, aux: th(d, 1) ?? 0, cool: th(d, 2) ?? 0, fan: th(d, 3) ?? 0,
-                           set: th(d, 4), inside: th(d, 5), out: out, grid: hydro[d]?.first)
-        }
-        let hs = ((json["system"] as? [String: Any])?["heating"] as? [String: Any])?["backupHeat"] as? [String: Any]
-        let auxKw = (hs?["kw"] as? NSNumber)?.doubleValue ?? 7.5
-        let ms = money.keys.filter { $0 >= String(from.prefix(7)) && $0 <= String(last.prefix(7)) && num($0, "grid") != nil && (num($0, "imp") ?? 0) > 0 }
-        let rate = ms.isEmpty ? 0.15 : ms.reduce(0) { $0 + (num($1, "grid") ?? 0) } / ms.reduce(0) { $0 + (num($1, "imp") ?? 0) }
-        return (days, auxKw, rate)
-    }
-}
 
 struct ClimateView: View {
     let db: SolarDB
