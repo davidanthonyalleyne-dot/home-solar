@@ -5,6 +5,11 @@ name: TestFlight check
 
 on:
   workflow_dispatch:
+    inputs:
+      add_me:
+        description: "Add the account holder to the internal TestFlight group (and re-invite)"
+        type: boolean
+        default: false
 
 jobs:
   check:
@@ -13,6 +18,7 @@ jobs:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      ADD_ME: ${{ inputs.add_me }}
     steps:
       - run: pip install --quiet pyjwt cryptography
       - shell: python
@@ -20,10 +26,11 @@ jobs:
           import json, os, time, urllib.request, urllib.error, jwt
           tok = jwt.encode({"iss": os.environ["ASC_ISSUER_ID"], "exp": int(time.time()) + 900, "aud": "appstoreconnect-v1"},
                            os.environ["ASC_KEY_P8"], algorithm="ES256", headers={"kid": os.environ["ASC_KEY_ID"], "typ": "JWT"})
-          def call(path):
-              r = urllib.request.Request("https://api.appstoreconnect.apple.com" + path, headers={"Authorization": f"Bearer {tok}"})
+          def call(path, body=None):
+              r = urllib.request.Request("https://api.appstoreconnect.apple.com" + path, json.dumps(body).encode() if body else None,
+                                         {"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
               try:
-                  return json.loads(urllib.request.urlopen(r).read())
+                  return json.loads(urllib.request.urlopen(r).read() or b"{}")
               except urllib.error.HTTPError as e:
                   print(path, e.code, e.read()[:300].decode(errors="ignore")); return {}
           app = call("/v1/apps?filter[bundleId]=ca.davidalleyne.solar")["data"][0]["id"]
@@ -44,3 +51,16 @@ jobs:
           for u in call("/v1/users?limit=20").get("data", []):
               a = u["attributes"]
               print("team user:", a.get("firstName"), a.get("roles"), "all apps" if a.get("allAppsVisible") else "")
+          if os.environ.get("ADD_ME") == "true":
+              me = next(u for u in call("/v1/users?limit=20")["data"] if "ACCOUNT_HOLDER" in u["attributes"]["roles"])["attributes"]
+              grp = next(g for g in call(f"/v1/apps/{app}/betaGroups?limit=50")["data"] if g["attributes"].get("isInternalGroup"))
+              r = call("/v1/betaTesters", {"data": {"type": "betaTesters", "attributes": {"email": me["username"], "firstName": me.get("firstName") or "", "lastName": me.get("lastName") or ""},
+                       "relationships": {"betaGroups": {"data": [{"type": "betaGroups", "id": grp["id"]}]}}}})
+              print("added to", grp["attributes"]["name"] if r else "failed")
+              tid = (r.get("data") or {}).get("id") if r else None
+              if tid:
+                  inv = call("/v1/betaTesterInvitations", {"data": {"type": "betaTesterInvitations", "relationships": {
+                      "app": {"data": {"type": "apps", "id": app}}, "betaTester": {"data": {"type": "betaTesters", "id": tid}}}}})
+                  print("invitation", "sent" if inv else "not sent")
+              for t in call(f"/v1/betaGroups/{grp['id']}/betaTesters?limit=50").get("data", []):
+                  print("   now in group:", t["attributes"].get("firstName"), t["attributes"].get("inviteType"), t["attributes"].get("state"))
