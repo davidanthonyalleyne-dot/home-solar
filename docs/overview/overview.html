@@ -73,7 +73,7 @@
     </div>
   </header>
 
-  <p class="intro">Solar joins two sources that never talk to each other: the <b>SolarEdge inverter</b> on the house (17 panels, 7.7 kW) and <b>Toronto Hydro's</b> meter readings and bills. It works out Ontario's net metering rules the way the bills do, so the savings are real dollars, checked against every bill on file. It has five tabs: Now, Month, History, <b>Ask</b>, where Sunny, Solar's assistant, answers questions about your energy, typed or spoken, and Settings. It runs from the Home Screen of an iPhone or iPad.</p>
+  <p class="intro">Solar joins two sources that never talk to each other: the <b>SolarEdge inverter</b> on the house (17 panels, 7.7 kW) and <b>Toronto Hydro's</b> meter readings and bills. It works out Ontario's net metering rules the way the bills do, so the savings are real dollars, checked against every bill on file. It has five tabs: Now, Month, History, <b>Ask</b>, where Sunny, Solar's assistant, answers questions about your energy, typed or spoken, and Settings. It runs from the Home Screen of an iPhone or iPad, and as the Solar app from TestFlight.</p>
 
   <div class="shots" style="grid-template-columns: repeat(3, minmax(0, 1fr))">
     <figure>
@@ -101,7 +101,7 @@
     </div>
   </div>
 
-  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.11 · App 1.99</span><span>Page 1 of 3</span></span></footer>
+  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.12 · App 1.99</span><span>Page 1 of 3</span></span></footer>
 </div>
 
 <div class="page">
@@ -127,9 +127,10 @@
     <section><h2>Private by design</h2><p>Everything is encrypted with a passphrase before it's published. Face ID unlocks it on a trusted device; the passphrase shows only if Face ID fails.</p></section>
     <section><h2>How it runs</h2><p>A scheduled GitHub job fetches SolarEdge and the weather about every hour, reads new files, rebuilds the site and sends alerts. No server to maintain.</p></section>
     <section><h2>Good to know</h2><p>Meter and thermostat data come from exported files, so costs and heating trail by however long it's been since the last one.</p></section>
+    <section><h2>iPhone app</h2><p>Also installs from TestFlight as an app showing the live site. Alerts and Face ID unlock need the Home Screen version.</p></section>
   </div>
 
-  <footer><span class="num">Updated November 14, 2026</span><span class="ver"><span>Document 2.11 · App 1.99</span><span>Page 2 of 3</span></span></footer>
+  <footer><span class="num">Updated November 14, 2026</span><span class="ver"><span>Document 2.12 · App 1.99</span><span>Page 2 of 3</span></span></footer>
 </div>
 
 <div class="page tech" style="gap: 12px">
@@ -141,7 +142,8 @@
     <p class="label">Sources and libraries</p>
     <table>
       <tr><th>Piece</th><th>Version</th><th>What it does</th><th>Loaded from</th><th>Licence</th></tr>
-      <tr><td>App code</td><td>App 1.99</td><td>The five tabs, charts, net metering maths, encryption and Sunny, the assistant in Ask (<code>app.js</code>, <code>lock.js</code>, <code>style.css</code>, <code>sw.js</code>). No framework; charts and icons are SVG drawn for the app, text in the system font</td><td>GitHub Pages, this repo's <code>web/</code></td><td>Written for the app</td></tr>
+      <tr><td>App code</td><td>App 1.99</td><td>The five tabs, charts, net metering maths, encryption and Sunny (<code>app.js</code>, <code>lock.js</code>, <code>style.css</code>, <code>sw.js</code>). No framework; SVG charts and icons, system font</td><td>GitHub Pages, this repo's <code>web/</code></td><td>Written for the app</td></tr>
+      <tr><td>iPhone app</td><td>1.0</td><td>Opens the live site in a SwiftUI web view (<code>ios/</code>)</td><td>TestFlight</td><td>Written for the app</td></tr>
       <tr><td>Build job</td><td>Python 3</td><td>Fetches data, reads bills and meter files, models costs, encrypts, sends alerts (<code>scripts/build.py</code>, <code>money.py</code>, <code>parse_bill.py</code>)</td><td>GitHub Actions</td><td>Written for the app</td></tr>
       <tr><td>Transformers.js</td><td>3.5.1</td><td>Runs the speech model in the browser, with ONNX Runtime Web inside</td><td>cdn.jsdelivr.net</td><td>Apache-2.0</td></tr>
       <tr><td>Whisper tiny.en</td><td>Xenova, 8-bit</td><td>Turns a spoken question into text on the phone (about 40 MB, cached after first use)</td><td>huggingface.co</td><td>MIT</td></tr>
@@ -154,24 +156,25 @@
     <p class="label">Integrations</p>
     <table>
       <tr><th>Service</th><th>Used for</th><th>Details</th></tr>
-      <tr><td>SolarEdge Monitoring API v2</td><td>Production, power now, inverter status and alerts</td><td><code>monitoringapi.solaredge.com/v2</code>, OAuth through <code>connect.solaredge.com</code>; the refresh token rotates and is saved back as a GitHub secret. Free tier, 2,000 calls a month</td></tr>
-      <tr><td>ecobee</td><td>Heating history</td><td>No API for new developers; the Download data CSV is added from Settings and kept encrypted in <code>data/ecobee/</code></td></tr>
-      <tr><td>Toronto Hydro</td><td>Bills and hourly meter readings</td><td>No API. Bill PDFs and MyTorontoHydro spreadsheets are added from Settings; kept encrypted, the PDF isn't kept</td></tr>
-      <tr><td>Open-Meteo</td><td>Weather now, forecast, past weather</td><td><code>api.open-meteo.com</code> and <code>archive-api.open-meteo.com</code>, no key. Called by the build, the Now screen (a week ahead on iPad), and Ask for each question</td></tr>
-      <tr><td>Anthropic Claude API</td><td>Sunny's answers in Ask</td><td><code>api.anthropic.com/v1/messages</code>, model <code>claude-haiku-5-5</code>, called from the phone. Sends the question, recent conversation and a summary of months, bills, 120 days and the forecast. Key in the <code>ANTHROPIC_API_KEY</code> secret, carried inside the encrypted data</td></tr>
-      <tr><td>GitHub</td><td>Hosting, the hourly job, uploads</td><td>Pages serves the site, Actions runs the build hourly, and files from the phone arrive encrypted in <code>data/inbox/</code> via the Git Data API (<code>UPLOAD_TOKEN</code>)</td></tr>
+      <tr><td>SolarEdge Monitoring API v2</td><td>Production, power now, inverter status and alerts</td><td><code>monitoringapi.solaredge.com/v2</code>, OAuth through <code>connect.solaredge.com</code>; the rotating refresh token is saved back as a GitHub secret</td></tr>
+      <tr><td>ecobee</td><td>Heating history</td><td>No API; its CSV export is added from Settings, kept encrypted in <code>data/ecobee/</code></td></tr>
+      <tr><td>Toronto Hydro</td><td>Bills and hourly meter readings</td><td>No API. Bill PDFs and meter spreadsheets are added from Settings and kept encrypted</td></tr>
+      <tr><td>Open-Meteo</td><td>Weather now, forecast, past weather</td><td><code>api.open-meteo.com</code> and <code>archive-api.open-meteo.com</code>, no key. Used by the build, Now and Ask</td></tr>
+      <tr><td>Anthropic Claude API</td><td>Sunny's answers in Ask</td><td><code>api.anthropic.com/v1/messages</code>, model <code>claude-haiku-5-5</code>, called from the phone with the question, recent conversation and a summary of your data. Key in <code>ANTHROPIC_API_KEY</code>, carried inside the encrypted data</td></tr>
+      <tr><td>GitHub</td><td>Hosting, the hourly job, uploads</td><td>Pages serves the site, Actions runs the build; phone uploads arrive encrypted in <code>data/inbox/</code> (<code>UPLOAD_TOKEN</code>)</td></tr>
+      <tr><td>App Store Connect</td><td>iPhone app builds</td><td>Built with Xcode 26 on GitHub when <code>ios/</code> changes, signed for team M8GX2N7YR2 and sent to TestFlight with a team API key (<code>ASC_*</code> secrets)</td></tr>
       <tr><td>Web Push (Apple)</td><td>Alerts on the phone</td><td>VAPID-signed pushes from the build; subscriptions kept encrypted in <code>data/push.enc</code></td></tr>
-      <tr><td>Browser features</td><td>Unlock, voice, offline</td><td>Web Crypto (PBKDF2-SHA256, AES-GCM), passkeys for Face ID unlock, microphone and Web Audio for recording, speech synthesis to read answers, a service worker, and local storage for Ask conversations</td></tr>
+      <tr><td>Browser features</td><td>Unlock, voice, offline</td><td>Web Crypto, passkeys (Face ID), microphone, speech synthesis, a service worker, local storage for Ask</td></tr>
     </table>
   </div>
 
   <section><h2>What runs where</h2>
-    <p>On the phone or iPad: unlocking and decrypting, every screen and chart, transcribing spoken questions, reading answers aloud, and the calls to Claude and Open-Meteo. Files you add are encrypted before they leave.</p>
+    <p>On the phone or iPad (Home Screen or TestFlight app): unlocking and decrypting, every screen and chart, transcribing spoken questions, reading answers aloud, and the calls to Claude and Open-Meteo. Files you add are encrypted before they leave.</p>
     <p>On GitHub, about every hour: the build fetches SolarEdge and the weather, reads new files, rebuilds the site and sends alerts. The site's data is published encrypted with a key from the passphrase (PBKDF2-SHA256, 600,000 rounds); serial numbers and tokens exist only inside it.</p>
     <p>This document: <code>docs/overview/</code>. Make sample data with <code>fake_data.py</code>, take screenshots with <code>shoot.js</code>, print with <code>pdf.js</code>.</p>
   </section>
 
-  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.11 · App 1.99</span><span>Page 3 of 3</span></span></footer>
+  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.12 · App 1.99</span><span>Page 3 of 3</span></span></footer>
 </div>
 
 </body>
