@@ -67,17 +67,45 @@ jobs:
           APP=$(find "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator" -maxdepth 1 -name "Solar.app")
           xcrun simctl install "$DEV" "$APP"
           mkdir -p "$RUNNER_TEMP/crashes/sim"
-          for mode in light dark; do
+          SIMLOGS=~/Library/Developer/CoreSimulator/Devices/$DEV/data/Library/Logs/CrashReporter
+          for run in 1 2 3; do
+            mode=light; [ $run = 2 ] && mode=dark
             xcrun simctl ui "$DEV" appearance $mode
-            xcrun simctl launch --console-pty "$DEV" ca.davidalleyne.solar -previewNow -cycle > "$RUNNER_TEMP/crashes/sim/console-$mode.txt" 2>&1 &
-            sleep 75
-            xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/crashes/sim/end-$mode.png" || true
-            if xcrun simctl spawn "$DEV" launchctl list | grep -q ca.davidalleyne.solar; then echo "$mode: still running"; else echo "$mode: NOT RUNNING (crashed?)"; fi
-            grep -E "SOLAR_CYCLE_DONE|Fatal|fatal|crash|Terminating|exception" "$RUNNER_TEMP/crashes/sim/console-$mode.txt" | head -20 || true
+            START=$(date +%s)
+            xcrun simctl launch "$DEV" ca.davidalleyne.solar -previewNow -cycle
+            sleep 70
+            xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/crashes/sim/end-$run-$mode.png" || true
+            if xcrun simctl spawn "$DEV" launchctl list | grep -q ca.davidalleyne.solar; then echo "run $run $mode: still running"; else echo "run $run $mode: NOT RUNNING (crashed)"; fi
+            xcrun simctl spawn "$DEV" log show --last 2m --style compact --predicate 'process == "Solar" AND (messageType == fault OR messageType == error)' > "$RUNNER_TEMP/crashes/sim/log-$run.txt" 2>&1 || true
+            tail -40 "$RUNNER_TEMP/crashes/sim/log-$run.txt"
             xcrun simctl terminate "$DEV" ca.davidalleyne.solar || true
           done
-          find ~/Library/Logs/DiagnosticReports -name "Solar*" -newer "$APP" -exec cp {} "$RUNNER_TEMP/crashes/sim/" \; 2>/dev/null || true
-          for f in "$RUNNER_TEMP"/crashes/sim/*.ips; do [ -f "$f" ] && head -c 6000 "$f"; done || true
+          sleep 10
+          for d in ~/Library/Logs/DiagnosticReports "$SIMLOGS"; do
+            find "$d" -type f \( -name "Solar*" -o -name "*.ips" \) -mmin -30 -exec cp {} "$RUNNER_TEMP/crashes/sim/" \; 2>/dev/null || true
+          done
+          ls -la "$RUNNER_TEMP/crashes/sim"
+          for f in "$RUNNER_TEMP"/crashes/sim/*.ips; do [ -f "$f" ] || continue; echo "== $f"; python3 - "$f" <<'PY'
+          import json, sys
+          raw = open(sys.argv[1]).read().split("\n", 1)
+          head = json.loads(raw[0]); print(head.get("app_name"), head.get("os_version"))
+          try:
+              b = json.loads(raw[1])
+          except Exception:
+              print(raw[1][:4000]); sys.exit()
+          print(json.dumps(b.get("exception"), indent=1), b.get("termination"), b.get("asi"))
+          imgs = b.get("usedImages", [])
+          for t in b.get("threads", []):
+              if not t.get("triggered"): continue
+              for fr in t.get("frames", [])[:40]:
+                  im = imgs[fr["imageIndex"]].get("name", "?") if fr.get("imageIndex", -1) < len(imgs) else "?"
+                  print(" ", im, fr.get("symbol", ""), fr.get("sourceFile", ""), fr.get("sourceLine", ""))
+          for k in ("lastExceptionBacktrace",):
+              for fr in (b.get(k) or [])[:30]:
+                  im = imgs[fr["imageIndex"]].get("name", "?")
+                  print(" LEB", im, fr.get("symbol", ""))
+          PY
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
