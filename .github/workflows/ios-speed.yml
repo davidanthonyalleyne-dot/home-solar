@@ -19,11 +19,31 @@ jobs:
         run: |
           XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
           sudo xcode-select -s "$XCODE"
-      - name: Time the tabs
+      - name: Build
         run: |
           brew install xcodegen
           xcodegen generate
+          xcodebuild build -project Solar.xcodeproj -scheme Solar -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/dd" \
+            SWIFT_OPTIMIZATION_LEVEL=-O CODE_SIGNING_ALLOWED=NO | tail -3
+      - name: Time the tabs
+        run: |
           DEV=$(xcrun simctl list devices available | awk '/^-- iOS 2[6-9]/{f=1;next} /^--/{f=0} f' | grep -E "iPhone 1[6-9] Pro \(" | tail -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
           xcrun simctl boot "$DEV"; xcrun simctl bootstatus "$DEV" -b
-          xcodebuild test -project Solar.xcodeproj -scheme Solar -configuration Debug -destination "id=$DEV" \
-            -only-testing:SolarUITests/TabSpeedTests CODE_SIGNING_ALLOWED=NO 2>&1 | grep -E "SOLAR_TAB_MS|error:|\*\* TEST" || true
+          xcrun simctl install "$DEV" "$(find "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator" -maxdepth 1 -name Solar.app)"
+          for run in 1 2; do
+            xcrun simctl launch "$DEV" ca.davidalleyne.solar -previewNow -hitch
+            sleep 50
+            xcrun simctl terminate "$DEV" ca.davidalleyne.solar || true
+          done
+          xcrun simctl spawn "$DEV" log show --last 3m --style compact --predicate 'eventMessage CONTAINS "SOLAR_HITCH"' | grep -oE "SOLAR_HITCH.*" > hitch.txt
+          cat hitch.txt
+          python3 - <<'PY'
+          import re, statistics
+          rows = [re.findall(r"(\w+) first=(\d+) worst=(\d+)", l)[0] for l in open("hitch.txt") if "first=" in l]
+          f = [int(r[1]) for r in rows]; w = [int(r[2]) for r in rows]
+          print(f"SOLAR_HITCH summary n={len(rows)} first median={statistics.median(f)} max={max(f)}  worst median={statistics.median(w)} max={max(w)}")
+          by = {}
+          for t, a, b in rows: by.setdefault(t, []).append(int(a))
+          for t, v in by.items(): print("SOLAR_HITCH", t, "median first", statistics.median(v))
+          PY
