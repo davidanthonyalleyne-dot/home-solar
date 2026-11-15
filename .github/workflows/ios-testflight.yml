@@ -68,6 +68,21 @@ jobs:
               "}\n")
           PY
 
+      - name: Register the widget's bundle ID (no-op once it exists)
+        run: |
+          python3 -m pip install --quiet --break-system-packages pyjwt cryptography 2>/dev/null || python3 -m pip install --quiet pyjwt cryptography
+          python3 - <<'PY'
+          import json, os, time, urllib.request, urllib.error, jwt
+          tok = jwt.encode({"iss": os.environ["ASC_ISSUER_ID"], "exp": int(time.time()) + 900, "aud": "appstoreconnect-v1"},
+                           open(os.environ["KEY_PATH"]).read(), algorithm="ES256", headers={"kid": os.environ["ASC_KEY_ID"], "typ": "JWT"})
+          body = json.dumps({"data": {"type": "bundleIds", "attributes": {"identifier": "ca.davidalleyne.solar.widgets", "name": "Solar Widgets", "platform": "IOS"}}}).encode()
+          req = urllib.request.Request("https://api.appstoreconnect.apple.com/v1/bundleIds", body, {"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+          try:
+              urllib.request.urlopen(req); print("registered ca.davidalleyne.solar.widgets")
+          except urllib.error.HTTPError as e:
+              print("already registered" if e.code == 409 else f"{e.code} {e.read()[:300]}")
+          PY
+
       - name: Generate the Xcode project
         run: |
           brew install xcodegen

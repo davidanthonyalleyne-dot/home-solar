@@ -2,6 +2,7 @@ import SwiftUI
 import WebKit
 import AuthenticationServices
 import LocalAuthentication
+import WidgetKit
 
 // Solar for iPhone: a native shell around the Solar web app on GitHub Pages.
 // The web app stays the single source of truth; every build of the site shows up here
@@ -50,6 +51,7 @@ final class Gate: ObservableObject {
         case .background:
             backgroundedAt = Date()
             autoPrompt = true
+            WidgetCenter.shared.reloadAllTimelines()   // the widgets catch up with what you just saw
         case .active:
             if let t = backgroundedAt, unlocked, Date().timeIntervalSince(t) > relockAfter { lock() }
             backgroundedAt = nil
