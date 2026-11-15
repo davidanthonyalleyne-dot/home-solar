@@ -21,6 +21,8 @@ targets:
     dependencies:
       - target: SolarWidgets
         embed: true
+    scheme:
+      testTargets: [SolarUITests]
     info:
       path: Solar/Info.plist
       properties:
@@ -59,3 +61,14 @@ targets:
         PRODUCT_NAME: SolarWidgets
         TARGETED_DEVICE_FAMILY: "1,2"
         SKIP_INSTALL: YES
+  SolarUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [SolarUITests]
+    dependencies:
+      - target: Solar
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ca.davidalleyne.solar.uitests
+        TEST_TARGET_NAME: Solar
+        GENERATE_INFOPLIST_FILE: YES

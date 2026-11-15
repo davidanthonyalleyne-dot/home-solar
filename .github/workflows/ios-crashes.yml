@@ -106,6 +106,36 @@ jobs:
                   print(" LEB", im, fr.get("symbol", ""))
           PY
           done
+      - name: Tap and slide the real tab bar (UI tests)
+        if: always()
+        working-directory: ios
+        run: |
+          DEV=$(xcrun simctl list devices available | awk '/^-- iOS 2[6-9]/{f=1;next} /^--/{f=0} f' | grep -E "iPhone 1[6-9] Pro \(" | tail -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          set +e
+          xcodebuild test -project Solar.xcodeproj -scheme Solar -configuration Debug -destination "id=$DEV" \
+            -derivedDataPath "$RUNNER_TEMP/dd" -resultBundlePath "$RUNNER_TEMP/crashes/tests.xcresult" CODE_SIGNING_ALLOWED=NO 2>&1 \
+            | grep -E "Test Case|error|crash|Crash|stopped after|signal|Executed|\*\* TEST" | head -120
+          set -e
+          sleep 5
+          for d in ~/Library/Logs/DiagnosticReports ~/Library/Developer/CoreSimulator/Devices/$DEV/data/Library/Logs/CrashReporter; do
+            find "$d" -type f -name "Solar*" -mmin -60 -exec cp {} "$RUNNER_TEMP/crashes/" \; 2>/dev/null
+          done
+          for f in "$RUNNER_TEMP"/crashes/Solar*.ips; do [ -f "$f" ] || continue; echo "== $f"; python3 - "$f" <<'PY'
+          import json, sys
+          raw = open(sys.argv[1]).read().split("\n", 1)
+          b = json.loads(raw[1])
+          print(json.dumps(b.get("exception")), b.get("termination", {}).get("indicator"), json.dumps(b.get("asi"))[:1500])
+          imgs = b.get("usedImages", [])
+          for t in b.get("threads", []):
+              if not t.get("triggered"): continue
+              for fr in t.get("frames", [])[:45]:
+                  im = imgs[fr["imageIndex"]].get("name", "?")
+                  print(" ", im, fr.get("symbol", ""), fr.get("sourceFile", ""), fr.get("sourceLine", ""))
+          for fr in (b.get("lastExceptionBacktrace") or [])[:30]:
+              print(" LEB", imgs[fr["imageIndex"]].get("name", "?"), fr.get("symbol", ""))
+          PY
+          done
+          true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
