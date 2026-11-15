@@ -401,6 +401,7 @@ struct TVAsk: View {
             }
         }
         .padding(.horizontal, pad).padding(.top, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
@@ -437,7 +438,7 @@ struct TVSettings: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .leading, spacing: 20) {
                 Button("Refresh now") { Task { await model.refresh(force: true) } }
-                Button(confirm ? "Press again to forget it" : "Forget the passphrase on this Apple TV", role: .destructive) {
+                Button(confirm ? "Press again to forget it" : "Forget the passphrase on this Apple TV") {
                     if confirm { SharedVault.passphrase = nil; onForget() } else { confirm = true }
                 }
             }
@@ -445,6 +446,7 @@ struct TVSettings: View {
             .padding(.top, 110)
         }
         .padding(.horizontal, pad).padding(.top, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
