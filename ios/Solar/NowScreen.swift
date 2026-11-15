@@ -24,7 +24,10 @@ struct MainTabs: View {
             }
             .tabItem { Label("Now", systemImage: "sun.max") }
             .tag(SolarTab.now)
-            ForEach([SolarTab.month, .history, .ask, .settings], id: \.self) { t in
+            MonthScreen(model: now)
+                .tabItem { Label("Month", systemImage: "calendar") }
+                .tag(SolarTab.month)
+            ForEach([SolarTab.history, .ask, .settings], id: \.self) { t in
                 WebTab(web: web, tab: t, active: tab == t)
                     .ignoresSafeArea(edges: .top)
                     .tabItem { Label(t.title, systemImage: t.symbol) }
@@ -114,6 +117,7 @@ struct NowData {
 final class NowModel: ObservableObject {
     @Published var data: NowData?
     @Published var failed = false
+    @Published var json: [String: Any]?
     var preview = false
     private var loadedAt: Date?
 
@@ -125,6 +129,7 @@ final class NowModel: ObservableObject {
         WidgetCenter.shared.reloadAllTimelines()
         loadedAt = Date()
         failed = false
+        self.json = json
         data = NowModel.make(snap, json)
     }
 
@@ -487,6 +492,7 @@ struct PreviewNow: View {
         return false
         #endif
     }
+    static var startTab: SolarTab { ProcessInfo.processInfo.arguments.contains("-month") ? .month : .now }
     @StateObject private var model: NowModel = {
         let m = NowModel()
         let s = Snapshot.sample
@@ -495,13 +501,18 @@ struct PreviewNow: View {
                          peakKw: 7.74, acKw: 6, month: 138.2, year: 3452, lifetime: 14828, since: "2023", curve: s.curve, expected: 11,
                          lat: 43.64, lon: -79.43, weather: s.weather, tomorrow: (0, 4, -2), status: ("ok", "System normal"))
         m.preview = true
+        if let u = Bundle.main.url(forResource: "sample-data", withExtension: "json"), let d = try? Data(contentsOf: u) {
+            m.json = try? JSONSerialization.jsonObject(with: d) as? [String: Any]
+        }
         return m
     }()
+    @State private var tab = PreviewNow.startTab
     var body: some View {
-        TabView {
-            NowScreen(model: model) { _ in }.tabItem { Label("Now", systemImage: "sun.max") }
-            ForEach([SolarTab.month, .history, .ask, .settings], id: \.self) { t in
-                Color(uiColor: .systemBackground).tabItem { Label(t.title, systemImage: t.symbol) }
+        TabView(selection: $tab) {
+            NowScreen(model: model) { _ in }.tabItem { Label("Now", systemImage: "sun.max") }.tag(SolarTab.now)
+            MonthScreen(model: model).tabItem { Label("Month", systemImage: "calendar") }.tag(SolarTab.month)
+            ForEach([SolarTab.history, .ask, .settings], id: \.self) { t in
+                Color(uiColor: .systemBackground).tabItem { Label(t.title, systemImage: t.symbol) }.tag(t)
             }
         }
         .tint(.primary)

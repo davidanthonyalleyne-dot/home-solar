@@ -26,7 +26,7 @@ jobs:
           xcodegen generate
           xcodebuild build -project Solar.xcodeproj -scheme Solar -configuration Debug -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO | tail -5
-      - name: Photograph Now
+      - name: Photograph Now and Month
         run: |
           DEV=$(xcrun simctl list devices available | grep -E "iPhone 1[6-9] Pro \(" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
           echo "device $DEV"
@@ -37,10 +37,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/screens"
           for mode in light dark; do
             xcrun simctl ui "$DEV" appearance $mode
-            xcrun simctl terminate "$DEV" ca.davidalleyne.solar || true
-            xcrun simctl launch "$DEV" ca.davidalleyne.solar -previewNow
-            sleep 6
-            xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/screens/now-$mode.png"
+            for screen in now month; do
+              xcrun simctl terminate "$DEV" ca.davidalleyne.solar || true
+              xcrun simctl launch "$DEV" ca.davidalleyne.solar -previewNow -$screen
+              sleep 6
+              xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/screens/$screen-$mode.png"
+            done
           done
       - uses: actions/upload-artifact@v4
         with:
