@@ -94,6 +94,7 @@ targets:
       path: TV/Info.plist
       properties:
         ITSAppUsesNonExemptEncryption: false
+        UIRequiredDeviceCapabilities: [arm64]
         CFBundleURLTypes:
           - CFBundleURLName: ca.davidalleyne.solar
             CFBundleURLSchemes: [solar]
@@ -117,6 +118,7 @@ targets:
       path: TopShelf/Info.plist
       properties:
         CFBundleDisplayName: Solar
+        UIRequiredDeviceCapabilities: [arm64]
         NSExtension:
           NSExtensionPointIdentifier: com.apple.tv-top-shelf
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ContentProvider
