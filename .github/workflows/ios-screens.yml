@@ -25,7 +25,7 @@ jobs:
           brew install xcodegen
           xcodegen generate
           xcodebuild build -project Solar.xcodeproj -scheme Solar -configuration Debug -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO | tail -5
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO > "$RUNNER_TEMP/build.log" 2>&1 || { grep -E "error:" "$RUNNER_TEMP/build.log" | sort -u | head -60; exit 1; }
       - name: Photograph Now and Month
         run: |
           # an iPhone on the newest iOS runtime (26 or later), where the tab bar is Liquid Glass
