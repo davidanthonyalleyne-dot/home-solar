@@ -10,6 +10,15 @@ import WidgetKit
 
 enum SolarTab: String, CaseIterable { case now, month, history, ask, settings }
 
+/// One tab's screen. Switching tabs redraws MainTabs; this keeps the other four screens from
+/// redrawing with it (they still redraw on their own when their data changes).
+struct TabPage<Content: View>: View, Equatable {
+    let tab: SolarTab
+    @ViewBuilder let content: () -> Content
+    var body: some View { content() }
+    static func == (a: TabPage, b: TabPage) -> Bool { a.tab == b.tab }
+}
+
 struct MainTabs: View {
     let onLock: () -> Void
     @State private var tab: SolarTab = .now
@@ -17,23 +26,26 @@ struct MainTabs: View {
 
     var body: some View {
         TabView(selection: $tab) {
-            NowScreen(model: now) { _ in
-                // the status dot opens the SolarEdge page in Settings
-                now.settingsPath = ["solaredge"]
-                tab = .settings
+            TabPage(tab: .now) {
+                NowScreen(model: now) { _ in
+                    // the status dot opens the SolarEdge page in Settings
+                    now.settingsPath = ["solaredge"]
+                    tab = .settings
+                }
             }
+            .equatable()
             .tabItem { Label("Now", systemImage: "sun.max") }
             .tag(SolarTab.now)
-            MonthScreen(model: now)
+            TabPage(tab: .month) { MonthScreen(model: now) }.equatable()
                 .tabItem { Label("Month", systemImage: "calendar") }
                 .tag(SolarTab.month)
-            HistoryScreen(model: now) { ym in now.selectedMonth = ym; tab = .month }
+            TabPage(tab: .history) { HistoryScreen(model: now) { ym in now.selectedMonth = ym; tab = .month } }.equatable()
                 .tabItem { Label("History", systemImage: "chart.bar") }
                 .tag(SolarTab.history)
-            AskScreen(model: now)
+            TabPage(tab: .ask) { AskScreen(model: now) }.equatable()
                 .tabItem { Label("Ask", systemImage: "bubble.left") }
                 .tag(SolarTab.ask)
-            SettingsScreen(model: now, onLock: onLock)
+            TabPage(tab: .settings) { SettingsScreen(model: now, onLock: onLock) }.equatable()
                 .tabItem { Label("Settings", systemImage: "gearshape") }
                 .tag(SolarTab.settings)
         }
@@ -82,21 +94,26 @@ struct NowData {
 final class NowModel: ObservableObject {
     @Published var data: NowData?
     @Published var failed = false
-    @Published var json: [String: Any]?
+    @Published var json: [String: Any]? { didSet { db = json.map(SolarDB.init) } }
+    /// The data, parsed once when it arrives, for every screen to share
+    private(set) var db: SolarDB?
     @Published var selectedMonth: String?   // Month's month; History sets it when you tap a month
     @Published var settingsPath: [String] = []   // the Settings page that's open; the status dot opens SolarEdge
     var preview = false
     private var loadedAt: Date?
+    private var loading = false
 
     func refresh(force: Bool = false) async {
-        if preview { return }
+        if preview || loading { return }
         if !force, let t = loadedAt, Date().timeIntervalSince(t) < 120 { return }
+        loading = true; defer { loading = false }
         guard let snap = await Snapshot.build(), let json = SolarCrypto.lastJSON else { failed = data == nil; return }
         snap.cache()
         WidgetCenter.shared.reloadAllTimelines()
         loadedAt = Date()
         failed = false
-        self.json = json
+        // only hand the screens new data when it really changed, so nothing redraws for nothing
+        if self.json.map({ !NSDictionary(dictionary: $0).isEqual(to: json) }) ?? true { self.json = json }
         data = NowModel.make(snap, json)
         let s = json["solar"] as? [String: Any]
         Task.detached { await GitHub.nudgeIfLate(updated: SK.iso(s?["updated"] as? String), token: json["uploadToken"] as? String) }
@@ -484,11 +501,11 @@ struct PreviewNow: View {
     @State private var tab = PreviewNow.startTab
     var body: some View {
         TabView(selection: $tab) {
-            NowScreen(model: model) { _ in }.tabItem { Label("Now", systemImage: "sun.max") }.tag(SolarTab.now)
-            MonthScreen(model: model).tabItem { Label("Month", systemImage: "calendar") }.tag(SolarTab.month)
-            HistoryScreen(model: model) { ym in model.selectedMonth = ym; tab = .month }.tabItem { Label("History", systemImage: "chart.bar") }.tag(SolarTab.history)
-            AskScreen(model: model).tabItem { Label("Ask", systemImage: "bubble.left") }.tag(SolarTab.ask)
-            SettingsScreen(model: model, onLock: {}).tabItem { Label("Settings", systemImage: "gearshape") }.tag(SolarTab.settings)
+            TabPage(tab: .now) { NowScreen(model: model) { _ in } }.equatable().tabItem { Label("Now", systemImage: "sun.max") }.tag(SolarTab.now)
+            TabPage(tab: .month) { MonthScreen(model: model) }.equatable().tabItem { Label("Month", systemImage: "calendar") }.tag(SolarTab.month)
+            TabPage(tab: .history) { HistoryScreen(model: model) { ym in model.selectedMonth = ym; tab = .month } }.equatable().tabItem { Label("History", systemImage: "chart.bar") }.tag(SolarTab.history)
+            TabPage(tab: .ask) { AskScreen(model: model) }.equatable().tabItem { Label("Ask", systemImage: "bubble.left") }.tag(SolarTab.ask)
+            TabPage(tab: .settings) { SettingsScreen(model: model, onLock: {}) }.equatable().tabItem { Label("Settings", systemImage: "gearshape") }.tag(SolarTab.settings)
         }
         .tint(.primary)
         .task {

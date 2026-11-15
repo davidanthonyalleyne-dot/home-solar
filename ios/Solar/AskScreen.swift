@@ -467,7 +467,7 @@ struct AskScreen: View {
                             Text("Ask needs a Claude API key. Create one in the Anthropic Console and add it to the repository as a GitHub secret named ANTHROPIC_API_KEY. It's kept inside the encrypted data, so only your unlocked app can use it.")
                                 .font(.system(size: 17)).padding(.top, 20)
                         } else if ask.msgs.isEmpty && !ask.listening {
-                            Start(ask: ask, db: SolarDB(json!)) { q in Task { await ask.send(q, json: json) } }
+                            Start(ask: ask, db: model.db ?? SolarDB(json!)) { q in Task { await ask.send(q, json: json) } }
                         } else {
                             Conversation(ask: ask) { Task { if let last = ask.msgs.last(where: { $0.role == "user" }) { ask.msgs.removeLast(); await ask.send(last.text, json: json) } } }
                         }

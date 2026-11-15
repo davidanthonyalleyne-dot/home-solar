@@ -37,8 +37,7 @@ struct HistoryScreen: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                if let j = model.json {
-                    let db = SolarDB(j)
+                if let db = model.db {
                     let v = (view == "climate" && !db.hasClimate) || (view == "energy" && db.daily.isEmpty) ? "cost" : view
                     VStack(alignment: .leading, spacing: 0) {
                         VStack(alignment: .leading, spacing: 2) {

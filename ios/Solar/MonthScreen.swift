@@ -173,8 +173,7 @@ struct MonthScreen: View {
 
     var body: some View {
         ScrollView {
-            if let j = model.json {
-                let db = SolarDB(j)
+            if let db = model.db {
                 if let cur = ym ?? db.defaultMonth {
                     MonthBody(db: db, ym: cur, day: day, ledgerOpen: $ledgerOpen,
                               go: { model.selectedMonth = $0; day = nil },
@@ -191,8 +190,7 @@ struct MonthScreen: View {
         .refreshable { await model.refresh(force: true) }
         .task { await model.refresh() }
         .sheet(item: $sheet) { k in
-            if let j = model.json {
-                let db = SolarDB(j)
+            if let db = model.db {
                 NavigationStack {
                     ScrollView {
                         switch k {

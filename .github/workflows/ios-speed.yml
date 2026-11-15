@@ -1,0 +1,29 @@
+name: iOS tab speed
+
+# Times how long each tab takes to show its screen after a tap, on the iOS 26 simulator
+# with sample data. Run by hand; look for SOLAR_TAB_MS in the log.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  speed:
+    runs-on: macos-15
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v5
+      - name: Use the newest Xcode 26 or later
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+      - name: Time the tabs
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          DEV=$(xcrun simctl list devices available | awk '/^-- iOS 2[6-9]/{f=1;next} /^--/{f=0} f' | grep -E "iPhone 1[6-9] Pro \(" | tail -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          xcrun simctl boot "$DEV"; xcrun simctl bootstatus "$DEV" -b
+          xcodebuild test -project Solar.xcodeproj -scheme Solar -configuration Release -destination "id=$DEV" \
+            -only-testing:SolarUITests/TabSpeedTests CODE_SIGNING_ALLOWED=NO 2>&1 | grep -E "SOLAR_TAB_MS|error:|\*\* TEST" || true
