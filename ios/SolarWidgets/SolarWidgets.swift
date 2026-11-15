@@ -211,19 +211,6 @@ struct CurveView: View {
     }
 }
 
-struct WeatherGlyph: View {
-    let code: Int?
-    var day = true
-    var size: CGFloat = 14
-    var body: some View {
-        let name = SK.symbol(code, day: day)
-        Image(systemName: name)
-            .font(.system(size: size))
-            .symbolRenderingMode(name == "sun.max.fill" ? .monochrome : .hierarchical)
-            .foregroundStyle(name == "sun.max.fill" ? SK.sunColor : .secondary)
-    }
-}
-
 struct SmallView: View {
     let r: Reading
     var body: some View {

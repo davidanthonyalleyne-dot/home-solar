@@ -22,8 +22,7 @@ struct SolarApp: App {
         WindowGroup {
             Group {
                 if gate.unlocked {
-                    SolarWebView(url: solarURL, passphrase: Secrets.passphrase) { gate.lock() }
-                        .ignoresSafeArea()
+                    Unlocked(onLock: { gate.lock() })
                 } else {
                     LockView(gate: gate)
                 }
@@ -31,6 +30,35 @@ struct SolarApp: App {
             .background(Color(uiColor: .systemBackground))
         }
         .onChange(of: phase) { _, now in gate.phaseChanged(now) }
+    }
+}
+
+// On iPhone: native tabs, with Now drawn natively. On iPad: the web app as it is, sidebar and all.
+struct Unlocked: View {
+    let onLock: () -> Void
+    @Environment(\.horizontalSizeClass) private var size
+    @StateObject private var host = WebHost()
+
+    var body: some View {
+        if size == .compact {
+            MainTabs(web: host.web(onLock: onLock))
+        } else {
+            SolarWebView(url: solarURL, passphrase: Secrets.passphrase, onLock: onLock)
+                .ignoresSafeArea()
+        }
+    }
+}
+
+/// The one web view the iPhone's Month, History, Ask and Settings tabs share.
+@MainActor
+final class WebHost: ObservableObject {
+    private var made: (WKWebView, SolarWebView.Coordinator)?
+    func web(onLock: @escaping () -> Void) -> WKWebView {
+        if let made { return made.0 }
+        let c = SolarWebView.Coordinator(onLock: onLock)
+        let w = SolarWebView.build(url: solarURL, passphrase: Secrets.passphrase, coordinator: c, nativeTabs: true)
+        made = (w, c)
+        return w
     }
 }
 
@@ -217,6 +245,11 @@ struct SolarWebView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(onLock: onLock) }
 
     func makeUIView(context: Context) -> WKWebView {
+        SolarWebView.build(url: url, passphrase: passphrase, coordinator: context.coordinator, nativeTabs: false)
+    }
+
+    /// Makes the web view. With nativeTabs the page's own tab bar is hidden, because the app's is used.
+    static func build(url: URL, passphrase: String, coordinator: Coordinator, nativeTabs: Bool) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
@@ -232,12 +265,16 @@ struct SolarWebView: UIViewRepresentable {
             ctl.addUserScript(WKUserScript(source: "window.SolarNative = Object.freeze({ app: true });",
                                            injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
-        ctl.add(context.coordinator, name: "solar")
+        if nativeTabs {
+            let css = "const s = document.createElement('style'); s.textContent = '.tabs{display:none !important}'; document.head.appendChild(s);"
+            ctl.addUserScript(WKUserScript(source: css, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        }
+        ctl.add(coordinator, name: "solar")
         config.userContentController = ctl
 
         let web = WKWebView(frame: .zero, configuration: config)
-        web.navigationDelegate = context.coordinator
-        web.uiDelegate = context.coordinator
+        web.navigationDelegate = coordinator
+        web.uiDelegate = coordinator
         web.allowsBackForwardNavigationGestures = false
         web.isOpaque = false
         web.backgroundColor = .systemBackground
@@ -247,9 +284,9 @@ struct SolarWebView: UIViewRepresentable {
         web.scrollView.bounces = true
 
         let refresh = UIRefreshControl()
-        refresh.addTarget(context.coordinator, action: #selector(Coordinator.reload(_:)), for: .valueChanged)
+        refresh.addTarget(coordinator, action: #selector(Coordinator.reload(_:)), for: .valueChanged)
         web.scrollView.refreshControl = refresh
-        context.coordinator.webView = web
+        coordinator.webView = web
 
         web.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData))
         return web

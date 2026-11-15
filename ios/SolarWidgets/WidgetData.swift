@@ -58,18 +58,22 @@ enum SolarCrypto {
         return try AES.GCM.open(sealed, using: SymmetricKey(data: key))
     }
     /// Downloads and opens data.json. Nil when there's no passphrase in this build or it no longer fits.
+    /// The last data.json opened, for the app's Now screen, which needs more of it than the widgets.
+    nonisolated(unsafe) static var lastJSON: [String: Any]?
     static func latest() async -> [String: Any]? {
         var req = URLRequest(url: SolarConfig.dataURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         req.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         guard let (data, _) = try? await URLSession.shared.data(for: req) else { return nil }
-        if let plain = try? JSONSerialization.jsonObject(with: data) as? [String: Any], plain["solar"] != nil { return plain }
+        if let plain = try? JSONSerialization.jsonObject(with: data) as? [String: Any], plain["solar"] != nil { lastJSON = plain; return plain }
         guard let box = try? JSONDecoder().decode(Box.self, from: data), let salt = Data(base64Encoded: box.salt) else { return nil }
         var key = KeyCache.load(salt: box.salt)
         if key == nil, let k = SolarCrypto.key(passphrase: Secrets.passphrase, salt: salt, iterations: box.iter) {
             key = k; KeyCache.save(k, salt: box.salt)
         }
         guard let key, let raw = try? SolarCrypto.open(box, key: key) else { return nil }
-        return try? JSONSerialization.jsonObject(with: raw) as? [String: Any]
+        let json = try? JSONSerialization.jsonObject(with: raw) as? [String: Any]
+        if json != nil { lastJSON = json }
+        return json
     }
 }
 
@@ -266,4 +270,17 @@ enum SK {
     }
     static let sunColor = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 1, green: 0.624, blue: 0.039, alpha: 1) : UIColor(red: 0.91, green: 0.514, blue: 0.047, alpha: 1) })
     static let washColor = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.239, green: 0.165, blue: 0.059, alpha: 1) : UIColor(red: 0.984, green: 0.89, blue: 0.769, alpha: 1) })
+}
+
+struct WeatherGlyph: View {
+    let code: Int?
+    var day = true
+    var size: CGFloat = 14
+    var body: some View {
+        let name = SK.symbol(code, day: day)
+        Image(systemName: name)
+            .font(.system(size: size))
+            .symbolRenderingMode(name == "sun.max.fill" ? .monochrome : .hierarchical)
+            .foregroundStyle(name == "sun.max.fill" ? SK.sunColor : .secondary)
+    }
 }
