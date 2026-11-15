@@ -93,6 +93,7 @@ struct SettingsScreen: View {
     @State private var upStatus: String? = nil
     @State private var upBad = false
     @AppStorage("landscape") private var landscape = true
+    @AppStorage("liveActivity") private var liveOn = true
 
     var body: some View {
         NavigationStack(path: $model.settingsPath) {
@@ -156,7 +157,11 @@ struct SettingsScreen: View {
             Section {
                 Toggle(isOn: $landscape) { SetRow(icon: "rectangle.landscape.rotate", title: "Landscape layout") { EmptyView() } }
                     .tint(SK.sunColor)
-            } header: { Text("Display") } footer: { Text("On an iPhone turned sideways, Now and Month split into two columns. Off keeps the upright layout.") }
+                Toggle(isOn: Binding(get: { liveOn }, set: { v in liveOn = v; SolarActivity.enabled = v; Task { if v { await model.refresh(force: true) } else { await SolarActivity.endAll() } } })) {
+                    SetRow(icon: "sun.horizon", title: "Live Activity") { EmptyView() }
+                }
+                .tint(SK.sunColor)
+            } header: { Text("Display") } footer: { Text("On an iPhone turned sideways, Now and Month split into two columns. The Live Activity shows the live number on the Lock Screen and in the Dynamic Island while the sun is up; it starts when you open Solar after sunrise and ends at sunset.") }
             Section("App") {
                 NavigationLink(value: "alerts") { SetRow(icon: "bell", title: "Alerts") { Text("Home Screen app") } }
                 NavigationLink(value: "ask") { SetRow(icon: "bubble.left", title: "Sunny") { Text(j["askKey"] != nil ? "Claude" : "Not set up") } }

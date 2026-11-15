@@ -7,7 +7,11 @@ import SwiftUI
 
 @main
 struct SolarWidgetBundle: WidgetBundle {
-    var body: some Widget { SolarWidget() }
+    var body: some Widget {
+        SolarWidget()
+        SolarLiveActivity()
+        if #available(iOS 18.0, *) { SolarControl() }
+    }
 }
 
 struct SolarWidget: Widget {

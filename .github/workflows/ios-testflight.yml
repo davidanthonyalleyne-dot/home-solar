@@ -25,7 +25,6 @@ jobs:
       TEAM_ID: M8GX2N7YR2
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-      SITE_PASSPHRASE: ${{ secrets.SITE_PASSPHRASE }}
     steps:
       - uses: actions/checkout@v5
 
@@ -49,24 +48,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/keys"
           echo "${{ secrets.ASC_KEY_P8 }}" > "$RUNNER_TEMP/keys/AuthKey_${ASC_KEY_ID}.p8"
           echo "KEY_PATH=$RUNNER_TEMP/keys/AuthKey_${ASC_KEY_ID}.p8" >> "$GITHUB_ENV"
-
-      - name: Give the app the site's passphrase (scrambled, never committed)
-        run: |
-          python3 - <<'PY'
-          import os, secrets
-          p = os.environ.get("SITE_PASSPHRASE", "").encode()
-          if not p:
-              print("::warning::SITE_PASSPHRASE is empty; the app will ask for the passphrase")
-          k = secrets.token_bytes(max(len(p), 1))
-          x = bytes(a ^ b for a, b in zip(p, k))
-          arr = lambda b: ", ".join(str(v) for v in b)
-          open("Solar/Secrets.swift", "w").write(
-              "enum Secrets {\n"
-              f"    private static let a: [UInt8] = [{arr(x)}]\n"
-              f"    private static let b: [UInt8] = [{arr(k)}]\n"
-              "    static var passphrase: String { String(decoding: zip(a, b).map { $0 ^ $1 }, as: UTF8.self) }\n"
-              "}\n")
-          PY
 
       - name: Register the widget's bundle ID (no-op once it exists)
         run: |
@@ -137,6 +118,9 @@ jobs:
           ENT=$(codesign -d --entitlements - "$RUNNER_TEMP/ipa/Payload/Solar.app" 2>&1)
           echo "$ENT" | tail -20
           echo "$ENT" | grep -q applesignin || { echo "::error::Sign in with Apple entitlement missing from the signed app"; exit 1; }
+          echo "$ENT" | grep -q "solar.shared" || { echo "::error::The keychain group the widgets share is missing from the signed app"; exit 1; }
+          WENT=$(codesign -d --entitlements - "$RUNNER_TEMP/ipa/Payload/Solar.app/PlugIns/SolarWidgets.appex" 2>&1)
+          echo "$WENT" | grep -q "solar.shared" || { echo "::error::The keychain group is missing from the signed widgets"; echo "$WENT"; exit 1; }
 
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>

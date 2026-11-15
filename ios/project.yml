@@ -16,6 +16,7 @@ targets:
     sources:
       - Solar
       - path: SolarWidgets/WidgetData.swift
+      - path: SolarWidgets/Shared.swift
       - path: Preview/sample-data.json
         buildPhase: resources
     dependencies:
@@ -32,7 +33,7 @@ targets:
         NSSpeechRecognitionUsageDescription: Your spoken question to Sunny is turned into text on this iPhone.
         NSCameraUsageDescription: Solar uses the camera if you choose to photograph a Toronto Hydro bill to upload.
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
-        UIBackgroundModes: [fetch, remote-notification]
+        UIBackgroundModes: [fetch]
         BGTaskSchedulerPermittedIdentifiers: [ca.davidalleyne.solar.refresh]
         NSSupportsLiveActivities: true
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]

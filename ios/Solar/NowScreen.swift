@@ -104,6 +104,15 @@ final class NowModel: ObservableObject {
     private var loadedAt: Date?
     private var loading = false
 
+    /// Opens on the last data saved on this iPhone (still encrypted on disk), so Now shows at once,
+    /// even with no signal; refresh() then brings it up to date.
+    init(cached: Bool = true) {
+        guard cached, let json = SolarCrypto.cached(), let snap = Snapshot.cached() else { return }
+        self.json = json
+        db = SolarDB(json)
+        data = NowModel.make(snap, json)
+    }
+
     func refresh(force: Bool = false) async {
         if preview || loading { return }
         if !force, let t = loadedAt, Date().timeIntervalSince(t) < 120 { return }
@@ -111,6 +120,7 @@ final class NowModel: ObservableObject {
         guard let snap = await Snapshot.build(), let json = SolarCrypto.lastJSON else { failed = data == nil; return }
         snap.cache()
         WidgetCenter.shared.reloadAllTimelines()
+        Task { await SolarActivity.update(snap, canStart: true) }
         loadedAt = Date()
         failed = false
         // only hand the screens new data when it really changed, so nothing redraws for nothing
@@ -498,7 +508,7 @@ struct PreviewNow: View {
             : a.contains("-settings") || a.contains("-solaredge") ? .settings : .now
     }
     @StateObject private var model: NowModel = {
-        let m = NowModel()
+        let m = NowModel(cached: false)
         let s = Snapshot.sample
         let day = SK.day(Date())
         m.data = NowData(day: day, nowKw: s.nowKw, todayKwh: s.todayKwh, fresh: true, offline: false, updated: Date().addingTimeInterval(-300),

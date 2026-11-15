@@ -355,6 +355,11 @@ enum SK {
         return f.string(from: d)
     }
     static func kw(_ v: Double) -> String { String(format: "%.2f", v) }
+    /// "4:51 pm"
+    static func clockAmPm(_ d: Date) -> String {
+        let f = formatter("h:mm a"); f.amSymbol = "am"; f.pmSymbol = "pm"
+        return f.string(from: d)
+    }
     static func kwh(_ v: Double) -> String { abs(v) >= 100 ? String(format: "%.0f", v) : String(format: "%.1f", v) }
     static func dollars(_ v: Double) -> String { "$" + String(format: "%.0f", v.rounded()) }
     static func weekday(_ d: String) -> String {

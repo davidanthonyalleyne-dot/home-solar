@@ -1,4 +1,5 @@
 import SwiftUI
+import BackgroundTasks
 import AuthenticationServices
 import LocalAuthentication
 import WidgetKit
@@ -29,7 +30,31 @@ struct SolarApp: App {
             }
             .background(Color(uiColor: .systemBackground))
         }
-        .onChange(of: phase) { _, now in gate.phaseChanged(now) }
+        .onChange(of: phase) { _, now in
+            gate.phaseChanged(now)
+            if now == .background { BackgroundRefresh.schedule() }
+        }
+        .backgroundTask(.appRefresh(BackgroundRefresh.id)) { await BackgroundRefresh.run() }
+    }
+}
+
+/// While Solar isn't open, iOS wakes it now and then (it decides when; roughly every half hour or
+/// more) to fetch the latest numbers, so the widgets, Live Activity and Siri stay current.
+enum BackgroundRefresh {
+    static let id = "ca.davidalleyne.solar.refresh"
+    static func schedule() {
+        let r = BGAppRefreshTaskRequest(identifier: id)
+        r.earliestBeginDate = Date().addingTimeInterval(20 * 60)
+        try? BGTaskScheduler.shared.submit(r)
+    }
+    static func run() async {
+        schedule()
+        guard let snap = await Snapshot.build(), let json = SolarCrypto.lastJSON else { return }
+        snap.cache()
+        WidgetCenter.shared.reloadAllTimelines()
+        await SolarActivity.update(snap)
+        let s = json["solar"] as? [String: Any]
+        await GitHub.nudgeIfLate(updated: SK.iso(s?["updated"] as? String), token: json["uploadToken"] as? String)
     }
 }
 
