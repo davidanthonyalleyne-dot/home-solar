@@ -143,12 +143,12 @@ struct Snapshot: Codable {
 
         // kWh per MJ/m² of sunlight, from days within a month of d (skipping outages and snow)
         func factor(_ d: String) -> Double? {
-            guard let t = SK.date(d) else { return num(w["factor"]) }
+            guard let t = SK.dayNum(d) else { return num(w["factor"]) }
             var r: [Double] = []
             for (k, p) in daily {
                 guard let row = wd[k], row.count > 4, let rad = num(row[4]), rad >= 2, p >= 0.5,
                       (num(row.count > 5 ? row[5] : nil) ?? 0) <= 0, ![71, 73, 75, 77, 85, 86].contains(iInt(num(row[2]) ?? 0)),
-                      let kt = SK.date(k), abs(kt.timeIntervalSince(t)) <= 30 * 86400 else { continue }
+                      let kt = SK.dayNum(k), abs(kt - t) <= 30 else { continue }
                 r.append(p / rad)
             }
             r.sort()
@@ -217,9 +217,30 @@ enum SK {
         let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.timeZone = SolarConfig.tz; f.dateFormat = "yyyy-MM-dd"
         return f.string(from: d)
     }
-    static func date(_ s: String) -> Date? {
-        let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.timeZone = SolarConfig.tz; f.dateFormat = "yyyy-MM-dd"
-        return f.date(from: s)
+    // Making a DateFormatter is slow (a Month screen was making tens of thousands), so each
+    // format is made once and reused. DateFormatter is safe to share across threads.
+    private static let formatLock = NSLock()
+    nonisolated(unsafe) private static var formatters: [String: DateFormatter] = [:]
+    static func formatter(_ format: String, utc: Bool = false) -> DateFormatter {
+        formatLock.lock(); defer { formatLock.unlock() }
+        let key = format + (utc ? "|utc" : "")
+        if let f = formatters[key] { return f }
+        let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian)
+        f.timeZone = utc ? TimeZone(identifier: "UTC") : SolarConfig.tz; f.dateFormat = format
+        formatters[key] = f
+        return f
+    }
+    static func date(_ s: String) -> Date? { formatter("yyyy-MM-dd").date(from: s) }
+    /// "yyyy-MM-dd" as a count of days, by arithmetic (no calendar), for comparing dates quickly
+    static func dayNum(_ s: String) -> Int? {
+        let u = Array(s.utf8)
+        guard u.count >= 10 else { return nil }
+        func n(_ a: Int, _ b: Int) -> Int? { var v = 0; for i in a..<b { let c = Int(u[i]) - 48; guard c >= 0, c <= 9 else { return nil }; v = v * 10 + c }; return v }
+        guard var y = n(0, 4), let m = n(5, 7), let d = n(8, 10), (1...12).contains(m) else { return nil }
+        y -= m <= 2 ? 1 : 0
+        let era = (y >= 0 ? y : y - 399) / 400, yoe = y - era * 400
+        let doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1
+        return era * 146097 + yoe * 365 + yoe / 4 - yoe / 100 + doy
     }
     static func monthName(_ ym: String) -> String {
         guard let d = date(ym + "-15") else { return "" }

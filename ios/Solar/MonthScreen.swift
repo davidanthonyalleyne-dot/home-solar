@@ -81,16 +81,26 @@ struct SolarDB {
         return Stats(ym: ym, t: t, home: t.bothDays > 0 ? t.home / Double(t.bothDays) : nil, imp: t.hDays > 0 ? t.imp / Double(t.hDays) : nil,
                      prod: t.pDays > 0 ? t.prod / Double(t.pDays) : nil, cover: t.bothDays > 0 ? MonthMath.pct(t.selfUse, t.home) : nil)
     }
+    /// Each clear day's kWh per unit of sunlight, worked out once and shared by every lookup
+    final class Memo { var ratios: [(day: Int, k: Double)]?; var factor: [String: Double?] = [:] }
+    let memo = Memo()
+
     func factorAround(_ d: String) -> Double? {
-        guard let t = SK.date(d) else { return factor }
-        var r: [Double] = []
-        for (day, p) in daily {
-            guard let rad = w(day, 4), rad >= 2, p >= 0.5, (w(day, 5) ?? 0) <= 0, ![71, 73, 75, 77, 85, 86].contains(iInt(w(day, 2) ?? 0)),
-                  let dt = SK.date(day), abs(dt.timeIntervalSince(t)) <= 30 * 86400 else { continue }
-            r.append(p / rad)
+        if let hit = memo.factor[d] { return hit }
+        if memo.ratios == nil {
+            memo.ratios = daily.compactMap { day, p in
+                guard let rad = w(day, 4), rad >= 2, p >= 0.5, (w(day, 5) ?? 0) <= 0, ![71, 73, 75, 77, 85, 86].contains(iInt(w(day, 2) ?? 0)),
+                      let n = SK.dayNum(day) else { return nil }
+                return (n, p / rad)
+            }
         }
-        r.sort()
-        return r.count >= 7 ? r[r.count / 2] : factor
+        var out = factor
+        if let t = SK.dayNum(d) {
+            let r = memo.ratios!.filter { abs($0.day - t) <= 30 }.map(\.k).sorted()
+            if r.count >= 7 { out = r[r.count / 2] }
+        }
+        memo.factor[d] = out
+        return out
     }
     func expected(_ d: String) -> Double? { guard let rad = w(d, 4), let k = factorAround(d) else { return nil }; return k * rad }
     func bill(_ ym: String) -> [String: Any]? { bills.first { ($0["preSolar"] as? Bool) != true && ($0["to"] as? String ?? "").hasPrefix(ym) } }
@@ -119,7 +129,7 @@ enum MonthMath {
     static func money(_ v: Double) -> String { (v < 0 ? "−$" : "$") + fmt(abs(v), 2) }
     static func date(_ d: String, _ format: String) -> String {
         guard let t = SK.date(d) else { return d }
-        let f = DateFormatter(); f.timeZone = SolarConfig.tz; f.dateFormat = format; return f.string(from: t)
+        return SK.formatter(format).string(from: t)
     }
     static func shortDay(_ d: String) -> String { date(d, "MMM d") }
     static func dayName(_ d: String) -> String { date(d, "EEEE, MMMM d") }
