@@ -114,9 +114,11 @@ struct NowData {
 final class NowModel: ObservableObject {
     @Published var data: NowData?
     @Published var failed = false
+    var preview = false
     private var loadedAt: Date?
 
     func refresh(force: Bool = false) async {
+        if preview { return }
         if !force, let t = loadedAt, Date().timeIntervalSince(t) < 120 { return }
         guard let snap = await Snapshot.build(), let json = SolarCrypto.lastJSON else { failed = data == nil; return }
         snap.cache()
@@ -470,5 +472,38 @@ struct TodayChart: View {
         case ..<(3 * p / 4 + 1): return "moonphase.last.quarter"
         default: return "moonphase.waning.crescent"
         }
+    }
+}
+
+// MARK: - Screenshots
+
+/// Debug builds only: launched with -previewNow, the simulator shows Now with sample numbers and
+/// no lock, so the screenshot workflow can photograph it. Not in TestFlight builds.
+struct PreviewNow: View {
+    static var on: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.arguments.contains("-previewNow")
+        #else
+        return false
+        #endif
+    }
+    @StateObject private var model: NowModel = {
+        let m = NowModel()
+        let s = Snapshot.sample
+        let day = SK.day(Date())
+        m.data = NowData(day: day, nowKw: s.nowKw, todayKwh: s.todayKwh, fresh: true, offline: false, updated: Date().addingTimeInterval(-300),
+                         peakKw: 7.74, acKw: 6, month: 138.2, year: 3452, lifetime: 14828, since: "2023", curve: s.curve, expected: 11,
+                         lat: 43.64, lon: -79.43, weather: s.weather, tomorrow: (0, 4, -2), status: ("ok", "System normal"))
+        m.preview = true
+        return m
+    }()
+    var body: some View {
+        TabView {
+            NowScreen(model: model) { _ in }.tabItem { Label("Now", systemImage: "sun.max") }
+            ForEach([SolarTab.month, .history, .ask, .settings], id: \.self) { t in
+                Color(uiColor: .systemBackground).tabItem { Label(t.title, systemImage: t.symbol) }
+            }
+        }
+        .tint(.primary)
     }
 }

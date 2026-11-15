@@ -1,0 +1,48 @@
+name: iOS screenshots
+
+# Builds the iPhone app for the simulator and photographs the native screens with sample
+# numbers (Debug build, launched with -previewNow), light and dark. Run by hand; the pictures
+# are attached to the run as "screens".
+
+on:
+  workflow_dispatch:
+
+jobs:
+  screens:
+    runs-on: macos-15
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v5
+      - name: Use the newest Xcode 26 or later
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+      - name: Build for the simulator
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild build -project Solar.xcodeproj -scheme Solar -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO | tail -5
+      - name: Photograph Now
+        run: |
+          DEV=$(xcrun simctl list devices available | grep -E "iPhone 1[6-9] Pro \(" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          echo "device $DEV"
+          xcrun simctl boot "$DEV"; xcrun simctl bootstatus "$DEV" -b
+          xcrun simctl status_bar "$DEV" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 || true
+          APP=$(find "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator" -maxdepth 1 -name "Solar.app")
+          xcrun simctl install "$DEV" "$APP"
+          mkdir -p "$RUNNER_TEMP/screens"
+          for mode in light dark; do
+            xcrun simctl ui "$DEV" appearance $mode
+            xcrun simctl terminate "$DEV" ca.davidalleyne.solar || true
+            xcrun simctl launch "$DEV" ca.davidalleyne.solar -previewNow
+            sleep 6
+            xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/screens/now-$mode.png"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screens
+          path: ${{ runner.temp }}/screens

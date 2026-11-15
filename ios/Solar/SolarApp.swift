@@ -21,7 +21,9 @@ struct SolarApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if gate.unlocked {
+                if PreviewNow.on {
+                    PreviewNow()
+                } else if gate.unlocked {
                     Unlocked(onLock: { gate.lock() })
                 } else {
                     LockView(gate: gate)
