@@ -28,7 +28,9 @@ jobs:
             -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO | tail -5
       - name: Photograph Now and Month
         run: |
-          DEV=$(xcrun simctl list devices available | grep -E "iPhone 1[6-9] Pro \(" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          # an iPhone on the newest iOS runtime (26 or later), where the tab bar is Liquid Glass
+          DEV=$(xcrun simctl list devices available | awk '/^-- iOS 2[6-9]/{f=1;next} /^--/{f=0} f' | grep -E "iPhone 1[6-9] Pro \(" | tail -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          echo "device $DEV"; xcrun simctl list devices | grep "$DEV"
           echo "device $DEV"
           xcrun simctl boot "$DEV"; xcrun simctl bootstatus "$DEV" -b
           xcrun simctl status_bar "$DEV" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 || true
