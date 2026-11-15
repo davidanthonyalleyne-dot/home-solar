@@ -1,0 +1,172 @@
+[
+ {
+  "t": "2026-11-15T06:04:07.793Z",
+  "kind": "tab ignored",
+  "msg": "tapped month, still on history",
+  "v": "1.100",
+  "r": "history",
+  "w": 402,
+  "h": 874,
+  "vv": [
+   402,
+   874,
+   0,
+   1
+  ],
+  "sy": 0,
+  "body": "",
+  "sheets": 0,
+  "ios": "18_7",
+  "standalone": false,
+  "crumbs": [
+   "06:03:58 tab touch history",
+   "06:03:58 render history 402x874",
+   "06:03:59 tab touch ask",
+   "06:03:59 render ask 402x874",
+   "06:03:59 tab touch settings",
+   "06:03:59 render settings 402x874",
+   "06:04:05 tab touch now",
+   "06:04:05 render now 402x874",
+   "06:04:06 tab touch month",
+   "06:04:06 render month 402x874",
+   "06:04:07 tab touch history",
+   "06:04:07 render history 402x874"
+  ]
+ },
+ {
+  "t": "2026-11-15T06:04:09.377Z",
+  "kind": "tab ignored",
+  "msg": "tapped ask, still on settings",
+  "v": "1.100",
+  "r": "settings",
+  "w": 402,
+  "h": 874,
+  "vv": [
+   402,
+   874,
+   0,
+   1
+  ],
+  "sy": 0,
+  "body": "grouped",
+  "sheets": 0,
+  "ios": "18_7",
+  "standalone": false,
+  "crumbs": [
+   "06:03:59 tab touch settings",
+   "06:03:59 render settings 402x874",
+   "06:04:05 tab touch now",
+   "06:04:05 render now 402x874",
+   "06:04:06 tab touch month",
+   "06:04:06 render month 402x874",
+   "06:04:07 tab touch history",
+   "06:04:07 render history 402x874",
+   "06:04:08 tab touch ask",
+   "06:04:08 render ask 402x874",
+   "06:04:08 tab touch settings",
+   "06:04:08 render settings 402x874"
+  ]
+ },
+ {
+  "t": "2026-11-15T06:04:09.894Z",
+  "kind": "tab ignored",
+  "msg": "tapped settings, still on now",
+  "v": "1.100",
+  "r": "now",
+  "w": 402,
+  "h": 874,
+  "vv": [
+   402,
+   874,
+   0,
+   1
+  ],
+  "sy": 0,
+  "body": "",
+  "sheets": 0,
+  "ios": "18_7",
+  "standalone": false,
+  "crumbs": [
+   "06:04:05 tab touch now",
+   "06:04:05 render now 402x874",
+   "06:04:06 tab touch month",
+   "06:04:06 render month 402x874",
+   "06:04:07 tab touch history",
+   "06:04:07 render history 402x874",
+   "06:04:08 tab touch ask",
+   "06:04:08 render ask 402x874",
+   "06:04:08 tab touch settings",
+   "06:04:08 render settings 402x874",
+   "06:04:09 tab touch now",
+   "06:04:09 render now 402x874"
+  ]
+ },
+ {
+  "t": "2026-11-15T06:04:10.694Z",
+  "kind": "tab ignored",
+  "msg": "tapped now, still on ask",
+  "v": "1.100",
+  "r": "ask",
+  "w": 402,
+  "h": 874,
+  "vv": [
+   402,
+   874,
+   0,
+   1
+  ],
+  "sy": 0,
+  "body": "",
+  "sheets": 0,
+  "ios": "18_7",
+  "standalone": false,
+  "crumbs": [
+   "06:04:06 tab touch month",
+   "06:04:06 render month 402x874",
+   "06:04:07 tab touch history",
+   "06:04:07 render history 402x874",
+   "06:04:08 tab touch ask",
+   "06:04:08 render ask 402x874",
+   "06:04:08 tab touch settings",
+   "06:04:08 render settings 402x874",
+   "06:04:09 tab touch now",
+   "06:04:09 render now 402x874",
+   "06:04:10 tab touch ask",
+   "06:04:10 render ask 402x874"
+  ]
+ },
+ {
+  "t": "2026-11-15T13:43:12.569Z",
+  "kind": "tab ignored",
+  "msg": "tapped month, still on settings",
+  "v": "1.100",
+  "r": "settings",
+  "w": 402,
+  "h": 874,
+  "vv": [
+   402,
+   874,
+   0,
+   1
+  ],
+  "sy": 0,
+  "body": "grouped",
+  "sheets": 0,
+  "ios": "18_7",
+  "standalone": false,
+  "crumbs": [
+   "13:42:58 tab touch month",
+   "13:42:58 render month 402x874",
+   "13:43:00 tab touch now",
+   "13:43:00 render now 402x874",
+   "13:43:03 tab touch settings",
+   "13:43:03 render settings 402x874",
+   "13:43:05 tab touch now",
+   "13:43:05 render now 402x874",
+   "13:43:11 tab touch month",
+   "13:43:11 render month 402x874",
+   "13:43:12 tab touch settings",
+   "13:43:12 render settings 402x874"
+  ]
+ }
+]
