@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import WebKit
 import WidgetKit
 
@@ -501,5 +502,41 @@ struct PreviewNow: View {
             }
             print("SOLAR_CYCLE_DONE")
         }
+        .task {
+            // -hitch: switch tabs once a second and log how long the screen froze after each switch
+            guard ProcessInfo.processInfo.arguments.contains("-hitch") else { return }
+            try? await Task.sleep(for: .seconds(4))
+            let mon = FrameMonitor()
+            for i in 0..<30 {
+                let next = SolarTab.allCases[(i + 1) % SolarTab.allCases.count]
+                mon.reset()
+                tab = next
+                try? await Task.sleep(for: .milliseconds(1200))
+                NSLog("SOLAR_HITCH %@ first=%d worst=%d", next.rawValue, Int(mon.first * 1000), Int(mon.worst * 1000))
+            }
+            mon.stop()
+        }
     }
 }
+
+/// Watches the display's frames: the first frame gap after a reset (how long the new screen took
+/// to draw) and the worst gap since.
+final class FrameMonitor: NSObject {
+    private var link: CADisplayLink?
+    private var last: CFTimeInterval = 0
+    private(set) var first: Double = 0, worst: Double = 0
+    private var gotFirst = false
+    override init() {
+        super.init()
+        link = CADisplayLink(target: self, selector: #selector(tick(_:)))
+        link?.add(to: .main, forMode: .common)
+    }
+    func reset() { last = CACurrentMediaTime(); first = 0; worst = 0; gotFirst = false }
+    func stop() { link?.invalidate() }
+    @objc private func tick(_ l: CADisplayLink) {
+        let now = l.timestamp, gap = now - last
+        if last > 0 { if !gotFirst { first = gap; gotFirst = true }; worst = max(worst, gap) }
+        last = now
+    }
+}
+
