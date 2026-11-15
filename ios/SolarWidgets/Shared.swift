@@ -23,7 +23,7 @@ struct SolarActivityAttributes: ActivityAttributes {
 extension SolarActivityAttributes.ContentState {
     init(_ s: Snapshot, rise: Date, set: Date) {
         nowKw = s.nowKw; todayKwh = s.todayKwh; expectedKwh = s.expectedKwh
-        rise = rise; self.set = set; updated = SK.iso(s.updated) ?? Date()
+        self.rise = rise; self.set = set; updated = SK.iso(s.updated) ?? Date()
         let pts = s.curve.compactMap { $0.count > 1 ? $0[1] : nil }
         let step = max(1, Int((Double(pts.count) / 48).rounded(.up)))
         curve = stride(from: 0, to: pts.count, by: step).map { pts[$0] }
