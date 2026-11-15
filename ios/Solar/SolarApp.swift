@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import BackgroundTasks
 import AuthenticationServices
 import LocalAuthentication
@@ -69,7 +70,34 @@ struct Unlocked: View {
     }
 }
 
-// MARK: - Sign in with Apple + Face ID
+// MARK: - Sign in with Apple + Face ID or Touch ID
+
+/// What this device unlocks with: Face ID, Touch ID (older iPads and iPhones with a home
+/// button, iPad Air and mini with the sensor in the top button), or Optic ID.
+enum Bio {
+    static let kind: LABiometryType = {
+        let c = LAContext()
+        _ = c.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
+        return c.biometryType
+    }()
+    static var name: String {
+        switch kind {
+        case .touchID: return "Touch ID"
+        case .opticID: return "Optic ID"
+        case .faceID: return "Face ID"
+        default: return "your passcode"
+        }
+    }
+    static var symbol: String {
+        switch kind {
+        case .touchID: return "touchid"
+        case .opticID: return "opticid"
+        case .faceID: return "faceid"
+        default: return "lock"
+        }
+    }
+    static var device: String { UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone" }
+}
 
 @MainActor
 final class Gate: ObservableObject {
@@ -158,7 +186,7 @@ final class Gate: ObservableObject {
         ctx.localizedCancelTitle = "Not now"
         var err: NSError?
         guard ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &err) else {
-            message = "Turn on Face ID or a passcode for this iPhone to open Solar."
+            message = "Turn on \(Bio.name) or a passcode for this \(Bio.device) to open Solar."
             return
         }
         do {
@@ -186,7 +214,7 @@ struct LockView: View {
                 Button {
                     Task { await gate.unlock() }
                 } label: {
-                    Label("Unlock with Face ID", systemImage: "faceid")
+                    Label("Unlock with \(Bio.name)", systemImage: Bio.symbol)
                         .font(.headline)
                         .frame(maxWidth: .infinity, minHeight: 50)
                 }
@@ -218,7 +246,7 @@ struct PassphraseEntry: View {
     @FocusState private var focused: Bool
     var body: some View {
         VStack(spacing: 12) {
-            Text("Enter your passphrase once. Solar keeps it in this iPhone's keychain, so after this Face ID is enough, and the widgets can read your numbers.")
+            Text("Enter your passphrase once. Solar keeps it in this \(Bio.device)'s keychain, so after this \(Bio.name) is enough, and the widgets can read your numbers.")
                 .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
             SecureField("Passphrase", text: $pass)
                 .textContentType(.password).submitLabel(.go).focused($focused)

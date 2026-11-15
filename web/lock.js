@@ -92,6 +92,21 @@ window.HomeSolarLock = (() => {
   const risingIcon = '<svg viewBox="0 0 100 100" aria-hidden="true" class="rising"><defs><clipPath id="lock-above"><rect x="0" y="-40" width="100" height="103"/></clipPath></defs><g clip-path="url(#lock-above)"><circle class="halo" cx="50" cy="63" r="31"/><g class="up"><circle class="sun" cx="50" cy="63" r="23"/></g></g><line x1="16" y1="63" x2="84" y2="63" class="hz"/></svg>';
   // Face ID, drawn for Solar in the style of the system mark: four corners, eyes, nose, smile
   const faceIcon = '<svg viewBox="0 0 26 26" aria-hidden="true"><path d="M2 8V5.5A3.5 3.5 0 0 1 5.5 2H8M18 2h2.5A3.5 3.5 0 0 1 24 5.5V8M24 18v2.5a3.5 3.5 0 0 1-3.5 3.5H18M8 24H5.5A3.5 3.5 0 0 1 2 20.5V18"/><path d="M8.5 9v2M17.5 9v2M13 9.5v5.2c0 .6-.4 1-1 1h-.8"/><path d="M9 18.2c2.3 1.9 5.7 1.9 8 0"/></svg>';
+  // Touch ID, drawn for Solar: a fingerprint of nested arcs
+  const touchIcon = '<svg viewBox="0 0 26 26" aria-hidden="true"><path d="M6.5 7.5A8.5 8.5 0 0 1 21.5 13v2"/><path d="M4.5 12a8.5 8.5 0 0 1 1-3.5M4.5 15.5V12"/><path d="M8.5 21.5c1-2 1.5-4 1.5-6.5v-2a3 3 0 0 1 6 0v2.5"/><path d="M13 13v2.5c0 3-1 5.5-2.5 7.5"/><path d="M16 18.5c-.3 1.6-.9 3.1-1.7 4.5M19 18c-.2 1.2-.5 2.3-1 3.4"/></svg>';
+  // Which one this device has. Browsers don't say, so it's read from the screen: iPhones with a
+  // home button (375x667, 414x736) and every iPad that isn't an iPad Pro have Touch ID; a Mac
+  // has Touch ID; everything else Face ID. A 13-inch iPad (1024x1366) could be either.
+  const bio = (() => {
+    const w = Math.min(screen.width, screen.height), h = Math.max(screen.width, screen.height);
+    const ipad = /iPad/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const iphone = /iPhone|iPod/.test(navigator.userAgent);
+    let name = "Face ID";
+    if (iphone) name = (h === 667 || h === 736) ? "Touch ID" : "Face ID";
+    else if (ipad) name = ((w === 834 && (h === 1194 || h === 1210)) || (w === 1032 && h === 1376)) ? "Face ID" : (w === 1024 && h === 1366) ? "Face ID or Touch ID" : "Touch ID";
+    else if (/Mac/.test(navigator.platform)) name = "Touch ID";
+    return { name, icon: name === "Touch ID" ? touchIcon : faceIcon };
+  })();
   let risen = false;   // the sunrise plays once per opening, not on every redraw
 
   function shell(view, inner) {
@@ -108,8 +123,8 @@ window.HomeSolarLock = (() => {
 
       const offerFaceId = (data) => {
         if (!passkeysPossible()) return askKeep(data);
-        shell(view, `<p class="small" style="text-align:center;margin:0">Unlock with Face ID next time instead of typing your passphrase?</p>
-          <button class="btn" type="button" id="fid">${faceIcon}<span>Use Face ID</span></button>
+        shell(view, `<p class="small" style="text-align:center;margin:0">Unlock with ${bio.name} next time instead of typing your passphrase?</p>
+          <button class="btn" type="button" id="fid">${bio.icon}<span>Use ${bio.name}</span></button>
           <button class="btn secondary" type="button" id="skip">Not now</button><p class="small err" id="err" role="alert"></p>`);
         view.querySelector("#skip").onclick = () => done(data);
         view.querySelector("#fid").onclick = async (e) => {
@@ -117,13 +132,13 @@ window.HomeSolarLock = (() => {
           try { await setUpFaceId(rawKey); done(data); }
           catch (err) {
             if (err && err.message === "unsupported" || /extension|prf|can't unlock/i.test(String(err && err.message))) return askKeep(data, true);
-            view.querySelector("#err").textContent = "Face ID wasn't set up. You can try again or skip.";
+            view.querySelector("#err").textContent = `${bio.name} wasn't set up. You can try again or skip.`;
             e.target.closest("button").disabled = false;
           }
         };
       };
       const askKeep = (data, noPrf) => {
-        shell(view, `<p class="small" style="text-align:center;margin:0">${noPrf ? "This device can't use Face ID to unlock data. " : ""}Keep Solar unlocked on this device? Anyone holding it unlocked could open the app.</p>
+        shell(view, `<p class="small" style="text-align:center;margin:0">${noPrf ? `This device can't use ${bio.name} to unlock data. ` : ""}Keep Solar unlocked on this device? Anyone holding it unlocked could open the app.</p>
           <button class="btn" type="button" id="keep">Keep unlocked here</button>
           <button class="btn secondary" type="button" id="skip">Ask every time</button>`);
         view.querySelector("#skip").onclick = () => done(data);
@@ -159,7 +174,7 @@ window.HomeSolarLock = (() => {
       const askFaceId = (s, msg) => {
         // only Face ID shows; the passphrase appears if Face ID fails or is cancelled
         shell(view, `<p class="small err" id="err" role="alert">${msg ? esc(msg) : ""}</p>
-          <button class="btn" type="button" id="fid">${faceIcon}<span>Unlock with Face ID</span></button>
+          <button class="btn" type="button" id="fid">${bio.icon}<span>Unlock with ${bio.name}</span></button>
           <button class="btn secondary" type="button" id="usepass" hidden>Use passphrase</button>`);
         view.querySelector("#usepass").onclick = () => askPassphrase();
         view.querySelector("#fid").onclick = async (e) => {
@@ -168,7 +183,7 @@ window.HomeSolarLock = (() => {
           catch (err) {
             e.target.closest("button").disabled = false;
             if (err && err.name === "OperationError") { forget(); askPassphrase("The passphrase has changed. Enter the new one."); }
-            else { view.querySelector("#err").textContent = "Face ID didn't unlock it. Try again or use your passphrase."; view.querySelector("#usepass").hidden = false; }
+            else { view.querySelector("#err").textContent = `${bio.name} didn't unlock it. Try again or use your passphrase.`; view.querySelector("#usepass").hidden = false; }
           }
         };
       };
@@ -195,7 +210,7 @@ window.HomeSolarLock = (() => {
   function status() {
     if (window.SolarNative && window.SolarNative.passphrase) return "Sign in with Apple and Face ID";
     const s = load();
-    return s && s.kind === "passkey" ? "Face ID" : s && s.kind === "device" ? "Kept unlocked on this device" : "Passphrase each time";
+    return s && s.kind === "passkey" ? bio.name : s && s.kind === "device" ? "Kept unlocked on this device" : "Passphrase each time";
   }
 
   // decrypt a freshly fetched data.json with this session's key; rejects if it can't
