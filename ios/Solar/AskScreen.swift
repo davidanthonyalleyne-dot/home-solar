@@ -364,18 +364,37 @@ enum AskData {
         let times = h["time"] as? [String] ?? []
         let ct = String((c["time"] as? String ?? "").prefix(13))
         let nowIdx = max(0, times.firstIndex { $0 >= ct } ?? 0)
-        let hrs: [[Any]] = (nowIdx..<min(times.count, nowIdx + 24)).map { j in
-            [String(times[j].dropFirst(11).prefix(5)), words(h["weather_code"]?[j], true), r1(h["temperature_2m"]?[j]), h["cloud_cover"]?[j] ?? NSNull(),
-             n(h["shortwave_radiation"]?[j]).map { Int($0.rounded()) } ?? 0, h["precipitation_probability"]?[j] ?? NSNull()]
+        // one value from an hourly or daily column, or null
+        func hv(_ col: String, _ j: Int) -> Any { if let a = h[col], j < a.count { return a[j] }; return NSNull() }
+        func dv(_ col: String, _ i: Int) -> Any { if let a = dy[col], i < a.count { return a[i] }; return NSNull() }
+        var hrs: [[Any]] = []
+        for j in nowIdx..<min(times.count, nowIdx + 24) {
+            var row: [Any] = [String(times[j].dropFirst(11).prefix(5))]
+            row.append(words(hv("weather_code", j), true))
+            row.append(r1(hv("temperature_2m", j)))
+            row.append(hv("cloud_cover", j))
+            let sw: Int = n(hv("shortwave_radiation", j)).map { Int($0.rounded()) } ?? 0
+            row.append(sw)
+            row.append(hv("precipitation_probability", j))
+            hrs.append(row)
         }
         let dts = dy["time"] as? [String] ?? []
-        let drows: [[Any]] = dts.indices.map { i in
-            let rad = n(dy["shortwave_radiation_sum"]?[i])
-            return [dts[i], words(dy["weather_code"]?[i], true), dy["temperature_2m_max"]?[i] ?? NSNull(), dy["temperature_2m_min"]?[i] ?? NSNull(),
-                    r1(n(dy["sunshine_duration"]?[i]).map { $0 / 3600 }), dy["precipitation_probability_max"]?[i] ?? NSNull(),
-                    dy["precipitation_sum"]?[i] ?? NSNull(), dy["snowfall_sum"]?[i] ?? NSNull(),
-                    (k != nil && rad != nil) ? r1(k! * rad!) : (NSNull() as Any),
-                    String((dy["sunrise"]?[i] as? String ?? "").dropFirst(11)), String((dy["sunset"]?[i] as? String ?? "").dropFirst(11))]
+        var drows: [[Any]] = []
+        for i in dts.indices {
+            let rad: Double? = n(dv("shortwave_radiation_sum", i))
+            let sunH: Double? = n(dv("sunshine_duration", i)).map { $0 / 3600 }
+            var row: [Any] = [dts[i]]
+            row.append(words(dv("weather_code", i), true))
+            row.append(dv("temperature_2m_max", i))
+            row.append(dv("temperature_2m_min", i))
+            row.append(r1(sunH))
+            row.append(dv("precipitation_probability_max", i))
+            row.append(dv("precipitation_sum", i))
+            row.append(dv("snowfall_sum", i))
+            if let k, let rad { row.append(r1(k * rad)) } else { row.append(NSNull()) }
+            row.append(String((dv("sunrise", i) as? String ?? "").dropFirst(11)))
+            row.append(String((dv("sunset", i) as? String ?? "").dropFirst(11)))
+            drows.append(row)
         }
         let o: [String: Any] = [
             "source": "Open-Meteo forecast for the house, fetched just now",
