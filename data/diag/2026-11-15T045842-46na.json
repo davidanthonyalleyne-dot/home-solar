@@ -1,0 +1,62 @@
+[
+ {
+  "t": "2026-11-15T04:58:41.102Z",
+  "kind": "tab ignored",
+  "msg": "tapped month, still on history",
+  "v": "1.99",
+  "r": "history",
+  "w": 402,
+  "h": 874,
+  "vv": [
+   402,
+   874,
+   0,
+   1
+  ],
+  "sy": 0,
+  "body": "",
+  "sheets": 0,
+  "ios": "18_7",
+  "standalone": false,
+  "crumbs": [
+   "04:58:33 render now 402x874",
+   "04:58:33 render now 402x874",
+   "04:58:33 render now 402x874",
+   "04:58:40 tab touch month",
+   "04:58:40 render month 402x874",
+   "04:58:40 tab touch history",
+   "04:58:40 render history 402x874"
+  ]
+ },
+ {
+  "t": "2026-11-15T04:58:41.667Z",
+  "kind": "tab ignored",
+  "msg": "tapped history, still on ask",
+  "v": "1.99",
+  "r": "ask",
+  "w": 402,
+  "h": 874,
+  "vv": [
+   402,
+   874,
+   0,
+   1
+  ],
+  "sy": 0,
+  "body": "",
+  "sheets": 0,
+  "ios": "18_7",
+  "standalone": false,
+  "crumbs": [
+   "04:58:33 render now 402x874",
+   "04:58:33 render now 402x874",
+   "04:58:33 render now 402x874",
+   "04:58:40 tab touch month",
+   "04:58:40 render month 402x874",
+   "04:58:40 tab touch history",
+   "04:58:40 render history 402x874",
+   "04:58:41 tab touch ask",
+   "04:58:41 render ask 402x874"
+  ]
+ }
+]
