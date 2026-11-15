@@ -47,3 +47,13 @@ jobs:
           for t, a, b in rows: by.setdefault(t, []).append(int(a))
           for t, v in by.items(): print("SOLAR_HITCH", t, "median first", statistics.median(v))
           PY
+      - name: Profile tab switching (Time Profiler)
+        if: always()
+        run: |
+          DEV=$(xcrun simctl list devices | grep Booted | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          APP=$(find "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator" -maxdepth 1 -name Solar.app)
+          xcrun xctrace record --template 'Time Profiler' --device "$DEV" --time-limit 40s --output "$RUNNER_TEMP/t.trace" \
+            --launch -- "$APP" -previewNow -hitch > /dev/null 2>&1 || true
+          xcrun xctrace export --input "$RUNNER_TEMP/t.trace" --xpath '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]' > "$RUNNER_TEMP/tp.xml" 2>/dev/null || true
+          ls -la "$RUNNER_TEMP/tp.xml"
+          python3 ../scripts/top_frames.py "$RUNNER_TEMP/tp.xml" || true
