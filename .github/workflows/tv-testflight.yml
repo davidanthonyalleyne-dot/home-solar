@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["ios/TV/**", "ios/TopShelf/**", "ios/Solar/Model/**", "ios/SolarWidgets/WidgetData.swift", ".github/workflows/tv-testflight.yml"]
+    paths: ["ios/TV/**", "ios/TopShelf/**", "ios/Solar/Model/**", "ios/SolarWidgets/WidgetData.swift", "ios/project.yml", ".github/workflows/tv-testflight.yml"]
 
 concurrency:
   group: tv-testflight
