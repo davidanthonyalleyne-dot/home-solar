@@ -194,6 +194,10 @@ struct NowScreen: View {
 struct NowContent: View {
     let d: NowData
     let openStatus: (Bool) -> Void
+    @Environment(\.verticalSizeClass) private var vsize
+    @AppStorage("landscape") private var landscapePref = true
+    /// iPhone on its side: the numbers on the left, today's chart on the right
+    private var wide: Bool { vsize == .compact && landscapePref }
 
     private var sun: (rise: Date, set: Date) { SK.sun(d.day, lat: d.lat, lon: d.lon) }
 
@@ -209,6 +213,7 @@ struct NowContent: View {
         let todayNote: String? = d.offline ? (d.fresh ? d.updated.map { "as of \(clock($0))" } : "waiting for SolarEdge")
             : d.expected.map { "\(String(format: "%.0f", $0)) kWh expected" }
 
+        HStack(alignment: .top, spacing: 28) {
         VStack(alignment: .leading, spacing: 0) {
             // header: date and the weather now, the title, the status dot
             HStack(alignment: .top) {
@@ -241,9 +246,11 @@ struct NowContent: View {
             }
             .padding(.top, 20)
 
-            TodayChart(d: d, sun: st)
-                .frame(height: 210)
-                .padding(.top, 18)
+            if !wide {
+                TodayChart(d: d, sun: st)
+                    .frame(height: 210)
+                    .padding(.top, 18)
+            }
 
             if let t = d.tomorrow {
                 Divider().padding(.top, 20)
@@ -272,6 +279,11 @@ struct NowContent: View {
             if let u = d.updated {
                 Text("Updated \(ago(u))").font(.system(size: 13)).foregroundStyle(.secondary).padding(.top, 16)
             }
+        }
+        .frame(maxWidth: wide ? 340 : .infinity)
+        if wide {
+            TodayChart(d: d, sun: st).frame(height: 270).padding(.top, 70)
+        }
         }
     }
 

@@ -92,6 +92,7 @@ struct SettingsScreen: View {
     @State private var importing = false
     @State private var upStatus: String? = nil
     @State private var upBad = false
+    @AppStorage("landscape") private var landscape = true
 
     var body: some View {
         NavigationStack(path: $model.settingsPath) {
@@ -152,6 +153,10 @@ struct SettingsScreen: View {
                 }
                 if y["heating"] != nil { NavigationLink(value: "heating") { SetRow(icon: "house", title: "Heating and cooling") { Text("Heat pump") } } }
             }
+            Section {
+                Toggle(isOn: $landscape) { SetRow(icon: "rectangle.landscape.rotate", title: "Landscape layout") { EmptyView() } }
+                    .tint(SK.sunColor)
+            } header: { Text("Display") } footer: { Text("On an iPhone turned sideways, Now and Month split into two columns. Off keeps the upright layout.") }
             Section("App") {
                 NavigationLink(value: "alerts") { SetRow(icon: "bell", title: "Alerts") { Text("Home Screen app") } }
                 NavigationLink(value: "ask") { SetRow(icon: "bubble.left", title: "Sunny") { Text(j["askKey"] != nil ? "Claude" : "Not set up") } }
@@ -316,8 +321,14 @@ struct SettingsPage: View {
             Section {
                 row("Data", "Encrypted")
                 row("Unlock", "Sign in with Apple and Face ID")
-            } footer: { Text("Everything Solar publishes is encrypted with your passphrase. This app holds it, so it opens with Face ID instead.") }
+                row("Passphrase", SharedVault.passphrase != nil ? "In this iPhone's keychain" : "Not entered")
+            } footer: { Text("Everything Solar publishes is encrypted with your passphrase. This iPhone keeps it in its keychain, shared only with Solar's widgets, so the app opens with Face ID.") }
             Section { Button("Lock Solar now", action: onLock) }
+            Section {
+                Button(armed ? "Tap again to forget it" : "Forget the passphrase on this iPhone", role: .destructive) {
+                    if armed { SharedVault.passphrase = nil; armed = false; onLock() } else { armed = true }
+                }
+            } footer: { Text("Solar will ask for it again the next time it opens. The widgets stay empty until then.") }
         default: EmptyView()
         }
     }

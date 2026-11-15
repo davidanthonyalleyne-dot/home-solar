@@ -1,15 +1,11 @@
 import SwiftUI
-import WebKit
 import AuthenticationServices
 import LocalAuthentication
 import WidgetKit
 
-// Solar for iPhone: a native shell around the Solar web app on GitHub Pages.
-// The web app stays the single source of truth; every build of the site shows up here
-// on the next launch or pull to refresh, with no new TestFlight build needed.
-//
-// Opening it takes Sign in with Apple (once, then checked on every launch) and Face ID.
-// After that the app hands the site its passphrase, so it's never typed here.
+// Solar for iPhone and iPad, all SwiftUI. It reads the same encrypted data.json the website
+// publishes. Opening it takes Sign in with Apple (once, then checked on every launch) and Face
+// ID; the passphrase is entered once and kept in the keychain, shared with the widgets.
 
 let solarURL = URL(string: "https://davidanthonyalleyne-dot.github.io/home-solar/")!
 
@@ -37,18 +33,13 @@ struct SolarApp: App {
     }
 }
 
-// On iPhone: native tabs, with Now drawn natively. On iPad: the web app as it is, sidebar and all.
+// iPhone: a tab bar. iPad: a sidebar, the way iPad apps do it.
 struct Unlocked: View {
     let onLock: () -> Void
     @Environment(\.horizontalSizeClass) private var size
 
     var body: some View {
-        if size == .compact {
-            MainTabs(onLock: onLock)
-        } else {
-            SolarWebView(url: solarURL, passphrase: Secrets.passphrase, onLock: onLock)
-                .ignoresSafeArea()
-        }
+        if size == .compact { MainTabs(onLock: onLock) } else { SidebarRoot(onLock: onLock) }
     }
 }
 
@@ -60,6 +51,7 @@ final class Gate: ObservableObject {
     @Published var signedIn = Keychain.get("appleUser") != nil
     @Published var message: String?
     @Published var busy = false
+    @Published var needsPassphrase = false   // Face ID passed, but this phone doesn't have the passphrase yet
     var autoPrompt = true   // Face ID comes up by itself on launch and on return, not right after Lock
     private var backgroundedAt: Date?
     private let relockAfter: TimeInterval = 120
@@ -81,7 +73,17 @@ final class Gate: ObservableObject {
     func lock() {
         autoPrompt = false
         unlocked = false
+        needsPassphrase = false
         message = nil
+    }
+
+    // the passphrase, once per phone; it's checked against the data before it's kept
+    func submit(passphrase: String) async {
+        busy = true; message = nil
+        let ok = await SolarCrypto.adopt(passphrase: passphrase)
+        busy = false
+        if ok { needsPassphrase = false; unlocked = true; WidgetCenter.shared.reloadAllTimelines() }
+        else { message = "That passphrase didn't work." }
     }
 
     // Sign in with Apple finished: remember which Apple Account this is, then Face ID.
@@ -135,7 +137,7 @@ final class Gate: ObservableObject {
         }
         do {
             try await ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock Solar")
-            unlocked = true
+            if SharedVault.passphrase == nil { needsPassphrase = true } else { unlocked = true }
         } catch {
             message = nil   // cancelled: the button stays there to try again
         }
@@ -152,7 +154,9 @@ struct LockView: View {
             SunMark().frame(width: 92, height: 92)
             Text("Solar").font(.largeTitle.weight(.bold))
             Spacer()
-            if gate.signedIn {
+            if gate.needsPassphrase {
+                PassphraseEntry(gate: gate)
+            } else if gate.signedIn {
                 Button {
                     Task { await gate.unlock() }
                 } label: {
@@ -180,6 +184,28 @@ struct LockView: View {
         .padding(.bottom, 24)
         .task { if gate.signedIn && !gate.unlocked && !gate.busy && gate.autoPrompt { await gate.unlock() } }
     }
+}
+
+struct PassphraseEntry: View {
+    @ObservedObject var gate: Gate
+    @State private var pass = ""
+    @FocusState private var focused: Bool
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("Enter your passphrase once. Solar keeps it in this iPhone's keychain, so after this Face ID is enough, and the widgets can read your numbers.")
+                .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            SecureField("Passphrase", text: $pass)
+                .textContentType(.password).submitLabel(.go).focused($focused)
+                .padding(14).background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                .onSubmit { go() }
+            Button(action: go) {
+                Text(gate.busy ? "Checking…" : "Continue").font(.headline).frame(maxWidth: .infinity, minHeight: 50)
+            }
+            .buttonStyle(.borderedProminent).tint(.orange).disabled(gate.busy || pass.isEmpty)
+        }
+        .onAppear { focused = true }
+    }
+    private func go() { guard !pass.isEmpty else { return }; Task { await gate.submit(passphrase: pass) } }
 }
 
 // Solar's mark: the sun on the horizon
@@ -222,148 +248,5 @@ enum Keychain {
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
                                 kSecAttrAccount as String: key]
         SecItemDelete(q as CFDictionary)
-    }
-}
-
-// MARK: - The web app
-
-struct SolarWebView: UIViewRepresentable {
-    let url: URL
-    let passphrase: String
-    let onLock: () -> Void
-
-    func makeCoordinator() -> Coordinator { Coordinator(onLock: onLock) }
-
-    func makeUIView(context: Context) -> WKWebView {
-        SolarWebView.build(url: url, passphrase: passphrase, coordinator: context.coordinator, nativeTabs: false)
-    }
-
-    /// Makes the web view. With nativeTabs the page's own tab bar is hidden, because the app's is used.
-    static func build(url: URL, passphrase: String, coordinator: Coordinator, nativeTabs: Bool) -> WKWebView {
-        let config = WKWebViewConfiguration()
-        config.allowsInlineMediaPlayback = true
-        config.mediaTypesRequiringUserActionForPlayback = []
-        config.websiteDataStore = .default()   // keeps saved Ask chats between launches
-
-        // hand the site its passphrase (lock.js uses it instead of asking) and a way to lock
-        let ctl = WKUserContentController()
-        if !passphrase.isEmpty, let json = try? JSONSerialization.data(withJSONObject: [passphrase]),
-           let arr = String(data: json, encoding: .utf8) {
-            let js = "window.SolarNative = Object.freeze({ app: true, passphrase: \(arr)[0] });"
-            ctl.addUserScript(WKUserScript(source: js, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        } else {
-            ctl.addUserScript(WKUserScript(source: "window.SolarNative = Object.freeze({ app: true });",
-                                           injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        }
-        if nativeTabs {
-            let css = "const s = document.createElement('style'); s.textContent = '.tabs{display:none !important}'; document.head.appendChild(s);"
-            ctl.addUserScript(WKUserScript(source: css, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        }
-        ctl.add(coordinator, name: "solar")
-        config.userContentController = ctl
-
-        let web = WKWebView(frame: .zero, configuration: config)
-        web.navigationDelegate = coordinator
-        web.uiDelegate = coordinator
-        web.allowsBackForwardNavigationGestures = false
-        web.isOpaque = false
-        web.backgroundColor = .systemBackground
-        web.scrollView.backgroundColor = .systemBackground
-        // the page handles the notch and home bar itself (viewport-fit=cover)
-        web.scrollView.contentInsetAdjustmentBehavior = .never
-        web.scrollView.bounces = true
-
-        let refresh = UIRefreshControl()
-        refresh.addTarget(coordinator, action: #selector(Coordinator.reload(_:)), for: .valueChanged)
-        web.scrollView.refreshControl = refresh
-        coordinator.webView = web
-
-        web.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData))
-        return web
-    }
-
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
-
-    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
-        uiView.configuration.userContentController.removeScriptMessageHandler(forName: "solar")
-    }
-
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
-        weak var webView: WKWebView?
-        let onLock: () -> Void
-        init(onLock: @escaping () -> Void) { self.onLock = onLock }
-
-        func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
-            if message.body as? String == "lock" { DispatchQueue.main.async { self.onLock() } }
-        }
-
-        @objc func reload(_ sender: UIRefreshControl) {
-            webView?.reload()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { sender.endRefreshing() }
-        }
-
-        // Solar's own pages stay in the app. Anything else (SolarEdge sign-in, GitHub,
-        // Toronto Hydro) opens in Safari.
-        private func isSolar(_ url: URL) -> Bool {
-            url.host == solarURL.host && url.path.hasPrefix(solarURL.path)
-        }
-
-        func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
-                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-            guard let url = action.request.url else { return decisionHandler(.allow) }
-            let scheme = url.scheme?.lowercased() ?? ""
-            if scheme == "about" || scheme == "blob" || scheme == "data" { return decisionHandler(.allow) }
-            if action.targetFrame?.isMainFrame == false { return decisionHandler(.allow) }
-            if isSolar(url) { return decisionHandler(.allow) }
-            UIApplication.shared.open(url)
-            decisionHandler(.cancel)
-        }
-
-        // target="_blank" links
-        func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
-                     for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-            if let url = action.request.url {
-                if isSolar(url) { webView.load(action.request) } else { UIApplication.shared.open(url) }
-            }
-            return nil
-        }
-
-        // the Ask tab's mic button
-        func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
-                     initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
-                     decisionHandler: @escaping (WKPermissionDecision) -> Void) {
-            decisionHandler(origin.host == solarURL.host ? .grant : .deny)
-        }
-
-        // alert() / confirm() from the page
-        func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
-                     initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
-            present(message, ok: { completionHandler() }, cancel: nil)
-        }
-
-        func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
-                     initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
-            present(message, ok: { completionHandler(true) }, cancel: { completionHandler(false) })
-        }
-
-        private func present(_ message: String, ok: @escaping () -> Void, cancel: (() -> Void)?) {
-            let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
-            if let cancel { alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in cancel() }) }
-            alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in ok() })
-            guard let root = webView?.window?.rootViewController else { ok(); return }
-            var top = root
-            while let next = top.presentedViewController { top = next }
-            top.present(alert, animated: true)
-        }
-
-        // if the page fails to load (offline), offer to try again
-        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-            let html = """
-            <meta name="viewport" content="width=device-width,initial-scale=1">
-            <body style="font:17px -apple-system;display:flex;height:90vh;align-items:center;justify-content:center;text-align:center;color:#888">
-            <div>Solar can't reach the internet.<br><br><a href="\(solarURL.absoluteString)">Try again</a></div></body>
-            """
-            webView.loadHTMLString(html, baseURL: nil)
-        }
     }
 }

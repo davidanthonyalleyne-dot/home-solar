@@ -219,6 +219,8 @@ struct MonthScreen: View {
 }
 
 struct MonthBody: View {
+    @Environment(\.verticalSizeClass) private var vsize
+    @AppStorage("landscape") private var landscapePref = true
     let db: SolarDB
     let ym: String
     let day: String?
@@ -245,10 +247,23 @@ struct MonthBody: View {
                 }
                 .padding(.bottom, 4)
             }
-            YearStrip(db: db, ym: ym, go: go).padding(.top, 14)
-            Rectangle().fill(Palette.rule).frame(height: 1).padding(.top, 14)
-            MoneyBlock(db: db, ym: ym, openBill: openBill).padding(.top, 22)
-            DayChart(db: db, ym: ym, selected: day, tap: tapDay).padding(.top, 28)
+            if vsize == .compact && landscapePref {
+                // iPhone on its side: the month on the left, the days on the right
+                HStack(alignment: .top, spacing: 28) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        YearStrip(db: db, ym: ym, go: go).padding(.top, 14)
+                        Rectangle().fill(Palette.rule).frame(height: 1).padding(.top, 14)
+                        MoneyBlock(db: db, ym: ym, openBill: openBill).padding(.top, 22)
+                    }
+                    .frame(width: 330)
+                    DayChart(db: db, ym: ym, selected: day, tap: tapDay).padding(.top, 14)
+                }
+            } else {
+                YearStrip(db: db, ym: ym, go: go).padding(.top, 14)
+                Rectangle().fill(Palette.rule).frame(height: 1).padding(.top, 14)
+                MoneyBlock(db: db, ym: ym, openBill: openBill).padding(.top, 22)
+                DayChart(db: db, ym: ym, selected: day, tap: tapDay).padding(.top, 28)
+            }
             Facts(db: db, ym: ym).padding(.top, 26)
             Heating(db: db, ym: ym).padding(.top, 26)
             Ledger(db: db, ym: ym, open: $ledgerOpen).padding(.top, 26)

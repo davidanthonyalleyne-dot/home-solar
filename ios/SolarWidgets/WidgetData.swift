@@ -1,5 +1,7 @@
 // What the widgets show, built on each refresh from the same encrypted data.json the app opens
-// (unlocked with the passphrase built into the app, as the app does) plus Open-Meteo's forecast.
+// (unlocked with the passphrase you enter once in the app, kept in a keychain group the app and
+// widgets share) plus Open-Meteo's forecast. The last data.json is kept, still encrypted, so
+// the app and widgets open on it when the network is slow or gone.
 // Expected solar uses the web app's method: forecast sunlight times what the panels made per unit
 // of sunlight on similar days within a month of the date.
 
@@ -19,27 +21,62 @@ enum SolarConfig {
     static let tz = TimeZone(identifier: "America/Toronto")!
 }
 
-// MARK: - The data key, derived once per salt and kept in this extension's keychain
+// MARK: - The keychain the app and widgets share: the passphrase, and the key it makes
+
+enum SharedVault {
+    static let group = "M8GX2N7YR2.ca.davidalleyne.solar.shared"
+    private static func base(_ name: String, group: Bool) -> [String: Any] {
+        var q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ca.davidalleyne.solar", kSecAttrAccount as String: name]
+        if group { q[kSecAttrAccessGroup as String] = SharedVault.group }
+        return q
+    }
+    static func set(_ name: String, _ data: Data) {
+        for g in [true, false] {
+            SecItemDelete(base(name, group: g) as CFDictionary)
+            var add = base(name, group: g)
+            add[kSecValueData as String] = data
+            add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            if SecItemAdd(add as CFDictionary, nil) == errSecSuccess { return }   // the shared group, or this app's own if that isn't allowed
+        }
+    }
+    static func get(_ name: String) -> Data? {
+        for g in [true, false] {
+            var q = base(name, group: g); q[kSecReturnData as String] = true
+            var out: CFTypeRef?
+            if SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data { return d }
+        }
+        return nil
+    }
+    static func remove(_ name: String) { for g in [true, false] { SecItemDelete(base(name, group: g) as CFDictionary) } }
+
+    static var passphrase: String? {
+        get { get("passphrase").flatMap { String(data: $0, encoding: .utf8) } }
+        set { if let v = newValue { set("passphrase", Data(v.utf8)) } else { remove("passphrase"); remove("key") } }
+    }
+}
 
 enum KeyCache {
-    private static let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                                           kSecAttrService as String: "ca.davidalleyne.solar.widgets", kSecAttrAccount as String: "key"]
+    // stored as salt length (1 byte) + salt + key
     static func load(salt: String) -> Data? {
-        var query = q; query[kSecReturnData as String] = true
-        var out: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess, let d = out as? Data, d.count > 32 else { return nil }
-        // stored as salt length (1 byte) + salt + key
+        guard let d = SharedVault.get("key"), d.count > 33 else { return nil }
         let n = Int(d[0]); guard d.count == 1 + n + 32, String(data: d.subdata(in: 1..<(1 + n)), encoding: .utf8) == salt else { return nil }
         return d.subdata(in: (1 + n)..<d.count)
     }
     static func save(_ key: Data, salt: String) {
-        SecItemDelete(q as CFDictionary)
-        var add = q
         var blob = Data([UInt8(min(255, salt.utf8.count))]); blob.append(Data(salt.utf8.prefix(255))); blob.append(key)
-        add[kSecValueData as String] = blob
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(add as CFDictionary, nil)
+        SharedVault.set("key", blob)
     }
+}
+
+/// The last data.json, exactly as downloaded (encrypted), in this app's or widget's own storage.
+enum BoxCache {
+    static var url: URL {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("data-box.json")
+    }
+    static func save(_ d: Data) { try? d.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]) }
+    static func load() -> Data? { try? Data(contentsOf: url) }
 }
 
 struct Box: Decodable { let iter: Int; let salt: String; let iv: String; let ct: String }
@@ -77,11 +114,22 @@ enum SolarCrypto {
     static func latest() async -> [String: Any]? {
         var req = URLRequest(url: SolarConfig.dataURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         req.setValue("no-store", forHTTPHeaderField: "Cache-Control")
-        guard let (data, _) = try? await URLSession.shared.data(for: req) else { return nil }
+        if let (data, resp) = try? await URLSession.shared.data(for: req), (resp as? HTTPURLResponse)?.statusCode == 200, let json = open(data) {
+            BoxCache.save(data)
+            return json
+        }
+        return cached()
+    }
+    /// The last data.json downloaded, opened from the copy kept on this device.
+    static func cached() -> [String: Any]? { BoxCache.load().flatMap { open($0) } }
+
+    /// Opens a downloaded data.json with the passphrase from the keychain. Throws nothing: nil means no
+    /// passphrase yet, or one that no longer fits.
+    static func open(_ data: Data) -> [String: Any]? {
         if let plain = try? JSONSerialization.jsonObject(with: data) as? [String: Any], plain["solar"] != nil { lastJSON = plain; return plain }
         guard let box = try? JSONDecoder().decode(Box.self, from: data), let salt = Data(base64Encoded: box.salt) else { return nil }
         var key = KeyCache.load(salt: box.salt)
-        if key == nil, let k = SolarCrypto.key(passphrase: Secrets.passphrase, salt: salt, iterations: box.iter) {
+        if key == nil, let p = SharedVault.passphrase, let k = SolarCrypto.key(passphrase: p, salt: salt, iterations: box.iter) {
             key = k; KeyCache.save(k, salt: box.salt)
         }
         guard let key, let raw = try? SolarCrypto.open(box, key: key) else { return nil }
@@ -89,6 +137,20 @@ enum SolarCrypto {
         let json = try? JSONSerialization.jsonObject(with: raw) as? [String: Any]
         if json != nil { lastJSON = json }
         return json
+    }
+
+    /// Checks a passphrase against the latest data.json and keeps it if it works.
+    static func adopt(passphrase: String) async -> Bool {
+        var req = URLRequest(url: SolarConfig.dataURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        req.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        let data = (try? await URLSession.shared.data(for: req))?.0 ?? BoxCache.load()
+        guard let data, let box = try? JSONDecoder().decode(Box.self, from: data), let salt = Data(base64Encoded: box.salt) else { return false }
+        let key: Data? = await Task.detached { SolarCrypto.key(passphrase: passphrase, salt: salt, iterations: box.iter) }.value
+        guard let key, (try? SolarCrypto.open(box, key: key)) != nil else { return false }
+        SharedVault.passphrase = passphrase
+        KeyCache.save(key, salt: box.salt)
+        BoxCache.save(data)
+        return true
     }
 }
 
@@ -131,8 +193,10 @@ struct Snapshot: Codable {
     func cache() { if let d = try? JSONEncoder().encode(self) { UserDefaults.standard.set(d, forKey: "snapshot") } }
 
     /// Builds today's snapshot from data.json and the forecast.
-    static func build() async -> Snapshot? {
-        guard let data = await SolarCrypto.latest(), let s = data["solar"] as? [String: Any] else { return nil }
+    static func build(from json: [String: Any]? = nil) async -> Snapshot? {
+        var data = json
+        if data == nil { data = await SolarCrypto.latest() }
+        guard let data, let s = data["solar"] as? [String: Any] else { return nil }
         let w = data["weather"] as? [String: Any] ?? [:]
         let wd = w["daily"] as? [String: [Any]] ?? [:]
         let daily = (s["daily"] as? [String: Any] ?? [:]).compactMapValues { ($0 as? NSNumber)?.doubleValue }

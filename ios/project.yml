@@ -5,7 +5,7 @@ options:
     iOS: "17.0"
 settings:
   base:
-    MARKETING_VERSION: "1.6.3"
+    MARKETING_VERSION: "1.7"
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: M8GX2N7YR2
@@ -31,7 +31,10 @@ targets:
         NSFaceIDUsageDescription: Solar uses Face ID to unlock your energy data.
         NSSpeechRecognitionUsageDescription: Your spoken question to Sunny is turned into text on this iPhone.
         NSCameraUsageDescription: Solar uses the camera if you choose to photograph a Toronto Hydro bill to upload.
-        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UIBackgroundModes: [fetch, remote-notification]
+        BGTaskSchedulerPermittedIdentifiers: [ca.davidalleyne.solar.refresh]
+        NSSupportsLiveActivities: true
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
     settings:
       base:
@@ -48,7 +51,6 @@ targets:
     platform: iOS
     sources:
       - SolarWidgets
-      - path: Solar/Secrets.swift
     info:
       path: SolarWidgets/Info.plist
       properties:
@@ -59,6 +61,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ca.davidalleyne.solar.widgets
         PRODUCT_NAME: SolarWidgets
+        CODE_SIGN_ENTITLEMENTS: SolarWidgets/SolarWidgets.entitlements
         TARGETED_DEVICE_FAMILY: "1,2"
         SKIP_INSTALL: YES
   SolarUITests:
