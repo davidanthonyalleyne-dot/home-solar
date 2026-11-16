@@ -419,6 +419,21 @@ struct PreviewNow: View {
         }
         .task {
             // -hitch: switch tabs once a second and log how long the screen froze after each switch
+            // -exportTest: write both kinds of export into Documents for CI to open and check
+            if ProcessInfo.processInfo.arguments.contains("-exportTest"), let j = model.json {
+                let db = SolarDB(j)
+                let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                var o = ExportOptions(); o.range = .all; o.weather = true; o.heating = true
+                for (by, fmt, name) in [(ExportOptions.By.day, ExportOptions.Format.xlsx, "days.xlsx"), (.month, .xlsx, "months.xlsx"), (.day, .csv, "days.csv")] {
+                    o.by = by; o.format = fmt
+                    if let (url, n) = try? Exporter.make(o, db: db) {
+                        try? FileManager.default.removeItem(at: docs.appendingPathComponent(name))
+                        try? FileManager.default.copyItem(at: url, to: docs.appendingPathComponent(name))
+                        print("SOLAR_EXPORT \(name) \(n) rows")
+                    }
+                }
+                model.settingsPath = ["export"]; tab = .settings
+            }
             guard ProcessInfo.processInfo.arguments.contains("-hitch") else { return }
             try? await Task.sleep(for: .seconds(4))
             let mon = FrameMonitor()

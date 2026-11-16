@@ -87,6 +87,7 @@ struct SettingsScreen: View {
                 NavigationLink(value: "alerts") { SetRow(icon: "bell", title: "Alerts") { Text(Alerts.shared.on ? "On" : "Off") } }
                 NavigationLink(value: "ask") { SetRow(icon: "bubble.left", title: "Sunny") { Text(j["askKey"] != nil ? "Claude" : "Not set up") } }
                 NavigationLink(value: "security") { SetRow(icon: "lock", title: "Security") { Text("Sign in with Apple") } }
+                NavigationLink(value: "export") { SetRow(icon: "tablecells", title: "Export data") { Text("Excel") } }
             }
             Section {
             } footer: {
@@ -156,7 +157,7 @@ struct SettingsPage: View {
     @State private var armed = false
 
     static let titles = ["solaredge": "SolarEdge", "hydro": "Toronto Hydro", "thermostat": "ecobee thermostat", "system": "Solar system",
-                         "heating": "Heating and cooling", "alerts": "Alerts", "ask": "Sunny", "security": "Security"]
+                         "heating": "Heating and cooling", "alerts": "Alerts", "ask": "Sunny", "security": "Security", "export": "Export data"]
 
     var body: some View {
         List { content }
@@ -227,6 +228,8 @@ struct SettingsPage: View {
         case "heating": heating(y, pv)
         case "alerts":
             AlertsPage(json: json)
+        case "export":
+            ExportPage(json: json)
         case "ask":
             let count = ChatStore.load().count
             Section {
