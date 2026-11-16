@@ -60,6 +60,8 @@ enum GitHub {
         var cal = Calendar(identifier: .gregorian); cal.timeZone = SolarConfig.tz
         let hr = cal.component(.hour, from: Date())
         guard hr >= 6, hr < 22 else { return }
+        let sun = SK.sun(SK.day(Date()))   // nothing new comes in the dark
+        guard Date() > sun.rise.addingTimeInterval(30 * 60), Date() < sun.set.addingTimeInterval(60 * 60) else { return }
         let last = UserDefaults.standard.double(forKey: "nudgeAt")
         guard Date().timeIntervalSince1970 - last > 15 * 60 else { return }
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "nudgeAt")

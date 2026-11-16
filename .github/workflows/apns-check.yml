@@ -1,0 +1,40 @@
+name: Alerts key check
+
+# Checks the Apple push key (APNS_KEY_P8, APNS_KEY_ID) without sending anything to a phone:
+# that the key reads as an Apple key, that it isn't the App Store Connect key by mistake, and
+# what Apple's push servers say to a token signed with it. Run by hand.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      APNS_KEY_P8: ${{ secrets.APNS_KEY_P8 }}
+      APNS_KEY_ID: ${{ secrets.APNS_KEY_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+    steps:
+      - run: pip install --quiet pyjwt cryptography "httpx[http2]"
+      - shell: python
+        run: |
+          import os, time, hashlib, jwt, httpx
+          from cryptography.hazmat.primitives.serialization import load_pem_private_key
+          p8, kid = os.environ["APNS_KEY_P8"].strip(), os.environ["APNS_KEY_ID"].strip()
+          lines = p8.splitlines()
+          print("key id length", len(kid), "looks right" if len(kid) == 10 and kid.isalnum() else "LOOKS WRONG")
+          print("key lines", len(lines), "first line ok" if lines and lines[0].startswith("-----BEGIN PRIVATE KEY") else "first line WRONG",
+                "last line ok" if lines and lines[-1].startswith("-----END PRIVATE KEY") else "last line WRONG")
+          print("same as the App Store Connect key:", hashlib.sha256(p8.encode()).digest() == hashlib.sha256(os.environ["ASC_KEY_P8"].strip().encode()).digest())
+          try:
+              k = load_pem_private_key(p8.encode(), None); print("key loads:", type(k).__name__, getattr(k, "curve", None) and k.curve.name)
+          except Exception as e:
+              print("key does NOT load:", e)
+          tok = jwt.encode({"iss": "M8GX2N7YR2", "iat": int(time.time())}, p8, algorithm="ES256", headers={"kid": kid})
+          # a made-up device token: if the key is good, Apple answers BadDeviceToken; if not, InvalidProviderToken
+          fake = "0" * 64
+          with httpx.Client(http2=True, timeout=20) as c:
+              for host in ("api.push.apple.com", "api.sandbox.push.apple.com"):
+                  r = c.post(f"https://{host}/3/device/{fake}", json={"aps": {"alert": "test"}},
+                             headers={"authorization": f"bearer {tok}", "apns-topic": "ca.davidalleyne.solar", "apns-push-type": "alert"})
+                  print(host, r.status_code, r.text)

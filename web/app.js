@@ -346,7 +346,8 @@
     if (daylight && /FAULT|ERROR|SHUTDOWN|LOCKED/.test(mode)) items.push({ level: "bad", title: "Inverter fault", note: `The inverter reports ${esc(mode.toLowerCase().replace(/_/g, " "))}. Check its light and the SolarEdge app.` });
     const age = s.updated ? Date.now() - Date.parse(s.updated) : 0;
     const fresh = s.todayDate === d && !s.needsConnect && !s.authTroubleSince && age < 75 * 60000;
-    if (!s.needsConnect && !s.authTroubleSince && age > 90 * 60000 && age < 36 * 3600000) items.push({ level: "warn", title: `Numbers are ${esc(ago(s.updated).replace(" ago", ""))} old`,
+    // only in daylight: after sunset the day's last reading stays put until morning, and that's normal
+    if (daylight && now - sun.rise > 90 * 60000 && !s.needsConnect && !s.authTroubleSince && age > 90 * 60000 && age < 36 * 3600000) items.push({ level: "warn", title: `Numbers are ${esc(ago(s.updated).replace(" ago", ""))} old`,
       note: `GitHub hasn't run the hourly update since ${when(s.updated)}, so today's figures stop there. Solar has asked it to run now; fresh numbers usually follow within a few minutes. Your panels are probably fine.` });
     const snowy = wd && ((wd[5] || 0) > 0 || [71, 73, 75, 77, 85, 86].includes(wd[2]));
     if (fresh && daylight && now - sun.rise > 3 * 3600000 && (s.today || 0) < 0.05 && !snowy) items.push({ level: "bad", title: "No production today", note: `Nothing since sunrise at ${clock(sun.rise)}. Check the inverter's light and the SolarEdge app.` });
@@ -1168,6 +1169,8 @@
     const s = state.data && state.data.solar, tok = state.data && state.data.uploadToken;
     if (!s || !s.updated || !tok || nudging || document.hidden) return;
     const hr = Number(new Date().toLocaleString("en-US", { timeZone: "America/Toronto", hour: "numeric", hour12: false }));
+    const sun = sunTimes(torontoToday()), now = new Date();
+    if (now < sun.rise.getTime() + 30 * 60000 || now > sun.set.getTime() + 60 * 60000) return;   // nothing new comes in the dark
     if (hr < 6 || hr >= 22 || Date.now() - Date.parse(s.updated) < 25 * 60000) return;
     if (Date.now() - (lsGet("nudgeAt") || 0) < 15 * 60000) return;
     nudging = true; lsSet("nudgeAt", Date.now());

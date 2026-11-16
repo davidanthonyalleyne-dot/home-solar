@@ -30,7 +30,8 @@ enum SolarStatus {
         let age = updated.map { now.timeIntervalSince($0) } ?? 0
         let needsConnect = s["needsConnect"] as? Bool ?? false, trouble = s["authTroubleSince"] as? String
         let fresh = s["todayDate"] as? String == day && !needsConnect && trouble == nil && age < 75 * 60
-        if !needsConnect, trouble == nil, age > 90 * 60, age < 36 * 3600 {
+        // only in daylight: after sunset the day's last reading stays put until morning, and that's normal
+        if daylight, now.timeIntervalSince(sun.rise) > 90 * 60, !needsConnect, trouble == nil, age > 90 * 60, age < 36 * 3600 {
             items.append(StatusItem(level: "warn", title: "Numbers are \(Fmt.ago(updated!).replacingOccurrences(of: " ago", with: "")) old",
                                     note: "GitHub hasn't run the update since \(when(s["updated"])), so today's figures stop there. Solar has asked it to run now; fresh numbers usually follow within a few minutes. Your panels are probably fine."))
         }
