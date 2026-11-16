@@ -113,6 +113,17 @@ jobs:
             xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/tvshots/$tab.png"
           done
 
+      - name: Drive the Apple TV app with the remote (UI tests)
+        if: always()
+        continue-on-error: true
+        run: |
+          DEV=$(xcrun simctl list devices available | awk '/^-- tvOS/{f=1;next} /^--/{f=0} f' | grep -E "Apple TV 4K" | tail -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          mkdir -p "$RUNNER_TEMP/tvshots/tests"
+          xcodebuild test -project Solar.xcodeproj -scheme SolarTV -configuration Debug -destination "id=$DEV" \
+            -derivedDataPath "$RUNNER_TEMP/dd" -resultBundlePath "$RUNNER_TEMP/tv.xcresult" CODE_SIGNING_ALLOWED=NO > "$RUNNER_TEMP/tvtest.log" 2>&1
+          grep -E "TVTEST|error:|failed|passed|\*\* TEST" "$RUNNER_TEMP/tvtest.log" | head -80
+          xcrun xcresulttool export attachments --path "$RUNNER_TEMP/tv.xcresult" --output-path "$RUNNER_TEMP/tvshots/tests" || true
+          ls "$RUNNER_TEMP/tvshots/tests" | head -30
       - uses: actions/upload-artifact@v4
         if: always()
         with:

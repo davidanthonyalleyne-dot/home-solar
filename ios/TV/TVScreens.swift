@@ -128,15 +128,29 @@ struct TVMonth: View {
     var body: some View {
         if let db = model.db, let ym = model.selectedMonth ?? db.defaultMonth {
             let months = db.months
+            let i = months.firstIndex(of: ym)
             let days = db.monthDays(ym)
             let grid = db.num(ym, "grid"), saved = db.num(ym, "saved"), without = db.num(ym, "without")
             VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .lastTextBaseline) {
+                // the month, with buttons for the ones either side; left and right on the chart move between days
+                HStack(alignment: .center, spacing: 30) {
                     Text(MonthMath.monthYear(ym)).font(.system(size: 64, weight: .bold))
                     Spacer()
-                    Text("Swipe left or right for other months").font(.system(size: 24)).foregroundStyle(.secondary)
+                    if let i, i > 0 {
+                        Button { model.selectedMonth = months[i - 1]; focusedDay = nil } label: {
+                            Label(MonthMath.date(months[i - 1] + "-01", "MMMM"), systemImage: "chevron.left").font(.system(size: 26, weight: .medium))
+                        }
+                        .accessibilityIdentifier("prevMonth")
+                    }
+                    if let i, i < months.count - 1 {
+                        Button { model.selectedMonth = months[i + 1]; focusedDay = nil } label: {
+                            Label(MonthMath.date(months[i + 1] + "-01", "MMMM"), systemImage: "chevron.right").font(.system(size: 26, weight: .medium))
+                                .labelStyle(TrailingIcon())
+                        }
+                        .accessibilityIdentifier("nextMonth")
+                    }
                 }
-                HStack(alignment: .top, spacing: 120) {
+                HStack(alignment: .top, spacing: 90) {
                     TVBig(label: "Paid to the grid", value: grid.map { MonthMath.dollars($0) } ?? "–")
                     TVBig(label: "Saved by solar", value: saved.map { MonthMath.dollars($0) } ?? "–", color: SK.sunColor)
                     if let w = without, w > 0 {
@@ -145,19 +159,41 @@ struct TVMonth: View {
                             Text(MonthMath.dollars(w)).font(.system(size: 76, weight: .semibold)).foregroundStyle(.secondary).monospacedDigit()
                         }
                     }
+                    Spacer(minLength: 0)
+                    TVDayReadout(day: days.first { $0.d == focusedDay })
                 }
-                .padding(.top, 26)
-                TVDayBars(db: db, days: days, focused: $focusedDay).frame(height: 420).padding(.top, 36)
+                .padding(.top, 20)
+                TVDayBars(days: days, focused: $focusedDay).frame(height: 400).padding(.top, 28)
             }
             .padding(.horizontal, pad).padding(.top, 20)
-            .onMoveCommand { dir in
-                guard let i = months.firstIndex(of: ym) else { return }
-                if dir == .left, i > 0 { model.selectedMonth = months[i - 1]; focusedDay = nil }
-                if dir == .right, i < months.count - 1 { model.selectedMonth = months[i + 1]; focusedDay = nil }
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
             ProgressView().scaleEffect(2)
         }
+    }
+}
+
+private struct TrailingIcon: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View { HStack(spacing: 10) { configuration.title; configuration.icon } }
+}
+
+/// The day the remote is on, large enough to read from the couch
+struct TVDayReadout: View {
+    let day: SolarDB.Day?
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            if let r = day {
+                Text(MonthMath.date(r.d, "EEEE, MMMM d")).font(.system(size: 27, weight: .medium)).foregroundStyle(.secondary)
+                Text(r.prod.map { "\(MonthMath.kwh($0)) kWh solar" } ?? "No solar reading").font(.system(size: 44, weight: .semibold)).foregroundStyle(SK.sunColor)
+                Text([r.imp.map { "\(MonthMath.kwh($0)) from the grid" }, r.home.map { "\(MonthMath.kwh($0)) used in all" }].compactMap { $0 }.joined(separator: " · "))
+                    .font(.system(size: 25)).foregroundStyle(.secondary)
+            } else {
+                Text("Move down to the chart to see a day").font(.system(size: 25)).foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 560, alignment: .trailing)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("dayReadout")
     }
 }
 
@@ -172,37 +208,44 @@ struct TVBig: View {
     }
 }
 
-/// Grid and solar per day. The remote moves along the days; the one in focus shows its total.
+/// Grid and solar per day. Each day is a full-height column, so the remote lands on it easily,
+/// and only days that have happened take focus. The one in focus is lit and read out above.
 struct TVDayBars: View {
-    let db: SolarDB
     let days: [SolarDB.Day]
     @Binding var focused: String?
     @FocusState private var focus: String?
 
     var body: some View {
+        let today = SK.day(Date())
         let mx = max(1, days.map { ($0.imp ?? 0) + ($0.selfUse ?? $0.prod ?? 0) }.max() ?? 1)
-        HStack(alignment: .bottom, spacing: 6) {
+        let start = days.last { $0.d <= today && ($0.prod != nil || $0.imp != nil) }?.d ?? days.last { $0.d <= today }?.d
+        HStack(alignment: .bottom, spacing: 4) {
             ForEach(days, id: \.d) { r in
-                let g = r.imp ?? 0, s = r.selfUse ?? r.prod ?? 0, on = focus == r.d
-                VStack(spacing: 6) {
-                    Text(on ? "\(MonthMath.kwh(g + s)) kWh" : " ").font(.system(size: 20, weight: .semibold)).fixedSize()
+                let g = r.imp ?? 0, s = r.selfUse ?? r.prod ?? 0, on = focus == r.d, past = r.d <= today
+                VStack(spacing: 8) {
+                    Spacer(minLength: 0)
                     VStack(spacing: 0) {
-                        Rectangle().fill(SK.sunColor).frame(height: 330 * CGFloat(s / mx))
-                        Rectangle().fill(Color.white.opacity(0.75)).frame(height: 330 * CGFloat(g / mx))
+                        Rectangle().fill(SK.sunColor).frame(height: 320 * CGFloat(s / mx))
+                        Rectangle().fill(Color.white.opacity(0.75)).frame(height: 320 * CGFloat(g / mx))
                     }
                     .frame(maxWidth: .infinity)
                     .clipShape(RoundedRectangle(cornerRadius: 3))
-                    .opacity(focus == nil || on ? 1 : 0.55)
-                    Text(r.d.suffix(2).hasPrefix("0") ? String(r.d.suffix(1)) : String(r.d.suffix(2)))
-                        .font(.system(size: 18)).foregroundStyle(on ? .primary : .secondary)
+                    .opacity(focus == nil || on ? 1 : 0.5)
+                    Text(String(Int(r.d.suffix(2)) ?? 0))
+                        .font(.system(size: on ? 22 : 18, weight: on ? .bold : .regular)).foregroundStyle(on ? .primary : .secondary)
                 }
-                .frame(maxHeight: .infinity, alignment: .bottom)
-                .focusable()
+                .padding(.horizontal, 3).padding(.vertical, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(on ? 0.16 : 0)))
+                .contentShape(Rectangle())
+                .focusable(past)
                 .focused($focus, equals: r.d)
-                .scaleEffect(on ? 1.08 : 1)
-                .animation(.easeOut(duration: 0.15), value: on)
+                .accessibilityIdentifier("day-\(r.d)")
+                .animation(.easeOut(duration: 0.12), value: on)
             }
         }
+        .focusSection()
+        .defaultFocus($focus, start)
         .onChange(of: focus) { _, v in focused = v }
     }
 }

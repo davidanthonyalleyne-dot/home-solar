@@ -89,6 +89,8 @@ targets:
     dependencies:
       - target: SolarTopShelf
         embed: true
+    scheme:
+      testTargets: [SolarTVUITests]
     info:
       path: TV/Info.plist
       properties:
@@ -128,3 +130,14 @@ targets:
         CODE_SIGN_ENTITLEMENTS: TopShelf/SolarTopShelf.entitlements
         TARGETED_DEVICE_FAMILY: "3"
         SKIP_INSTALL: YES
+  SolarTVUITests:
+    type: bundle.ui-testing
+    platform: tvOS
+    sources: [SolarTVUITests]
+    dependencies:
+      - target: SolarTV
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ca.davidalleyne.solar.tvuitests
+        TEST_TARGET_NAME: SolarTV
+        GENERATE_INFOPLIST_FILE: YES
