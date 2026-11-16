@@ -460,16 +460,11 @@ struct TVSettings: View {
         HStack(alignment: .top, spacing: 70) {
             VStack(alignment: .leading, spacing: 24) {
                 Text("Settings").font(.system(size: 64, weight: .bold))
-                if let j = model.json, let st = SolarStatus.items(j) {
-                    HStack(spacing: 16) {
-                        Image(systemName: st.level == "ok" ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                            .font(.system(size: 48)).foregroundStyle(Fmt.statusColor(st.level))
-                        VStack(alignment: .leading) {
-                            Text(st.level == "ok" ? "Connected" : st.items.first { $0.level == st.level }?.title ?? "Needs a look").font(.system(size: 36, weight: .semibold))
-                            if let d = model.data, let u = d.updated { Text("Updated \(Fmt.ago(u))").font(.system(size: 25)).foregroundStyle(.secondary) }
-                        }
-                    }
-                    ForEach(Array(st.items.filter { $0.level != "ok" }.prefix(4).enumerated()), id: \.offset) { _, it in
+                if let j = model.json, let st = SolarStatus.items(j), let c = SolarStatus.chain(j) {
+                    ChainView(links: c.links, big: true).frame(maxWidth: 900).padding(.top, 10)
+                    Text(c.line).font(.system(size: 28)).foregroundStyle(c.level == "bad" ? Palette.bad : .secondary).frame(maxWidth: 900, alignment: .leading)
+                    if let d = model.data, let u = d.updated { Text("Latest numbers \(Fmt.ago(u))").font(.system(size: 25)).foregroundStyle(.secondary) }
+                    ForEach(Array(st.items.filter { $0.level == "bad" || $0.level == "warn" }.dropFirst().prefix(3).enumerated()), id: \.offset) { _, it in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(it.title).font(.system(size: 28, weight: .semibold))
                             Text(it.note).font(.system(size: 24)).foregroundStyle(.secondary)

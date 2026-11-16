@@ -47,7 +47,7 @@ struct SettingsScreen: View {
                     SetRow(icon: "sun.max", title: "SolarEdge") {
                         HStack(spacing: 6) {
                             if s != nil { Circle().fill(Fmt.statusColor(ok ? (st?.level ?? "ok") : "bad")).frame(width: 8, height: 8) }
-                            Text(ok ? "Connected" : s?["authTroubleSince"] != nil ? "No data" : (s?["needsConnect"] as? Bool ?? false) ? "Sign in again" : "Not connected")
+                            Text(ok ? "Signed in" : s?["authTroubleSince"] != nil ? "Not answering" : (s?["needsConnect"] as? Bool ?? false) ? "Sign in again" : "Not set up")
                         }
                     }
                 }
@@ -269,17 +269,10 @@ struct SettingsPage: View {
             let lead = issues.first { $0.title == head }, rest = issues.filter { $0.title != head }
             let sun = SK.sun(SK.day(Date())), now = Date()
             Section {
-                HStack(spacing: 14) {
-                    Image(systemName: st.level == "ok" ? "checkmark" : st.level == "unknown" ? "clock" : "exclamationmark")
-                        .font(.system(size: 20, weight: .bold)).foregroundStyle(.white)
-                        .frame(width: 40, height: 40).background(Fmt.statusColor(st.level), in: Circle())
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(head).font(.system(size: 20, weight: .semibold))
-                        Text(sub).font(.system(size: 15)).foregroundStyle(.secondary)
-                    }
+                if let c = SolarStatus.chain(json) {
+                    ChainView(links: c.links).padding(.vertical, 6)
+                    Text(c.line).font(.system(size: 15)).foregroundStyle(c.level == "bad" ? Palette.bad : .secondary)
                 }
-                .padding(.vertical, 4)
-                if let lead, !lead.note.isEmpty { Text(lead.note).font(.system(size: 15)).foregroundStyle(.secondary) }
                 ForEach(Array(rest.enumerated()), id: \.offset) { _, x in
                     HStack(alignment: .top, spacing: 10) {
                         Circle().fill(Fmt.statusColor(x.level)).frame(width: 8, height: 8).padding(.top, 6)

@@ -6,7 +6,7 @@ options:
     tvOS: "17.0"
 settings:
   base:
-    MARKETING_VERSION: "1.9"
+    MARKETING_VERSION: "1.9.1"
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: M8GX2N7YR2

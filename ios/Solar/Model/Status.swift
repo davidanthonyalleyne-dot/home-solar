@@ -58,6 +58,80 @@ enum SolarStatus {
     }
 }
 
+/// One link in the chain from the panels to this app, as Settings shows it
+struct ChainLink { var name: String; var symbol: String; var state: String; var level: String }
+
+extension SolarStatus {
+    /// Panels → inverter → SolarEdge → Solar, each with its own state, and one line saying what it adds up to
+    static func chain(_ json: [String: Any]) -> (links: [ChainLink], line: String, level: String)? {
+        guard let st = items(json), let s = json["solar"] as? [String: Any] else { return nil }
+        let n = { (x: Any?) in (x as? NSNumber)?.doubleValue }
+        let sun = SK.sun(SK.day(Date())), now = Date()
+        let daylight = now > sun.rise && now < sun.set
+        let has = { (t: String) in st.items.first { $0.title.localizedCaseInsensitiveContains(t) } }
+        let needsConnect = s["needsConnect"] as? Bool ?? false, trouble = s["authTroubleSince"] != nil
+        let kw = n(s["nowKw"]) ?? 0
+
+        let panels: ChainLink
+        if let x = has("No production today") { panels = ChainLink(name: "Panels", symbol: "sun.max", state: "No output", level: x.level) }
+        else if !daylight { panels = ChainLink(name: "Panels", symbol: "moon.stars", state: "Resting", level: "rest") }
+        else if needsConnect || trouble || has("Numbers are") != nil { panels = ChainLink(name: "Panels", symbol: "sun.max", state: "Can't tell", level: "rest") }
+        else { panels = ChainLink(name: "Panels", symbol: "sun.max", state: kw > 0.01 ? "\(String(format: "%.1f", kw)) kW" : "Waking up", level: "ok") }
+
+        let alert = st.items.first { $0.level == "bad" && $0.title != "No production today" }
+        let inverter = alert.map { ChainLink(name: "Inverter", symbol: "bolt", state: $0.title == "Inverter fault" ? "Fault" : "Alert", level: "bad") }
+            ?? (s["alertsChecked"] == nil ? ChainLink(name: "Inverter", symbol: "bolt", state: "Not checked", level: "unknown")
+                : ChainLink(name: "Inverter", symbol: "bolt", state: "No faults", level: "ok"))
+
+        let edge = needsConnect ? ChainLink(name: "SolarEdge", symbol: "cloud", state: "Sign in again", level: "warn")
+            : trouble ? ChainLink(name: "SolarEdge", symbol: "cloud", state: "Not answering", level: "warn")
+            : ChainLink(name: "SolarEdge", symbol: "cloud", state: "Signed in", level: "ok")
+
+        let stale = has("Numbers are")
+        let app = stale != nil ? ChainLink(name: "Solar", symbol: "iphone", state: "Behind", level: "warn")
+            : (needsConnect || trouble) ? ChainLink(name: "Solar", symbol: "iphone", state: "Last numbers", level: "warn")
+            : ChainLink(name: "Solar", symbol: "iphone", state: "Up to date", level: "ok")
+
+        let issue = st.items.first { $0.level == "bad" } ?? st.items.first { $0.level == "warn" }
+        let line: String
+        if let issue { line = issue.note.isEmpty ? issue.title : issue.note }
+        else if !daylight { line = now < sun.rise ? "Night: no new numbers until sunrise at \(Fmt.clock(sun.rise)). That's normal." : "Evening: today's numbers are in. New ones start at sunrise tomorrow. That's normal." }
+        else { line = "Everything is working. New numbers come in through the day." }
+        return ([panels, inverter, edge, app], line, st.level)
+    }
+}
+
+/// The four links in a row: an icon for each, coloured by how it's doing, with a word or two under it
+struct ChainView: View {
+    let links: [ChainLink]
+    var big = false
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(links.enumerated()), id: \.offset) { i, l in
+                if i > 0 {
+                    Rectangle().fill(color(links[i - 1].level == "ok" && l.level == "ok" ? "ok" : "line")).frame(height: big ? 3 : 2)
+                        .frame(maxWidth: big ? 60 : 18).padding(.top, big ? 34 : 19)
+                }
+                VStack(spacing: big ? 8 : 4) {
+                    Image(systemName: l.symbol).font(.system(size: big ? 40 : 22, weight: .medium)).foregroundStyle(color(l.level))
+                        .frame(height: big ? 68 : 38)
+                    Text(l.name).font(.system(size: big ? 26 : 13, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.8)
+                    Text(l.state).font(.system(size: big ? 22 : 12)).foregroundStyle(color(l.level == "rest" ? "text" : l.level)).lineLimit(1).minimumScaleFactor(0.7)
+                }
+                .frame(maxWidth: .infinity)
+                .accessibilityElement(children: .combine)
+            }
+        }
+    }
+    func color(_ level: String) -> Color {
+        switch level {
+        case "ok", "warn", "bad": return Fmt.statusColor(level)
+        case "line": return Color.secondary.opacity(0.35)
+        default: return .secondary
+        }
+    }
+}
+
 enum Fmt {
     static func clock(_ d: Date) -> String { let f = DateFormatter(); f.timeZone = SolarConfig.tz; f.dateFormat = "h:mm a"; f.amSymbol = "am"; f.pmSymbol = "pm"; return f.string(from: d) }
     static func timeOf(_ d: Date) -> String { let f = DateFormatter(); f.timeZone = SolarConfig.tz; f.dateFormat = "MMM d 'at' h:mm a"; f.amSymbol = "am"; f.pmSymbol = "pm"; return f.string(from: d) }

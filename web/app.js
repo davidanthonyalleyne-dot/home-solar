@@ -1340,7 +1340,7 @@
     const d = state.data, s = d.solar, e = s && s.equipment;
     const ok = s && s.connected && !s.needsConnect && !s.authTroubleSince;
     const sol = [
-      ["Status", ok ? `<span class="okc">Connected</span>` : s && s.authTroubleSince ? `<span class="bad">No data since ${esc(timeOf(s.updated))}</span>` : s && s.needsConnect && s.daily ? "Sign-in expired" : "Not connected"],
+      ["Status", ok ? `<span class="okc">Signed in</span>` : s && s.authTroubleSince ? `<span class="bad">Not answering since ${esc(timeOf(s.updated))}</span>` : s && s.needsConnect && s.daily ? "Sign in again" : "Not set up"],
       ok && s.peakKw && ["System size", `${fmt(s.peakKw, 2)} kW`],
       ok && s.installed && ["Installed", esc(new Date(s.installed + "T12:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }))],
     ];
@@ -1394,6 +1394,39 @@
   }
 
   // the top of the SolarEdge page: is the link working, how fresh the numbers are, and anything wrong
+  // Panels -> inverter -> SolarEdge -> Solar, each with its own state, and one line saying what it adds up to
+  function solarChain() {
+    const s = state.data.solar, sys = systemStatus();
+    if (!s || !sys) return null;
+    const sun = sunTimes(torontoToday()), now = new Date(), daylight = now > sun.rise && now < sun.set;
+    const has = (t) => sys.items.find((x) => x.title.toLowerCase().includes(t.toLowerCase()));
+    const off = s.needsConnect || s.authTroubleSince;
+    const kw = s.nowKw || 0;
+    const noOut = has("No production today");
+    const panels = noOut ? ["Panels", "sun", "No output", noOut.level] : !daylight ? ["Panels", "moon", "Resting", "rest"]
+      : (off || has("Numbers are")) ? ["Panels", "sun", "Can't tell", "rest"] : ["Panels", "sun", kw > 0.01 ? `${kw.toFixed(1)} kW` : "Waking up", "ok"];
+    const alert = sys.items.find((x) => x.level === "bad" && x.title !== "No production today");
+    const inverter = alert ? ["Inverter", "bolt", alert.title === "Inverter fault" ? "Fault" : "Alert", "bad"]
+      : !s.alertsChecked ? ["Inverter", "bolt", "Not checked", "unknown"] : ["Inverter", "bolt", "No faults", "ok"];
+    const edge = s.needsConnect ? ["SolarEdge", "cloud", "Sign in again", "warn"] : s.authTroubleSince ? ["SolarEdge", "cloud", "Not answering", "warn"] : ["SolarEdge", "cloud", "Signed in", "ok"];
+    const app = has("Numbers are") ? ["Solar", "phone", "Behind", "warn"] : off ? ["Solar", "phone", "Last numbers", "warn"] : ["Solar", "phone", "Up to date", "ok"];
+    const issue = sys.items.find((x) => x.level === "bad") || sys.items.find((x) => x.level === "warn");
+    const line = issue ? (issue.note || esc(issue.title)) : !daylight
+      ? (now < sun.rise ? `Night: no new numbers until sunrise at ${clock(sun.rise)}. That's normal.` : "Evening: today's numbers are in. New ones start at sunrise tomorrow. That's normal.")
+      : "Everything is working. New numbers come in through the day.";
+    return { links: [panels, inverter, edge, app], line, level: sys.level };
+  }
+  const chainIcons = {
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>',
+    moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+    bolt: '<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>',
+    cloud: '<path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z"/>',
+    phone: '<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/>',
+  };
+  function chainHTML(c) {
+    return `<div class="chain">${c.links.map(([name, icon, st, lv], i) => `${i ? `<span class="clink ${c.links[i - 1][3] === "ok" && lv === "ok" ? "ok" : ""}"></span>` : ""}<div class="cnode ${lv}"><svg viewBox="0 0 24 24" aria-hidden="true">${chainIcons[icon]}</svg><b>${name}</b><span>${esc(st)}</span></div>`).join("")}</div>`;
+  }
+
   function solarStatusCard() {
     const s = state.data.solar, sys = systemStatus();
     if (!sys) return "";
@@ -1410,10 +1443,9 @@
     if (s.alertsChecked) facts.push(["System alerts", sys.items.some((x) => x.level === "bad" && /alert/i.test(x.title)) ? `<span class="bad">Open</span>` : `None, checked ${esc(ago(s.alertsChecked))}`]);
     const issues = sys.items.filter((x) => x.level === "bad" || x.level === "warn");
     const lead = issues.find((x) => x.title === head), rest = issues.filter((x) => x !== lead);
+    const c = solarChain();
     return `<div class="scard pad sestatus ${sys.level}">
-      <div class="seh"><span class="seicon" aria-hidden="true">${sys.level === "ok" ? '<svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>' : sys.level === "unknown" ? '<svg viewBox="0 0 24 24"><path d="M12 7v5l3 2"/></svg>' : '<svg viewBox="0 0 24 24"><path d="M12 7v6M12 16.5v.5"/></svg>'}</span>
-        <div><div class="setitle">${esc(head)}</div><div class="sesub">${esc(sub)}</div></div></div>
-      ${lead && lead.note ? `<p class="senote">${lead.note}</p>` : ""}
+      ${c ? chainHTML(c) + `<p class="senote chainline ${c.level === "bad" ? "bad" : ""}">${c.line}</p>` : ""}
       ${rest.length ? `<div class="status-pop sheetstatus seissues">${rest.map((x) => `<div class="pi ${x.level}"><i></i><div><b>${esc(x.title)}</b>${x.note ? `<span>${x.note}</span>` : ""}</div></div>`).join("")}</div>` : ""}
       ${sys.connect ? connectBtn() : ""}
       ${rows(facts)}</div>`;
@@ -1464,7 +1496,7 @@
     const d = state.data, s = d.solar, y = d.system || {};
     const ok = s && s.connected && !s.needsConnect && !s.authTroubleSince;
     const bills = (d.bills || []).filter((b) => !b.preSolar);
-    const solarV = ok ? `<span class="sdot ok"></span>Connected` : s && s.authTroubleSince ? `<span class="sdot bad"></span>No data` : s && s.needsConnect && s.daily ? `<span class="sdot bad"></span>Sign in again` : "Not connected";
+    const solarV = ok ? `<span class="sdot ok"></span>Signed in` : s && s.authTroubleSince ? `<span class="sdot bad"></span>Not answering` : s && s.needsConnect && s.daily ? `<span class="sdot bad"></span>Sign in again` : "Not set up";
     const t = d.thermostat, mine = lsGet("alertsDevice");
     const alertsOn = mine && mine.prefs ? Object.values(mine.prefs).filter(Boolean).length : 0;
     const panels = y.panels && y.inverter ? `${y.panels.count} panels · ${fmt(y.inverter.dcKw, 1)} kW` : "";
