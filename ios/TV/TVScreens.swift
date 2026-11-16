@@ -150,6 +150,7 @@ struct TVMonth: View {
                         .accessibilityIdentifier("nextMonth")
                     }
                 }
+                .focusSection()   // up from anywhere on the chart reaches the month buttons
                 HStack(alignment: .top, spacing: 90) {
                     TVBig(label: "Paid to the grid", value: grid.map { MonthMath.dollars($0) } ?? "–")
                     TVBig(label: "Saved by solar", value: saved.map { MonthMath.dollars($0) } ?? "–", color: SK.sunColor)
