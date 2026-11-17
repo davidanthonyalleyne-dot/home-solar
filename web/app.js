@@ -1425,7 +1425,7 @@
     moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
     bolt: '<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>',
     cloud: '<path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z"/>',
-    chart: '<path d="M4 4v16h16"/><path d="M7 15l4-5 3 3 5-6"/>',
+    chart: '<path d="M3 20h18"/><path d="M4 15l5-6 4 4 7-7"/>',
   };
   function chainHTML(c) {
     return `<div class="chain">${c.links.map(([name, icon, st, lv], i) => `${i ? `<span class="clink ${c.links[i - 1][3] === "ok" && lv === "ok" ? "ok" : ""}"></span>` : ""}<div class="cnode ${lv}"><svg viewBox="0 0 24 24" aria-hidden="true">${chainIcons[icon]}</svg><b>${name}</b><span>${esc(st).replace("\n", "<br>")}</span></div>`).join("")}</div>`;

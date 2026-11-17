@@ -97,7 +97,7 @@ extension SolarStatus {
             if m < 24 * 60 { return "Updated\n\(iInt((Double(m) / 60).rounded())) hr ago" }
             return "Updated\n" + MonthMath.date(SK.day(t), "MMM d")
         } ?? "No numbers yet"
-        let app = ChainLink(name: "Data", symbol: "chart.xyaxis.line", state: fresh,
+        let app = ChainLink(name: "Data", symbol: "data", state: fresh,
                             level: upd == nil ? "unknown" : (stale != nil || needsConnect || trouble) ? "warn" : "ok")
 
         let issue = st.items.first { $0.level == "bad" } ?? st.items.first { $0.level == "warn" }
@@ -106,6 +106,18 @@ extension SolarStatus {
         else if !daylight { line = now < sun.rise ? "Night: no new numbers until sunrise at \(Fmt.clock(sun.rise)). That's normal." : "Evening: today's numbers are in. New ones start at sunrise tomorrow. That's normal." }
         else { line = "Everything is working. New numbers come in through the day." }
         return ([panels, inverter, edge, app], line, st.level)
+    }
+}
+
+/// The data link's mark: a line going up over a baseline, no side axis
+struct DataGlyph: Shape {
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        let x = { (v: CGFloat) in r.minX + r.width * v }, y = { (v: CGFloat) in r.minY + r.height * v }
+        p.move(to: CGPoint(x: x(0), y: y(1))); p.addLine(to: CGPoint(x: x(1), y: y(1)))
+        p.move(to: CGPoint(x: x(0.05), y: y(0.68))); p.addLine(to: CGPoint(x: x(0.33), y: y(0.3)))
+        p.addLine(to: CGPoint(x: x(0.55), y: y(0.55))); p.addLine(to: CGPoint(x: x(0.95), y: y(0.05)))
+        return p
     }
 }
 
@@ -121,8 +133,12 @@ struct ChainView: View {
                         .frame(maxWidth: big ? 60 : 18).padding(.top, big ? 34 : 19)
                 }
                 VStack(spacing: big ? 8 : 4) {
-                    Image(systemName: l.symbol).font(.system(size: big ? 40 : 22, weight: .medium)).foregroundStyle(color(l.level))
-                        .frame(height: big ? 68 : 38)
+                    Group {
+                        if l.symbol == "data" { DataGlyph().stroke(color(l.level), style: StrokeStyle(lineWidth: big ? 3.5 : 2, lineCap: .round, lineJoin: .round))
+                            .frame(width: big ? 44 : 24, height: big ? 36 : 20) }
+                        else { Image(systemName: l.symbol).font(.system(size: big ? 40 : 22, weight: .medium)).foregroundStyle(color(l.level)) }
+                    }
+                    .frame(height: big ? 68 : 38)
                     Text(l.name).font(.system(size: big ? 26 : 13, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.8)
                     Text(l.state).font(.system(size: big ? 22 : 12)).foregroundStyle(color(l.level == "rest" ? "text" : l.level))
                         .lineLimit(2).multilineTextAlignment(.center).minimumScaleFactor(0.8)
