@@ -1409,7 +1409,11 @@
     const inverter = alert ? ["Inverter", "bolt", alert.title === "Inverter fault" ? "Fault" : "Alert", "bad"]
       : !s.alertsChecked ? ["Inverter", "bolt", "Not checked", "unknown"] : ["Inverter", "bolt", "No faults", "ok"];
     const edge = s.needsConnect ? ["SolarEdge", "cloud", "Sign in again", "warn"] : s.authTroubleSince ? ["SolarEdge", "cloud", "Not answering", "warn"] : ["SolarEdge", "cloud", "Signed in", "ok"];
-    const app = has("Numbers are") ? ["Solar", "phone", "Behind", "warn"] : off ? ["Solar", "phone", "Last numbers", "warn"] : ["Solar", "phone", "Up to date", "ok"];
+    // how fresh the numbers are: yellow when they should be new and aren't (never just because it's night)
+    const mins = s.updated ? Math.round((Date.now() - Date.parse(s.updated)) / 60000) : null;
+    const fresh = mins == null ? "No numbers yet" : mins < 1 ? "Updated\njust now" : mins < 60 ? `Updated\n${mins} min ago` : mins < 1440 ? `Updated\n${Math.round(mins / 60)} hr ago`
+      : "Updated\n" + new Date(s.updated).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: TZNAME });
+    const app = ["Data", "chart", fresh, mins == null ? "unknown" : (has("Numbers are") || off) ? "warn" : "ok"];
     const issue = sys.items.find((x) => x.level === "bad") || sys.items.find((x) => x.level === "warn");
     const line = issue ? (issue.note || esc(issue.title)) : !daylight
       ? (now < sun.rise ? `Night: no new numbers until sunrise at ${clock(sun.rise)}. That's normal.` : "Evening: today's numbers are in. New ones start at sunrise tomorrow. That's normal.")
@@ -1421,10 +1425,10 @@
     moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
     bolt: '<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>',
     cloud: '<path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z"/>',
-    phone: '<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/>',
+    chart: '<path d="M4 4v16h16"/><path d="M7 15l4-5 3 3 5-6"/>',
   };
   function chainHTML(c) {
-    return `<div class="chain">${c.links.map(([name, icon, st, lv], i) => `${i ? `<span class="clink ${c.links[i - 1][3] === "ok" && lv === "ok" ? "ok" : ""}"></span>` : ""}<div class="cnode ${lv}"><svg viewBox="0 0 24 24" aria-hidden="true">${chainIcons[icon]}</svg><b>${name}</b><span>${esc(st)}</span></div>`).join("")}</div>`;
+    return `<div class="chain">${c.links.map(([name, icon, st, lv], i) => `${i ? `<span class="clink ${c.links[i - 1][3] === "ok" && lv === "ok" ? "ok" : ""}"></span>` : ""}<div class="cnode ${lv}"><svg viewBox="0 0 24 24" aria-hidden="true">${chainIcons[icon]}</svg><b>${name}</b><span>${esc(st).replace("\n", "<br>")}</span></div>`).join("")}</div>`;
   }
 
   function solarStatusCard() {
@@ -1437,7 +1441,6 @@
     const sub = sys.level === "ok" ? "Everything is working" : sys.level === "unknown" ? "Waiting for the first check" : linkOk ? "Connected, but something needs a look" : "Not getting new numbers";
     const d = torontoToday(), sun = sunTimes(d), now = new Date();
     const facts = [];
-    if (s.updated) facts.push(["Latest numbers", esc(ago(s.updated))]);
     if (linkOk && s.liveEvery) facts.push(["Checks SolarEdge", now > sun.rise && now < sun.set ? `About every ${fmt(s.liveEvery)} min until sunset` : `Every ${fmt(s.liveEvery)} min from sunrise at ${clock(sun.rise)}`]);
     if (state.data.generated) facts.push(["App last updated", esc(ago(state.data.generated))]);
     if (s.alertsChecked) facts.push(["System alerts", sys.items.some((x) => x.level === "bad" && /alert/i.test(x.title)) ? `<span class="bad">Open</span>` : `None, checked ${esc(ago(s.alertsChecked))}`]);

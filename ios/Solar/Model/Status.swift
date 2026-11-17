@@ -88,9 +88,17 @@ extension SolarStatus {
             : ChainLink(name: "SolarEdge", symbol: "cloud", state: "Signed in", level: "ok")
 
         let stale = has("Numbers are")
-        let app = stale != nil ? ChainLink(name: "Solar", symbol: "iphone", state: "Behind", level: "warn")
-            : (needsConnect || trouble) ? ChainLink(name: "Solar", symbol: "iphone", state: "Last numbers", level: "warn")
-            : ChainLink(name: "Solar", symbol: "iphone", state: "Up to date", level: "ok")
+        // how fresh the numbers are: yellow when they should be new and aren't (never just because it's night)
+        let upd = SK.iso(s["updated"] as? String)
+        let fresh: String = upd.map { t in
+            let m = Int(now.timeIntervalSince(t) / 60)
+            if m < 1 { return "Updated\njust now" }
+            if m < 60 { return "Updated\n\(m) min ago" }
+            if m < 24 * 60 { return "Updated\n\(iInt((Double(m) / 60).rounded())) hr ago" }
+            return "Updated\n" + MonthMath.date(SK.day(t), "MMM d")
+        } ?? "No numbers yet"
+        let app = ChainLink(name: "Data", symbol: "chart.xyaxis.line", state: fresh,
+                            level: upd == nil ? "unknown" : (stale != nil || needsConnect || trouble) ? "warn" : "ok")
 
         let issue = st.items.first { $0.level == "bad" } ?? st.items.first { $0.level == "warn" }
         let line: String
@@ -116,7 +124,8 @@ struct ChainView: View {
                     Image(systemName: l.symbol).font(.system(size: big ? 40 : 22, weight: .medium)).foregroundStyle(color(l.level))
                         .frame(height: big ? 68 : 38)
                     Text(l.name).font(.system(size: big ? 26 : 13, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.8)
-                    Text(l.state).font(.system(size: big ? 22 : 12)).foregroundStyle(color(l.level == "rest" ? "text" : l.level)).lineLimit(1).minimumScaleFactor(0.7)
+                    Text(l.state).font(.system(size: big ? 22 : 12)).foregroundStyle(color(l.level == "rest" ? "text" : l.level))
+                        .lineLimit(2).multilineTextAlignment(.center).minimumScaleFactor(0.8)
                 }
                 .frame(maxWidth: .infinity)
                 .accessibilityElement(children: .combine)

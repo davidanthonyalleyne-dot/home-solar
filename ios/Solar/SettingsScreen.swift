@@ -283,7 +283,6 @@ struct SettingsPage: View {
                     Link("Connect SolarEdge", destination: url).fontWeight(.semibold).tint(SK.sunColor)
                     Button("Copy the sign-in link instead") { UIPasteboard.general.string = u }.tint(SK.sunColor)
                 }
-                if let u = SK.iso(s["updated"] as? String) { row("Latest numbers", Fmt.ago(u)) }
                 if linkOk, let e = n(s["liveEvery"]) {
                     row("Checks SolarEdge", now > sun.rise && now < sun.set ? "About every \(MonthMath.fmt(e)) min until sunset" : "Every \(MonthMath.fmt(e)) min from sunrise at \(Fmt.clock(sun.rise))")
                 }
