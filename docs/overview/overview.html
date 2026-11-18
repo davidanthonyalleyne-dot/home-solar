@@ -58,6 +58,7 @@
   td:first-child { font-weight: 600; white-space: nowrap; }
   td code, p code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 9.5px; background: var(--well); padding: 0 3px; border-radius: 3px; }
   .tech section p { font-size: 11px; line-height: 1.45; }
+  .tech td { padding: 4px 8px 4px 0; }
   @media screen and (max-width: 860px) { table { display: block; overflow-x: auto; } }
   @media screen and (max-width: 860px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 14px; } .stats > div:nth-child(3) { padding-left: 0; border-left: 0; } }
 </style>
@@ -101,14 +102,14 @@
     </div>
   </div>
 
-  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.22 · App 1.102</span><span>Page 1 of 3</span></span></footer>
+  <footer><span>Solar · what the app does · Screenshots show sample data, not real figures</span><span class="ver"><span>Document 2.23 · App 1.102</span><span>Page 1 of 3</span></span></footer>
 </div>
 
 <div class="page">
   <div class="cols" style="grid-template-columns: 1fr 2.75fr; column-gap: 22px; align-items: start">
     <figure>
       <img src="shots/ask.png" alt="The Ask tab">
-      <figcaption><b>Ask Sunny</b>Sunny is Solar's assistant. Type or say a question; Sunny answers from the app's own data and the forecast, with small charts that show the numbers, aloud if you spoke.</figcaption>
+      <figcaption><b>Ask Sunny</b>Sunny is Solar's assistant. Type or say a question; on an iPhone with Apple Intelligence it answers on the phone itself, otherwise Claude answers with small charts. Aloud if you spoke.</figcaption>
     </figure>
     <figure>
       <img src="shots/ipad.png" alt="Solar on an iPad in landscape" style="border-radius: 14px">
@@ -130,7 +131,7 @@
     <section><h2>iPhone, iPad and Apple TV</h2><p>Native apps from TestFlight, with alerts, widgets, Siri, a Live Activity, Control Center and an Excel export.</p></section>
   </div>
 
-  <footer><span class="num">Updated November 15, 2026</span><span class="ver"><span>Document 2.22 · App 1.102</span><span>Page 2 of 3</span></span></footer>
+  <footer><span class="num">Updated November 17, 2026</span><span class="ver"><span>Document 2.23 · App 1.102</span><span>Page 2 of 3</span></span></footer>
 </div>
 
 <div class="page tech" style="gap: 12px">
@@ -143,7 +144,7 @@
     <table>
       <tr><th>Piece</th><th>Version</th><th>What it does</th><th>Loaded from</th><th>Licence</th></tr>
       <tr><td>App code</td><td>App 1.102</td><td>The five tabs, charts, net metering maths, encryption and Sunny (<code>app.js</code>, <code>lock.js</code>, <code>style.css</code>, <code>sw.js</code>). No framework; SVG charts and icons, system font</td><td>GitHub Pages, this repo's <code>web/</code></td><td>Written for the app</td></tr>
-      <tr><td>iPhone and iPad app</td><td>1.9</td><td>SwiftUI, Sign in with Apple, keychain passphrase; widgets, alerts, Live Activity, Siri, Excel export (<code>ios/Solar</code>)</td><td>TestFlight</td><td>Written for the app</td></tr>
+      <tr><td>iPhone and iPad app</td><td>1.10</td><td>SwiftUI, Sign in with Apple, keychain passphrase; widgets, alerts, Live Activity, Siri, Excel export, Sunny on Apple Intelligence (<code>ios/Solar</code>)</td><td>TestFlight</td><td>Written for the app</td></tr>
       <tr><td>Apple TV app</td><td>1.8</td><td>Shared model code with tvOS screens and Top Shelf (<code>ios/TV</code>)</td><td>TestFlight</td><td>Written for the app</td></tr>
       <tr><td>Build job</td><td>Python 3</td><td>Fetches data, reads bills and meter files, models costs, encrypts, sends alerts (<code>scripts/build.py</code>, <code>money.py</code>, <code>parse_bill.py</code>)</td><td>GitHub Actions</td><td>Written for the app</td></tr>
       <tr><td>Transformers.js</td><td>3.5.1</td><td>Runs the speech model in the browser, with ONNX Runtime Web inside</td><td>cdn.jsdelivr.net</td><td>Apache-2.0</td></tr>
@@ -157,25 +158,26 @@
     <p class="label">Integrations</p>
     <table>
       <tr><th>Service</th><th>Used for</th><th>Details</th></tr>
-      <tr><td>SolarEdge Monitoring API v2</td><td>Production, power now, inverter status and alerts</td><td><code>monitoringapi.solaredge.com/v2</code>, OAuth through <code>connect.solaredge.com</code>; the rotating refresh token is saved back as a GitHub secret</td></tr>
+      <tr><td>SolarEdge Monitoring API v2</td><td>Production and alerts</td><td><code>monitoringapi.solaredge.com/v2</code>, OAuth through <code>connect.solaredge.com</code>; refresh token saved back as a secret</td></tr>
       <tr><td>ecobee</td><td>Heating history</td><td>No API; its CSV export is added from Settings, kept encrypted in <code>data/ecobee/</code></td></tr>
-      <tr><td>Toronto Hydro</td><td>Bills and hourly meter readings</td><td>No API. Bill PDFs and meter spreadsheets are added from Settings and kept encrypted</td></tr>
-      <tr><td>Open-Meteo</td><td>Weather now, forecast, past weather</td><td><code>api.open-meteo.com</code> and <code>archive-api.open-meteo.com</code>, no key. Used by the build, Now, Ask and the widgets</td></tr>
-      <tr><td>Anthropic Claude API</td><td>Sunny's answers in Ask</td><td><code>api.anthropic.com/v1/messages</code>, model <code>claude-haiku-5-5</code>, called from the device with a summary of your data; key carried inside the encrypted data</td></tr>
-      <tr><td>GitHub</td><td>Hosting, the hourly job, uploads</td><td>Pages serves the site, Actions runs the build; phone uploads arrive encrypted in <code>data/inbox/</code> (<code>UPLOAD_TOKEN</code>)</td></tr>
-      <tr><td>App Store Connect</td><td>iPhone, iPad and Apple TV builds</td><td>Xcode 26 on GitHub when <code>ios/</code> changes; signed for M8GX2N7YR2 with a team API key</td></tr>
+      <tr><td>Toronto Hydro</td><td>Bills, meter readings</td><td>No API; bills and meter files added from Settings, kept encrypted</td></tr>
+      <tr><td>Open-Meteo</td><td>Weather and forecast</td><td><code>api.open-meteo.com</code> and <code>archive-api.open-meteo.com</code>, no key</td></tr>
+      <tr><td>Apple Foundation Models</td><td>Sunny on the iPhone</td><td>On-device model (iOS 26+) with lookup tools; nothing leaves the phone</td></tr>
+      <tr><td>Anthropic Claude API</td><td>Sunny fallback</td><td><code>api.anthropic.com/v1/messages</code>, model <code>claude-haiku-5-5</code>, called from the device with a data summary; key kept in the encrypted data</td></tr>
+      <tr><td>GitHub</td><td>Site, hourly job</td><td>Pages serves the site, Actions runs the build; uploads arrive encrypted in <code>data/inbox/</code></td></tr>
+      <tr><td>App Store Connect</td><td>App builds</td><td>Xcode 27 on GitHub when <code>ios/</code> changes; signed for M8GX2N7YR2 with a team API key</td></tr>
       <tr><td>Apple push</td><td>Alerts on the phone</td><td>Web Push (VAPID) for the Home Screen app, APNs for the iPhone app (<code>APNS_KEY_P8</code>); devices kept encrypted in <code>data/push.enc</code></td></tr>
       <tr><td>Browser features</td><td>Unlock, voice, offline</td><td>Web Crypto, passkeys, microphone, speech, a service worker</td></tr>
     </table>
   </div>
 
   <section><h2>What runs where</h2>
-    <p>On the phone, iPad or Apple TV: unlocking and decrypting, every screen and chart, voice, and the calls to Claude and Open-Meteo. Files you add are encrypted before they leave.</p>
+    <p>On the phone, iPad or Apple TV: unlocking and decrypting, every screen and chart, voice, on-device Sunny, and calls to Claude and Open-Meteo. Files you add are encrypted before they leave.</p>
     <p>On GitHub, about every hour: the build fetches SolarEdge and the weather, reads new files, rebuilds the site and sends alerts. The site's data is published encrypted with a key from the passphrase (PBKDF2-SHA256, 600,000 rounds); serial numbers and tokens exist only inside it.</p>
-    <p>This document: <code>docs/overview/</code>. Make sample data with <code>fake_data.py</code>, take screenshots with <code>shoot.js</code>, print with <code>pdf.js</code>.</p>
+    <p>This document: <code>docs/overview/</code>; sample data from <code>fake_data.py</code>, shots from <code>shoot.js</code>, PDF from <code>pdf.js</code>.</p>
   </section>
 
-  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.22 · App 1.102</span><span>Page 3 of 3</span></span></footer>
+  <footer><span>Solar · technical setup</span><span class="ver"><span>Document 2.23 · App 1.102</span><span>Page 3 of 3</span></span></footer>
 </div>
 
 </body>
