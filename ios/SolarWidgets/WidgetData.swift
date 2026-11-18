@@ -107,10 +107,26 @@ enum SolarCrypto {
     }
     /// Downloads and opens data.json. Nil when there's no passphrase in this build or it no longer fits.
     /// The last data.json opened, for the app's Now screen, which needs more of it than the widgets.
-    nonisolated(unsafe) static var lastJSON: [String: Any]?
     /// The salt, rounds and key of the last data.json opened; the app seals uploads with them.
-    nonisolated(unsafe) static var lastBox: Box?
-    nonisolated(unsafe) static var lastKey: Data?
+    /// Several tasks open data.json at once (the screens, background refresh, Siri, the Live
+    /// Activity), so these are read and written under a lock; without it two writes at the same
+    /// moment crashed the app (crash report of Nov 17, SolarCrypto.open).
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var _json: [String: Any]?
+    nonisolated(unsafe) private static var _box: Box?
+    nonisolated(unsafe) private static var _key: Data?
+    static var lastJSON: [String: Any]? {
+        get { lock.lock(); defer { lock.unlock() }; return _json }
+        set { lock.lock(); _json = newValue; lock.unlock() }
+    }
+    static var lastBox: Box? {
+        get { lock.lock(); defer { lock.unlock() }; return _box }
+        set { lock.lock(); _box = newValue; lock.unlock() }
+    }
+    static var lastKey: Data? {
+        get { lock.lock(); defer { lock.unlock() }; return _key }
+        set { lock.lock(); _key = newValue; lock.unlock() }
+    }
     static func latest() async -> [String: Any]? {
         var req = URLRequest(url: SolarConfig.dataURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         req.setValue("no-store", forHTTPHeaderField: "Cache-Control")
