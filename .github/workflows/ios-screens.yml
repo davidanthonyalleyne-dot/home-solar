@@ -9,14 +9,14 @@ on:
 
 jobs:
   screens:
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 30
     defaults:
       run:
         working-directory: ios
     steps:
       - uses: actions/checkout@v5
-      - name: Use the newest Xcode 26 or later
+      - name: Use the newest Xcode or later
         run: |
           XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
           sudo xcode-select -s "$XCODE"
@@ -75,14 +75,14 @@ jobs:
           path: ${{ runner.temp }}/screens
 
   tv:
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 30
     defaults:
       run:
         working-directory: ios
     steps:
       - uses: actions/checkout@v5
-      - name: Use the newest Xcode 26 or later
+      - name: Use the newest Xcode or later
         run: |
           XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
           sudo xcode-select -s "$XCODE"

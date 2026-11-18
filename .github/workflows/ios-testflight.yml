@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   testflight:
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 30
     defaults:
       run:
@@ -36,7 +36,7 @@ jobs:
           [ -z "${{ secrets.ASC_KEY_P8 }}" ] && missing="$missing ASC_KEY_P8"
           if [ -n "$missing" ]; then echo "::error::Missing repository secrets:$missing"; exit 1; fi
 
-      - name: Use the newest Xcode 26 or later
+      - name: Use the newest Xcode or later
         run: |
           XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
           if [ -z "$XCODE" ]; then echo "::error::No Xcode 26+ on this runner"; ls /Applications | grep Xcode; exit 1; fi

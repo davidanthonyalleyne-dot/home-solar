@@ -109,7 +109,9 @@ final class AskModel: ObservableObject {
 
     func send(_ q: String, json: [String: Any]?, spoken: Bool = false) async {
         let q = q.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty, !busy, let json, let key = json["askKey"] as? String else { return }
+        guard !q.isEmpty, !busy, let json else { return }
+        let key = json["askKey"] as? String
+        guard key != nil || AskModel.appleReady else { return }
         msgs.append(ChatMsg(role: "user", text: q)); draft = ""; busy = true; note = nil
         persist()
         let bg = UIApplication.shared.beginBackgroundTask(withName: "Sunny")   // finish the answer if you switch away
@@ -117,6 +119,22 @@ final class AskModel: ObservableObject {
         do {
             let db = SolarDB(json)
             let wx = await AskData.weather(db)
+            #if os(iOS) && canImport(FoundationModels)
+            // Apple Intelligence first, on this iPhone; Claude only if Apple can't answer and a key is set
+            if SunnyEngine.chosen == .apple || key == nil, #available(iOS 26.0, *), SunnyEngine.appleStatus.ok {
+                do {
+                    let text = try await AppleSunny.answer(q, history: msgs.filter { $0.error != true }, db: db, json: json, weather: wx)
+                    msgs.append(ChatMsg(role: "assistant", text: text, spoken: spoken))
+                    if spoken { voice.speak(text) }
+                    busy = false; persist(); return
+                } catch let e as AppleSunnyError {
+                    guard key != nil, e.tryClaude else { throw AskError(e.message) }
+                } catch {
+                    guard key != nil else { throw AskError("Apple's model couldn't answer that. Try asking another way.") }
+                }
+            }
+            #endif
+            guard let key else { throw AskError("Sunny needs Apple Intelligence on this iPhone. \(AskModel.appleNote)") }
             var clean = msgs.filter { $0.error != true && !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
             clean = clean.enumerated().filter { i, m in !(m.role == "user" && i + 1 < clean.count && clean[i + 1].role == "user") }.map { $0.1 }
             while let f = clean.first, f.role != "user" { clean.removeFirst() }
@@ -155,6 +173,22 @@ final class AskModel: ObservableObject {
         }
         busy = false
         persist()
+    }
+
+    /// Whether Apple's on-device model can answer here (never on Apple TV)
+    static var appleReady: Bool {
+        #if os(iOS)
+        return SunnyEngine.appleStatus.ok
+        #else
+        return false
+        #endif
+    }
+    static var appleNote: String {
+        #if os(iOS)
+        return SunnyEngine.appleStatus.note + "."
+        #else
+        return ""
+        #endif
     }
 
     /// a short memory of earlier conversations, so "like I asked yesterday" makes sense

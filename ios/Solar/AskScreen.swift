@@ -18,7 +18,7 @@ struct AskScreen: View {
 
     var body: some View {
         let json = model.json
-        let hasKey = (json?["askKey"] as? String)?.isEmpty == false
+        let hasKey = (json?["askKey"] as? String)?.isEmpty == false || AskModel.appleReady
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
@@ -36,7 +36,7 @@ struct AskScreen: View {
                         if json == nil {
                             ProgressView().frame(maxWidth: .infinity).padding(.top, 120)
                         } else if !hasKey {
-                            Text("Ask needs a Claude API key. Create one in the Anthropic Console and add it to the repository as a GitHub secret named ANTHROPIC_API_KEY. It's kept inside the encrypted data, so only your unlocked app can use it.")
+                            Text("Sunny answers with Apple Intelligence on iPhones that have it. \(AskModel.appleNote) Otherwise it needs a Claude API key: create one in the Anthropic Console and add it to the repository as a GitHub secret named ANTHROPIC_API_KEY. It's kept inside the encrypted data, so only your unlocked app can use it.")
                                 .font(.system(size: 17)).padding(.top, 20)
                         } else if ask.msgs.isEmpty && !ask.listening {
                             Start(ask: ask, db: model.db ?? SolarDB(json!)) { q in Task { await ask.send(q, json: json) } }
