@@ -52,7 +52,7 @@ struct AskScreen: View {
                 .onChange(of: ask.busy) { _, _ in withAnimation { proxy.scrollTo("end", anchor: .bottom) } }
             }
             if hasKey {
-                AskBar(ask: ask, typing: $typing) { Task { await ask.send(ask.draft, json: json) } } listen: { ask.listen(json: json) }
+                AskBar(ask: ask, typing: $typing, engine: AskModel.engineName(hasKey: (json?["askKey"] as? String)?.isEmpty == false)) { Task { await ask.send(ask.draft, json: json) } } listen: { ask.listen(json: json) }
             }
         }
         .task { await model.refresh() }
@@ -132,6 +132,7 @@ struct Conversation: View {
 struct AskBar: View {
     @ObservedObject var ask: AskModel
     var typing: FocusState<Bool>.Binding
+    var engine = "Claude"
     let send: () -> Void
     let listen: () -> Void
     var body: some View {
@@ -153,7 +154,7 @@ struct AskBar: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(ask.listening ? "Stop and ask" : "Ask out loud")
             }
-            Text(ask.note ?? (ask.listening ? "Listening. Pause or tap to send." : "Sunny answers from your app's data, using Claude"))
+            Text(ask.note ?? (ask.listening ? "Listening. Pause or tap to send." : "Sunny answers from your app's data, using \(engine)"))
                 .font(.system(size: 12)).foregroundStyle(ask.note != nil ? Palette.bad : Color.secondary)
         }
         .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 8)

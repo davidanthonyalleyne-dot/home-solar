@@ -47,7 +47,8 @@ enum AppleSunny {
     Lead with the answer, with the key figure in bold using **double asterisks**. Write two or three short, plain sentences.
     No headings, no lists, no em dashes. Energy in kWh, money in dollars, temperatures in °C.
     If you use the forecast, say it's a forecast. If the facts and tools can't answer, say what's missing.
-    End with a final line that begins "From " and names the data used, like "From your October bill".
+    Never write your own name or sign the answer.
+    End with a final line, on its own, that begins "From " and names the data used, like "From your October bill".
     """
 
     #if canImport(FoundationModels)
@@ -58,11 +59,11 @@ enum AppleSunny {
             tools: [DayTool(db: db), MonthTool(db: db), YearTool(db: db), ForecastTool(weather: weather)],
             instructions: instructions + "\n\n" + brief(db: db, json: json))
         // the last couple of exchanges, so follow-ups like "and last year?" make sense
-        let recent = history.dropLast().suffix(4).map { "\($0.role == "user" ? "Owner" : "Sunny"): \(plain($0.text).prefix(300))" }.joined(separator: "\n")
+        let recent = history.dropLast().suffix(4).map { "\($0.role == "user" ? "Question" : "Answer"): \(plain($0.text).prefix(300))" }.joined(separator: "\n")
         let prompt = recent.isEmpty ? q : "Earlier in this conversation:\n\(recent)\n\nQuestion: \(q)"
         do {
             let r = try await session.respond(to: prompt)
-            let text = r.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = tidy(r.content)
             guard !text.isEmpty else { throw AppleSunnyError(message: "Apple's model sent back nothing.", tryClaude: true) }
             return text
         } catch let e as LanguageModelSession.GenerationError {
@@ -99,6 +100,27 @@ enum AppleSunny {
         s += "solar made \(String(format: "%.0f", t.prod)) kWh, bought \(String(format: "%.0f", t.imp)) kWh, sent back \(String(format: "%.0f", t.exp)) kWh."
         if let best = days.max(by: { ($0.prod ?? 0) < ($1.prod ?? 0) }), let p = best.prod, p > 0 { s += " Best solar day \(best.d) with \(String(format: "%.1f", p)) kWh." }
         return s
+    }
+
+    /// Apple's model sometimes signs off as "Sunny" or puts the source on the same line; keep the
+    /// answer clean and the source on its own last line starting "From", the way the screen shows it
+    static func tidy(_ raw: String) -> String {
+        var t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        t = t.replacingOccurrences(of: "^(\\*\\*)?Sunny(\\*\\*)?\\s*[:,\\-–]\\s*", with: "", options: [.regularExpression, .caseInsensitive])
+        var lines = t.components(separatedBy: "\n")
+        while let l = lines.last, l.trimmingCharacters(in: .whitespaces).isEmpty { lines.removeLast() }
+        if var last = lines.last {
+            last = last.replacingOccurrences(of: "^[\\s—–\\-]*(Sunny\\s*[:,\\-–]?\\s*)?", with: "", options: [.regularExpression, .caseInsensitive])
+            if last.lowercased().hasPrefix("from ") {
+                lines[lines.count - 1] = "From " + last.dropFirst(5)
+            } else if let r = last.range(of: "\\s*(?:(?:—|–|-)\\s*|\\bSunny\\s+)(?:Sunny\\s+)?from (your|the) ", options: [.regularExpression, .caseInsensitive]), r.lowerBound > last.startIndex {
+                // source tacked onto the last sentence: move it to its own line
+                let src = last[r].trimmingCharacters(in: CharacterSet(charactersIn: " —–-")).replacingOccurrences(of: "^Sunny\\s+", with: "", options: [.regularExpression, .caseInsensitive])
+                lines[lines.count - 1] = String(last[..<r.lowerBound])
+                lines.append("From " + src.dropFirst(5) + last[r.upperBound...])
+            } else { lines[lines.count - 1] = last }
+        }
+        return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func plain(_ t: String) -> String {

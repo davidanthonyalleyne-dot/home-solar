@@ -183,6 +183,12 @@ final class AskModel: ObservableObject {
         return false
         #endif
     }
+    static func engineName(hasKey: Bool) -> String {
+        #if os(iOS)
+        if SunnyEngine.appleStatus.ok, SunnyEngine.chosen == .apple || !hasKey { return "Apple Intelligence on this iPhone" }
+        #endif
+        return "Claude"
+    }
     static var appleNote: String {
         #if os(iOS)
         return SunnyEngine.appleStatus.note + "."
