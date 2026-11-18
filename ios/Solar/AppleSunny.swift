@@ -84,10 +84,21 @@ enum AppleSunny {
                      "Months with data run from \(db.months.first ?? "?") to \(db.months.last ?? "?") (YYYY-MM)."]
         if let kw = n(s["nowKw"]) { lines.append("Panels right now: \(String(format: "%.2f", kw)) kW.") }
         if let t = n(s["today"]) { lines.append("Made so far today: \(String(format: "%.1f", t)) kWh.") }
-        lines.append(MonthTool.describe(db, ym, label: "This month so far"))
+        lines.append(AppleSunny.month(db, ym, label: "This month so far"))
         let last = String(SK.day(Calendar.current.date(byAdding: .month, value: -1, to: Date())!).prefix(7))
-        lines.append(MonthTool.describe(db, last, label: "Last month"))
+        lines.append(AppleSunny.month(db, last, label: "Last month"))
         return "Facts:\n" + lines.joined(separator: "\n")
+    }
+
+    static func month(_ db: SolarDB, _ ym: String, label: String) -> String {
+        let days = db.monthDays(ym)
+        guard !days.isEmpty || db.money[ym] != nil else { return "\(label) (\(ym)): no data." }
+        let t = db.totals(days)
+        let src = db.isEstimate(ym) ? "estimated from the meter" : "from the bill"
+        var s = "\(label) (\(ym)): paid \(AppleSunny.money(db.num(ym, "grid"))) (\(src)), saved by solar \(AppleSunny.money(db.num(ym, "saved"))), without solar \(AppleSunny.money(db.num(ym, "without"))); "
+        s += "solar made \(String(format: "%.0f", t.prod)) kWh, bought \(String(format: "%.0f", t.imp)) kWh, sent back \(String(format: "%.0f", t.exp)) kWh."
+        if let best = days.max(by: { ($0.prod ?? 0) < ($1.prod ?? 0) }), let p = best.prod, p > 0 { s += " Best solar day \(best.d) with \(String(format: "%.1f", p)) kWh." }
+        return s
     }
 
     static func plain(_ t: String) -> String {
@@ -125,17 +136,7 @@ struct MonthTool: Tool {
         @Guide(description: "The month, written YYYY-MM") var month: String
     }
     func call(arguments: Arguments) async throws -> String {
-        MonthTool.describe(db, String(arguments.month.trimmingCharacters(in: .whitespaces).prefix(7)), label: arguments.month)
-    }
-    static func describe(_ db: SolarDB, _ ym: String, label: String) -> String {
-        let days = db.monthDays(ym)
-        guard !days.isEmpty || db.money[ym] != nil else { return "\(label) (\(ym)): no data." }
-        let t = db.totals(days)
-        let src = db.isEstimate(ym) ? "estimated from the meter" : "from the bill"
-        var s = "\(label) (\(ym)): paid \(AppleSunny.money(db.num(ym, "grid"))) (\(src)), saved by solar \(AppleSunny.money(db.num(ym, "saved"))), without solar \(AppleSunny.money(db.num(ym, "without"))); "
-        s += "solar made \(String(format: "%.0f", t.prod)) kWh, bought \(String(format: "%.0f", t.imp)) kWh, sent back \(String(format: "%.0f", t.exp)) kWh."
-        if let best = days.max(by: { ($0.prod ?? 0) < ($1.prod ?? 0) }), let p = best.prod, p > 0 { s += " Best solar day \(best.d) with \(String(format: "%.1f", p)) kWh." }
-        return s
+        AppleSunny.month(db, String(arguments.month.trimmingCharacters(in: .whitespaces).prefix(7)), label: arguments.month)
     }
 }
 
