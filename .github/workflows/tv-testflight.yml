@@ -28,11 +28,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Use the newest Xcode or later
+      - name: Use the newest released Xcode and SDK
         run: |
-          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
+          # Newest non-beta Xcode on the runner, so every build uses the latest released Apple SDKs
+          XCODE=$(ls -d /Applications/Xcode_[0-9]*.app 2>/dev/null | grep -viE 'beta|_rc|release_candidate' | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then echo "::error::No released Xcode on this runner"; ls /Applications | grep Xcode; exit 1; fi
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
+          xcodebuild -showsdks | grep -E "iphoneos|appletvos" || true
 
       - name: Generate the Xcode project
         run: |

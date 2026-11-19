@@ -36,12 +36,14 @@ jobs:
           [ -z "${{ secrets.ASC_KEY_P8 }}" ] && missing="$missing ASC_KEY_P8"
           if [ -n "$missing" ]; then echo "::error::Missing repository secrets:$missing"; exit 1; fi
 
-      - name: Use the newest Xcode or later
+      - name: Use the newest released Xcode and SDK
         run: |
-          XCODE=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
-          if [ -z "$XCODE" ]; then echo "::error::No Xcode 26+ on this runner"; ls /Applications | grep Xcode; exit 1; fi
+          # Newest non-beta Xcode on the runner, so every build uses the latest released Apple SDKs
+          XCODE=$(ls -d /Applications/Xcode_[0-9]*.app 2>/dev/null | grep -viE 'beta|_rc|release_candidate' | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then echo "::error::No released Xcode on this runner"; ls /Applications | grep Xcode; exit 1; fi
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
+          xcodebuild -showsdks | grep -E "iphoneos|appletvos" || true
 
       - name: Write the App Store Connect key
         run: |
