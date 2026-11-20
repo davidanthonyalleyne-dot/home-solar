@@ -535,10 +535,9 @@ def read_solaredge(prev):
     # GitHub can take a little while to hand a just-updated secret to the next run, so the
     # newest token is also kept (encrypted) in the Actions cache and tried first. The workflow
     # restores the newest cached copy before the build and saves this run's copy after it, so
-    # the token never needs a commit. The copy in the repository is the older home for it, read
-    # only when the cache comes back empty.
-    saved = [(read_private(p) or {}).get("refresh_token") for p in (TOKEN_CACHE, "data/solaredge_token.json")] if _passphrase() else []
-    tries = [t for t in dict.fromkeys([*saved, refresh]) if t]
+    # the token never needs a commit. If the cache ever comes back empty, the secret is used.
+    saved = (read_private(TOKEN_CACHE) or {}).get("refresh_token") if _passphrase() else None
+    tries = [t for t in dict.fromkeys([saved, refresh]) if t]
     tok, err = None, None
     for i, candidate in enumerate(tries):
         try:
