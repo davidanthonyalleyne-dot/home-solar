@@ -54,7 +54,7 @@ enum GitHub {
     }
 
     /// GitHub often skips its scheduled runs. When the numbers are over 25 minutes old in the
-    /// daytime, ask for a fresh build by touching data/ping.txt, at most every 15 minutes.
+    /// daytime, ask for a fresh build (requestBuild below), at most every 15 minutes.
     static func nudgeIfLate(updated: Date?, token: String?) async {
         guard let updated, let token, Date().timeIntervalSince(updated) > 25 * 60 else { return }
         var cal = Calendar(identifier: .gregorian); cal.timeZone = SolarConfig.tz
@@ -65,6 +65,14 @@ enum GitHub {
         let last = UserDefaults.standard.double(forKey: "nudgeAt")
         guard Date().timeIntervalSince1970 - last > 15 * 60 else { return }
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "nudgeAt")
+        await requestBuild(token: token)
+    }
+
+    /// Starts the build directly, with no commit. Needs Actions read and write on the upload token;
+    /// if GitHub refuses, falls back to the older way, a commit to data/ping.txt (any push rebuilds).
+    static func requestBuild(token: String) async {
+        do { _ = try await call("actions/workflows/deploy.yml/dispatches", "POST", ["ref": "main"], token: token); return }
+        catch {}
         try? await commit(path: "data/ping.txt", text: ISO8601DateFormatter().string(from: Date()) + "\n", message: "Ask for fresh numbers (the hourly run is late)", token: token)
     }
 }

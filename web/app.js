@@ -1162,8 +1162,21 @@
       catch (err) { if (attempt >= 5) throw err; }  // someone else pushed in between: try on top of theirs
     }
   }
+  // Starts the build directly (no commit). Needs Actions read and write on the upload token; a token
+  // without it is refused, and then the older way, a commit to data/ping.txt (any push rebuilds), is used.
+  async function requestBuild() {
+    try {
+      const r = await fetch(`https://api.github.com/repos/${repo()}/actions/workflows/deploy.yml/dispatches`, {
+        method: "POST", cache: "no-store",
+        headers: { Authorization: `Bearer ${state.data.uploadToken}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" },
+        body: JSON.stringify({ ref: "main" }),
+      });
+      if (r.ok) return;
+    } catch (e) { logErr(e); }
+    await commitFile("data/ping.txt", new Date().toISOString() + "\n", "Ask for fresh numbers (the hourly run is late)");
+  }
   // GitHub often skips its scheduled runs for hours. When the numbers are over 25 minutes old, the app
-  // asks for a fresh build itself by touching data/ping.txt (any push rebuilds). At most every 15 minutes per device.
+  // asks for a fresh build itself (requestBuild above). At most every 15 minutes per device.
   let nudging = false;
   async function maybeNudge() {
     const s = state.data && state.data.solar, tok = state.data && state.data.uploadToken;
@@ -1174,7 +1187,7 @@
     if (hr < 6 || hr >= 22 || Date.now() - Date.parse(s.updated) < 25 * 60000) return;
     if (Date.now() - (lsGet("nudgeAt") || 0) < 15 * 60000) return;
     nudging = true; lsSet("nudgeAt", Date.now());
-    try { await commitFile("data/ping.txt", new Date().toISOString() + "\n", "Ask for fresh numbers (the hourly run is late)"); } catch (e) { logErr(e); }
+    try { await requestBuild(); } catch (e) { logErr(e); }
     nudging = false;
   }
   const b64OfText = (t) => { const bytes = new TextEncoder().encode(t); let b = ""; for (let i = 0; i < bytes.length; i += 0x8000) b += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(b); };

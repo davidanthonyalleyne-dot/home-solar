@@ -214,6 +214,11 @@ def token_request(data):
     raise err
 
 
+# Where the newest SolarEdge refresh token is kept between runs (encrypted, as .token-cache/solaredge_token.enc).
+# The folder isn't committed: deploy.yml carries it from run to run in the Actions cache.
+TOKEN_CACHE = ".token-cache/solaredge_token.json"
+
+
 def save_refresh_token(token):
     """Store the new refresh token as a repository secret. It must happen right
     away: the old one stopped working the moment it was used."""
@@ -528,9 +533,12 @@ def read_solaredge(prev):
         return prev, False
 
     # GitHub can take a little while to hand a just-updated secret to the next run, so the
-    # newest token is also kept (encrypted) in the repository and tried first.
-    saved = (read_private("data/solaredge_token.json") or {}).get("refresh_token") if _passphrase() else None
-    tries = [t for t in dict.fromkeys([saved, refresh]) if t]
+    # newest token is also kept (encrypted) in the Actions cache and tried first. The workflow
+    # restores the newest cached copy before the build and saves this run's copy after it, so
+    # the token never needs a commit. The copy in the repository is the older home for it, read
+    # only when the cache comes back empty.
+    saved = [(read_private(p) or {}).get("refresh_token") for p in (TOKEN_CACHE, "data/solaredge_token.json")] if _passphrase() else []
+    tries = [t for t in dict.fromkeys([*saved, refresh]) if t]
     tok, err = None, None
     for i, candidate in enumerate(tries):
         try:
@@ -556,7 +564,8 @@ def read_solaredge(prev):
     if tok.get("refresh_token"):
         try:
             if _passphrase():
-                write_private("data/solaredge_token.json", {"refresh_token": tok["refresh_token"], "at": now.isoformat(timespec="seconds")})
+                (ROOT / TOKEN_CACHE).parent.mkdir(exist_ok=True)
+                write_private(TOKEN_CACHE, {"refresh_token": tok["refresh_token"], "at": now.isoformat(timespec="seconds")})
             save_refresh_token(tok["refresh_token"])
         except Exception as e:
             log(f"::error::Couldn't save the new SolarEdge refresh token: {e}. Run Connect SolarEdge again.")

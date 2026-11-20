@@ -17,6 +17,7 @@ permissions:
   pages: write
   id-token: write
   issues: write
+  actions: write  # to clear out older copies of the cached SolarEdge token
 
 # never cancel a run part way: it may have just rotated the SolarEdge token
 concurrency:
@@ -42,6 +43,15 @@ jobs:
       # bills wait in the inbox until a later run has it.
       - run: timeout 240 sh -c 'sudo apt-get install -y -q -o Acquire::Retries=1 -o Acquire::http::Timeout=20 poppler-utils || (sudo apt-get update -q && sudo apt-get install -y -q poppler-utils)' || echo "::warning::poppler-utils didn't install; bill PDFs will wait"
       - run: pip install openpyxl cryptography pywebpush "httpx[http2]" pyjwt
+      # The newest SolarEdge refresh token (encrypted) is carried from run to run in the Actions
+      # cache rather than committed. Runs never overlap (see concurrency above), so the newest
+      # cache entry is always the one the previous run saved.
+      - name: Restore the SolarEdge token
+        uses: actions/cache/restore@v4
+        with:
+          path: .token-cache
+          key: solaredge-token-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: solaredge-token-
       - id: build
         run: python scripts/build.py
         env:
@@ -59,6 +69,21 @@ jobs:
           VAPID_PRIVATE: ${{ secrets.VAPID_PRIVATE }}
           APNS_KEY_P8: ${{ secrets.APNS_KEY_P8 }}
           APNS_KEY_ID: ${{ secrets.APNS_KEY_ID }}
+      # Saved even when a later part of the build failed, since the token may already have rotated.
+      - name: Save the SolarEdge token
+        if: always() && hashFiles('.token-cache/*') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .token-cache
+          key: solaredge-token-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Clear out older token copies
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh cache list --repo "$GITHUB_REPOSITORY" --key solaredge-token- --sort created_at --order desc --limit 100 --json id -q '.[5:][].id' |
+            xargs -r -n1 gh cache delete --repo "$GITHUB_REPOSITORY"
       - name: Save files added from the app
         if: steps.build.outcome == 'success'
         run: |
