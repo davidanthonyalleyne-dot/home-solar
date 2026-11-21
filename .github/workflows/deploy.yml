@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment2.outputs.page_url || steps.deployment3.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -109,7 +109,21 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
+      # GitHub sometimes can't see the just-uploaded site for a few seconds ("Fetching artifact
+      # metadata failed"), which failed about one run in ten. Wait and try again before giving up.
       - id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+      - if: steps.deployment.outcome == 'failure'
+        run: sleep 45
+      - id: deployment2
+        if: steps.deployment.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+      - if: steps.deployment2.outcome == 'failure'
+        run: sleep 90
+      - id: deployment3
+        if: steps.deployment2.outcome == 'failure'
         uses: actions/deploy-pages@v4
       - if: steps.build.outputs.token_lost == 'true'
         run: |
