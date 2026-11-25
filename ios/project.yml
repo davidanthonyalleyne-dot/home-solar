@@ -39,7 +39,6 @@ targets:
         INAlternativeAppNames:
           - INAlternativeAppName: Home Solar
           - INAlternativeAppName: my solar
-          - INAlternativeAppName: the solar app
           - INAlternativeAppName: my panels
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
     settings:
