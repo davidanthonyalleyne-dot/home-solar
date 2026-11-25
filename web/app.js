@@ -1665,7 +1665,7 @@
 \`\`\`chart
 {"type":"bars","unit":"kWh","series":["Grid","Solar"],"rows":[["Sep",1150,540],["Oct",1420,410]]}
 \`\`\`
-Types: "bars" compares two to eight things (months, years, bills), stacked when there are two series; "columns" shows a run of days, hours or months in order (up to 31); "line" shows a trend over time (up to 31 points); "split" shows how one total divides up, with one row per part (for example where the power came from). Give "unit" as "kWh", "$", "°C", "h" or "%". Use one or two series with plain names (Solar, Grid, Heating, Backup heat, Cooling, Outdoor, Indoor, Cost, Saved), short row labels like "Oct", "Mon", "12th" or "2025", and numbers rounded sensibly. Only chart figures that are in the data. Skip the chart for yes or no answers that have no figures. End with a final line that begins "From " and names the data used, like "From your October bill and meter data".`;
+Types: "bars" compares two to eight things (months, years, bills), stacked when there are two series; "columns" shows a run of days, hours or months in order (up to 31); "line" shows a trend over time (up to 31 points); "area" shows how a run of days or months rose and fell, with an optional second series drawn dashed for comparison, such as Solar against Used (up to 31 points; prefer it over "columns" when the shape of the run matters more than single values); "split" shows how one total divides up, with one row per part (for example where the power came from). Give "unit" as "kWh", "$", "°C", "h" or "%". Use one or two series with plain names (Solar, Grid, Heating, Backup heat, Cooling, Outdoor, Indoor, Cost, Saved), short row labels like "Oct", "Mon", "12th" or "2025", and numbers rounded sensibly. Only chart figures that are in the data. Skip the chart for yes or no answers that have no figures. End with a final line that begins "From " and names the data used, like "From your October bill and meter data".`;
 
   // Sunny's little charts: bars, columns, a line or a split, drawn in the app's own colours
   function seriesClass(name, i) {
@@ -1680,7 +1680,7 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
     return i ? "c-sun" : "c-grid";
   }
   function askChart(c) {
-    const type = ["bars", "columns", "line", "split"].includes(c.type) ? c.type : "bars";
+    const type = ["bars", "columns", "line", "split", "area"].includes(c.type) ? c.type : "bars";
     const ser = (c.series || []).slice(0, 2).map(String), cls = ser.map(seriesClass);
     if (cls.length > 1 && cls[0] === cls[1]) cls[1] = cls[0] === "c-sun" ? "c-grid" : "c-sun";
     const unit = String(c.unit || "").slice(0, 4);
@@ -1700,6 +1700,29 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
       return `<div class="askchart" role="img" aria-label="${label}">${rows.map((r) => {
         const a = Math.max(0, r[1] || 0), b = stacked ? Math.max(0, r[2] || 0) : 0;
         return `<div class="r"><span class="l">${esc(r[0])}</span><span class="bars"><span class="${cls[0]}" style="flex:${a} 1 0"></span>${stacked ? `<span class="${cls[1]}" style="flex:${b} 1 0"></span>` : ""}<span style="flex:${max - a - b} 1 0"></span></span><span class="v num">${fmtV(stacked ? a + b : a)}</span></div>`; }).join("")}${key}</div>`;
+    }
+    // area: a run of days or months as a soft filled curve, drawn in on arrival; drag across it to read each point
+    if (type === "area") {
+      rows = rows.slice(0, 31);
+      const W = Math.min(contentWidth(), 520) - 28, H = 150, top = 30, bot = 22, n = rows.length;
+      const a = rows.map((r) => isNaN(r[1]) ? 0 : r[1]), two = ser.length > 1, b = two ? rows.map((r) => r[2]) : [];
+      const all = [...a, ...b.filter((v) => v != null && !isNaN(v))];
+      const hi = Math.ceil(Math.max(...all) / 5) * 5 || 1, lo = Math.max(0, Math.floor(Math.min(...all) * .6 / 5) * 5);
+      const X = (i) => n > 1 ? 4 + (W - 8) * i / (n - 1) : W / 2, Y = (v) => top + (H - top - bot) * (1 - (v - lo) / (hi - lo || 1));
+      const curve = (vs) => { const p = vs.map((v, i) => [X(i), Y(v)]); let d = `M${p[0][0].toFixed(1)},${p[0][1].toFixed(1)}`; for (let i = 1; i < p.length; i++) { const [x0, y0] = p[i - 1], [x1, y1] = p[i], m = (x1 - x0) / 2; d += `C${(x0 + m).toFixed(1)},${y0.toFixed(1)} ${(x1 - m).toFixed(1)},${y1.toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`; } return d; };
+      const gid = "ag" + Math.random().toString(36).slice(2, 8), c0 = cls[0] === "c-sun" ? "var(--sun)" : "var(--grid)";
+      let g = `<defs><linearGradient id="${gid}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${c0}" stop-opacity=".38"/><stop offset="1" stop-color="${c0}" stop-opacity="0"/></linearGradient></defs>`;
+      g += `<line x1="0" x2="${W}" y1="${Y(hi).toFixed(1)}" y2="${Y(hi).toFixed(1)}" class="axis" stroke-dasharray="2 4"/>` + svgText(0, Y(hi) - 5, fmtV(hi), "", "start");
+      g += `<line x1="0" x2="${W}" y1="${Y(lo).toFixed(1)}" y2="${Y(lo).toFixed(1)}" class="axis"/>`;
+      g += `<path d="${curve(a)}L${X(n - 1).toFixed(1)},${Y(lo).toFixed(1)}L${X(0).toFixed(1)},${Y(lo).toFixed(1)}Z" fill="url(#${gid})" class="aa-fill"/>`;
+      const bOk = two && b.every((v) => v != null && !isNaN(v));
+      if (bOk) g += `<path d="${curve(b)}" class="aa-ln2" style="stroke:${cls[1] === "c-sun" ? "var(--sun)" : "var(--grid)"}"/>`;
+      g += `<path d="${curve(a)}" class="aa-ln" pathLength="1" style="stroke:${c0}"/>`;
+      const step = Math.max(1, Math.ceil(n / 6));
+      rows.forEach((r, i) => { if ((i % step === 0 && n - 1 - i >= step / 2) || i === n - 1) g += svgText(X(i), H - 5, r[0], "", i === 0 ? "start" : i === n - 1 ? "end" : "middle"); });
+      g += `<g class="aa-hov"><line class="aa-x" y1="${top - 6}" y2="${Y(lo).toFixed(1)}"/><circle class="aa-d" r="5" style="fill:${c0}"/>${bOk ? `<circle class="aa-d2" r="4"/>` : ""}</g>`;
+      const pts = JSON.stringify({ x: rows.map((r, i) => +X(i).toFixed(1)), y: a.map((v) => +Y(v).toFixed(1)), y2: bOk ? b.map((v) => +Y(v).toFixed(1)) : [], l: rows.map((r) => r[0]), v: a.map(fmtV), v2: bOk ? b.map(fmtV) : [], s: ser.map(String) });
+      return `<div class="askchart svgc aa" data-aa="${esc(pts)}" role="img" aria-label="${label}"><div class="aa-pill" aria-hidden="true"></div><svg class="chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${g}</svg>${key}</div>`;
     }
     // columns and line: a small SVG
     rows = rows.slice(0, 31);
@@ -2316,6 +2339,34 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
   }
   checkVersion();
   document.addEventListener("visibilitychange", () => { if (!document.hidden) checkVersion(); });
+
+  // Sunny's area charts: press and drag across one to read each point
+  function aaShow(c, clientX) {
+    let d; try { d = JSON.parse(c.dataset.aa); } catch (_) { return; }
+    const svg = c.querySelector("svg"), r = svg.getBoundingClientRect(), vw = svg.viewBox.baseVal.width || r.width;
+    const px = (clientX - r.left) * vw / r.width; let i = 0;
+    d.x.forEach((x, k) => { if (Math.abs(x - px) < Math.abs(d.x[i] - px)) i = k; });
+    if (c._aaI === i) return; c._aaI = i; c.classList.add("on");
+    const h = c.querySelector(".aa-hov"), ln = h.querySelector(".aa-x"), dot = h.querySelector(".aa-d"), d2 = h.querySelector(".aa-d2");
+    ln.setAttribute("x1", d.x[i]); ln.setAttribute("x2", d.x[i]); dot.setAttribute("cx", d.x[i]); dot.setAttribute("cy", d.y[i]);
+    if (d2) { d2.setAttribute("cx", d.x[i]); d2.setAttribute("cy", d.y2[i]); }
+    const pill = c.querySelector(".aa-pill");
+    pill.innerHTML = `<span class="d">${esc(d.l[i])}</span> <b class="num">${esc(d.v[i])}</b>${d.v2.length ? ` <span class="u">· ${esc(d.s[1] || "")} ${esc(d.v2[i])}</span>` : ""}`;
+    const cx = d.x[i] * r.width / vw + (r.left - c.getBoundingClientRect().left);
+    pill.style.left = Math.max(8, Math.min(c.clientWidth - pill.offsetWidth - 8, cx - pill.offsetWidth / 2)) + "px";
+    if (navigator.vibrate && c._aaBuzz) try { navigator.vibrate(4); } catch (_) {}
+    c._aaBuzz = true;
+  }
+  function aaHide(c) { if (!c) return; c.classList.remove("on"); c._aaI = null; c._aaBuzz = false; }
+  let aaActive = null;
+  view.addEventListener("pointerdown", (e) => { const c = e.target.closest(".aa"); if (!c) return; aaActive = c; aaShow(c, e.clientX); });
+  view.addEventListener("pointermove", (e) => {
+    const c = e.target.closest(".aa");
+    if (e.pointerType === "mouse") { if (aaActive && aaActive !== c) aaHide(aaActive); aaActive = c; if (c) aaShow(c, e.clientX); return; }
+    if (aaActive) aaShow(aaActive, e.clientX);
+  });
+  ["pointerup", "pointercancel"].forEach((t) => view.addEventListener(t, (e) => { if (e.pointerType !== "mouse") { aaHide(aaActive); aaActive = null; } }));
+  view.addEventListener("pointerleave", () => { aaHide(aaActive); aaActive = null; });
 
   view.innerHTML = '<p class="loading">Loading…</p>';
   fetch(`data.json?t=${Date.now()}`, { cache: "no-store" })

@@ -265,7 +265,7 @@ struct AskChartView: View {
     }
 
     var body: some View {
-        let type = ["bars", "columns", "line", "split"].contains(c["type"] as? String ?? "") ? c["type"] as! String : "bars"
+        let type = ["bars", "columns", "line", "split", "area"].contains(c["type"] as? String ?? "") ? c["type"] as! String : "bars"
         let ser = ((c["series"] as? [Any]) ?? []).prefix(2).map { "\($0)" }
         var cols = ser.enumerated().map { AskChartView.color($1, $0) }
         if cols.count > 1 && cols[0] == cols[1] { cols[1] = cols[0] == SK.sunColor ? Palette.grid : SK.sunColor }
@@ -308,6 +308,9 @@ struct AskChartView: View {
                             Text(fmtV(stacked ? max(0, r.1) + max(0, r.2 ?? 0) : r.1)).font(.system(size: 13)).monospacedDigit().frame(width: 64, alignment: .trailing)
                         }
                     }
+                    if ser.count > 1 { FlowRow(items: ser.enumerated().map { (cols[min($0, cols.count - 1)], $1, "") }) }
+                } else if type == "area" {
+                    AreaPlot(rows: Array(rows.prefix(31)), two: ser.count > 1, names: ser, cols: cols, fmtV: fmtV).frame(height: 158)
                     if ser.count > 1 { FlowRow(items: ser.enumerated().map { (cols[min($0, cols.count - 1)], $1, "") }) }
                 } else {
                     SmallPlot(type: type, rows: Array(rows.prefix(31)), two: ser.count > 1, cols: cols, unit: unit, fmtV: fmtV).frame(height: 120)
@@ -385,5 +388,126 @@ struct SmallPlot: View {
                 ctx.draw(Text(fmtV(hi)).font(.system(size: 10)).foregroundStyle(.secondary), at: CGPoint(x: W, y: top - 6), anchor: .trailing)
             }
         }
+    }
+}
+
+
+/// Sunny's area chart: a soft filled curve that draws itself in, with an optional dashed
+/// second series. Drag across it to read each point; a light tick plays at each new point.
+struct AreaPlot: View {
+    let rows: [(String, Double, Double?)]
+    let two: Bool
+    let names: [String]
+    let cols: [Color]
+    let fmtV: (Double) -> String
+    @State private var drawn: CGFloat = 0
+    @State private var sel: Int?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let top: CGFloat = 30, bot: CGFloat = 22
+
+    var body: some View {
+        GeometryReader { g in
+            let W = g.size.width, H = g.size.height, n = rows.count
+            let a = rows.map { $0.1 }, b = two && rows.allSatisfy({ $0.2 != nil }) ? rows.map { $0.2! } : []
+            let all = a + b
+            let hi = max(5, ceil((all.max() ?? 1) / 5) * 5), lo = max(0, floor((all.min() ?? 0) * 0.6 / 5) * 5)
+            let X = { (i: Int) -> CGFloat in n > 1 ? 4 + (W - 8) * CGFloat(i) / CGFloat(n - 1) : W / 2 }
+            let Y = { (v: Double) -> CGFloat in top + (H - top - bot) * CGFloat(1 - (v - lo) / max(1e-9, hi - lo)) }
+            let curve = { (vs: [Double]) -> Path in
+                var p = Path()
+                for (i, v) in vs.enumerated() {
+                    let pt = CGPoint(x: X(i), y: Y(v))
+                    if i == 0 { p.move(to: pt) } else {
+                        let prev = CGPoint(x: X(i - 1), y: Y(vs[i - 1])), m = (pt.x - prev.x) / 2
+                        p.addCurve(to: pt, control1: CGPoint(x: prev.x + m, y: prev.y), control2: CGPoint(x: pt.x - m, y: pt.y))
+                    }
+                }
+                return p
+            }
+            let line = curve(a)
+            let fill: Path = {
+                var f = line
+                f.addLine(to: CGPoint(x: X(n - 1), y: Y(lo))); f.addLine(to: CGPoint(x: X(0), y: Y(lo))); f.closeSubpath()
+                return f
+            }()
+            ZStack(alignment: .topLeading) {
+                Path { p in p.move(to: CGPoint(x: 0, y: Y(hi))); p.addLine(to: CGPoint(x: W, y: Y(hi))) }
+                    .stroke(Palette.rule, style: StrokeStyle(lineWidth: 1, dash: [2, 4]))
+                Text(fmtV(hi)).font(.system(size: 10)).foregroundStyle(.secondary).position(x: 22, y: Y(hi) - 8)
+                Path { p in p.move(to: CGPoint(x: 0, y: Y(lo))); p.addLine(to: CGPoint(x: W, y: Y(lo))) }
+                    .stroke(Palette.rule, lineWidth: 1)
+                fill.fill(LinearGradient(colors: [cols[0].opacity(0.38), cols[0].opacity(0)], startPoint: .top, endPoint: .bottom))
+                    .opacity(drawn > 0.6 ? 1 : 0)
+                if !b.isEmpty {
+                    curve(b).stroke(cols[min(1, cols.count - 1)], style: StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
+                }
+                line.trim(from: 0, to: drawn).stroke(cols[0], style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                ForEach(labelIdx(n), id: \.self) { i in
+                    Text(rows[i].0).font(.system(size: 10)).foregroundStyle(.secondary)
+                        .fixedSize()
+                        .position(x: min(max(X(i), 14), W - 14), y: H - 6)
+                }
+                if let i = sel {
+                    Path { p in p.move(to: CGPoint(x: X(i), y: top - 6)); p.addLine(to: CGPoint(x: X(i), y: Y(lo))) }
+                        .stroke(.secondary, lineWidth: 1)
+                    if !b.isEmpty {
+                        Circle().fill(Palette.well).overlay(Circle().stroke(cols[min(1, cols.count - 1)], lineWidth: 2))
+                            .frame(width: 8, height: 8).position(x: X(i), y: Y(b[i]))
+                    }
+                    Circle().fill(cols[0]).overlay(Circle().stroke(Palette.well, lineWidth: 2.5))
+                        .frame(width: 11, height: 11).position(x: X(i), y: Y(a[i]))
+                    pill(i).fixedSize()
+                        .background(GeometryReader { pg in
+                            Color.clear.preference(key: PillW.self, value: pg.size.width)
+                        })
+                        .modifier(PillPlace(x: X(i), width: W))
+                }
+            }
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { v in
+                    guard n > 0 else { return }
+                    let i = (0..<n).min(by: { abs(X($0) - v.location.x) < abs(X($1) - v.location.x) }) ?? 0
+                    if i != sel { sel = i; UISelectionFeedbackGenerator().selectionChanged() }
+                }
+                .onEnded { _ in withAnimation(.easeOut(duration: 0.15)) { sel = nil } })
+            .animation(.easeOut(duration: 0.12), value: sel)
+        }
+        .onAppear {
+            if reduceMotion { drawn = 1 } else { withAnimation(.timingCurve(0.85, 0, 0.15, 1, duration: 1.1)) { drawn = 1 } }
+        }
+    }
+
+    private func labelIdx(_ n: Int) -> [Int] {
+        guard n > 0 else { return [] }
+        let step = max(1, Int(ceil(Double(n) / 6)))
+        return (0..<n).filter { ($0 % step == 0 && Double(n - 1 - $0) >= Double(step) / 2) || $0 == n - 1 }
+    }
+
+    private func pill(_ i: Int) -> some View {
+        HStack(spacing: 4) {
+            Text(rows[i].0).fontWeight(.semibold)
+            Text(fmtV(rows[i].1)).fontWeight(.semibold).foregroundStyle(cols[0]).monospacedDigit()
+            if two, let v = rows[i].2 { Text("· \(names.count > 1 ? names[1] : "") \(fmtV(v))").foregroundStyle(.secondary).monospacedDigit() }
+        }
+        .font(.system(size: 12))
+        .padding(.horizontal, 9).padding(.vertical, 3)
+        .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+private struct PillW: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+private struct PillPlace: ViewModifier {
+    let x: CGFloat, width: CGFloat
+    @State private var w: CGFloat = 0
+    func body(content: Content) -> some View {
+        content
+            .onPreferenceChange(PillW.self) { w = $0 }
+            .offset(x: min(max(0, x - w / 2), max(0, width - w)), y: 2)
     }
 }
