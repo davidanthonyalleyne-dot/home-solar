@@ -45,8 +45,8 @@ struct SidebarStatus: View {
                 HStack(spacing: 8) {
                     Circle().fill(Fmt.statusColor(d.status.level)).frame(width: 9, height: 9)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(d.status.label).font(.system(size: 13, weight: .medium))
-                        if let u = d.updated { Text("Updated \(Fmt.ago(u))").font(.system(size: 12)).foregroundStyle(.secondary) }
+                        Text(d.status.label).font(.system(.footnote, weight: .medium))
+                        if let u = d.updated { Text("Updated \(Fmt.ago(u))").font(.system(.caption)).foregroundStyle(.secondary) }
                     }
                     Spacer()
                 }

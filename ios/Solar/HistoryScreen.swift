@@ -16,8 +16,8 @@ struct HistoryScreen: View {
                     let v = (view == "climate" && !db.hasClimate) || (view == "energy" && db.daily.isEmpty) ? "cost" : view
                     VStack(alignment: .leading, spacing: 0) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(eyebrow(db, v)).font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
-                            Text("History").font(.system(size: 34, weight: .bold)).tracking(-0.5)
+                            Text(eyebrow(db, v)).font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary)
+                            Text("History").font(.system(.largeTitle, weight: .bold)).tracking(-0.5)
                         }
                         if !db.daily.isEmpty {
                             Picker("Show", selection: $view) {
@@ -74,7 +74,7 @@ struct CostView: View {
         let typ = offs.isEmpty ? nil : offs[iInt(Double(offs.count) * 0.75)]
         VStack(alignment: .leading, spacing: 0) {
             if ms.isEmpty {
-                Text("No cost history yet.").font(.system(size: 17))
+                Text("No cost history yet.").font(.system(.body))
             } else {
                 HStack(alignment: .top, spacing: 16) {
                     BigStat(label: "Paid to the grid", value: MonthMath.dollars(grid), size: long ? 36 : 44)
@@ -82,17 +82,17 @@ struct CostView: View {
                 }
                 SplitBar(a: grid, b: max(0, saved)).padding(.top, 18)
                 (Text("Solar has taken about ") + Text("\(MonthMath.pct(saved, grid + saved))%").fontWeight(.bold) + Text(" off what power would have cost."))
-                    .font(.system(size: 17)).padding(.top, 14)
+                    .font(.system(.body)).padding(.top, 14)
                 if missing > 0 {
                     Text("\(missing) month\(missing > 1 ? "s" : "") with no meter data or bill \(missing > 1 ? "aren't" : "isn't") counted.")
-                        .font(.system(size: 13)).foregroundStyle(.secondary).padding(.top, 6)
+                        .font(.system(.footnote)).foregroundStyle(.secondary).padding(.top, 6)
                 }
 
                 (Text("Cost each month, from the ") + Text("grid").fontWeight(.semibold).foregroundColor(.primary)
                  + Text(" and saved by ") + Text("solar").fontWeight(.semibold).foregroundColor(SK.sunColor) + Text(". Same scale every year."))
-                    .font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary).padding(.top, 28)
+                    .font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary).padding(.top, 28)
                 YearRows(db: db, kind: .cost, openMonth: openMonth).padding(.top, 10)
-                Text("Paler bars are estimates. Tap a month to open it.").font(.system(size: 13)).foregroundStyle(.secondary).padding(.top, 6)
+                Text("Paler bars are estimates. Tap a month to open it.").font(.system(.footnote)).foregroundStyle(.secondary).padding(.top, 6)
 
                 // the years
                 VStack(spacing: 0) {
@@ -102,7 +102,7 @@ struct CostView: View {
                         Text("Saved").frame(width: 64, alignment: .trailing)
                         Text("Generated, kWh").frame(width: 104, alignment: .trailing)
                     }
-                    .font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary).padding(.bottom, 8)
+                    .font(.system(.caption, weight: .medium)).foregroundStyle(.secondary).padding(.bottom, 8)
                     ForEach(Array(ys.keys.sorted().reversed()), id: \.self) { y in
                         let t = ys[y]!
                         let target = (y == thisYear || t.last == nil)
@@ -112,14 +112,14 @@ struct CostView: View {
                         Rectangle().fill(Palette.rule).frame(height: 1)
                         Button { openMonth(target) } label: {
                             HStack(spacing: 0) {
-                                Text(y).font(.system(size: 15))
-                                if !note.isEmpty { Text(" \(note)").font(.system(size: 13)).foregroundStyle(.secondary) }
+                                Text(y).font(.system(.subheadline))
+                                if !note.isEmpty { Text(" \(note)").font(.system(.footnote)).foregroundStyle(.secondary) }
                                 Spacer()
                                 Text(MonthMath.dollars(t.grid)).frame(width: 70, alignment: .trailing)
                                 Text(MonthMath.dollars(t.saved)).frame(width: 64, alignment: .trailing).foregroundStyle(SK.sunColor).fontWeight(.semibold)
                                 Text(t.prod.map { MonthMath.fmt($0) } ?? "–").frame(width: 104, alignment: .trailing)
                             }
-                            .font(.system(size: 15)).monospacedDigit().padding(.vertical, 10).contentShape(Rectangle())
+                            .font(.system(.subheadline)).monospacedDigit().padding(.vertical, 10).contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
@@ -130,9 +130,9 @@ struct CostView: View {
                         Text("Months with a bill use the bill. The rest are estimated\(typ.map { ", usually within \(MonthMath.fmt(max(1, ceil($0 * 100))))% of the real bill" } ?? "").")
                             .multilineTextAlignment(.leading)
                         Spacer(minLength: 8)
-                        Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint)
+                        Image(systemName: "chevron.right").font(.system(.footnote, weight: .semibold)).foregroundStyle(Palette.faint)
                     }
-                    .font(.system(size: 15)).foregroundStyle(.secondary).padding(.vertical, 12).contentShape(Rectangle())
+                    .font(.system(.subheadline)).foregroundStyle(.secondary).padding(.vertical, 12).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain).padding(.top, 8)
                 CO2Line(db: db).padding(.top, 18)
@@ -148,7 +148,7 @@ struct BigStat: View {
     var sun = false
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
+            Text(label).font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary)
             Text(value).font(.system(size: size, weight: .semibold)).tracking(-1.2).monospacedDigit()
                 .foregroundStyle(sun ? SK.sunColor : Color.primary).lineLimit(1).minimumScaleFactor(0.6)
         }
@@ -177,7 +177,7 @@ struct CO2Line: View {
                 Image(systemName: "leaf").foregroundStyle(.secondary)
                 Text("Avoided about \(MonthMath.fmt((db.lifetime * 0.03 / 10).rounded() * 10)) kg of CO₂ since \(String((db.installed ?? "install").prefix(4)))")
             }
-            .font(.system(size: 15)).foregroundStyle(.secondary)
+            .font(.system(.subheadline)).foregroundStyle(.secondary)
         }
     }
 }
@@ -223,10 +223,10 @@ struct YearRows: View {
                             }
                         }
                         VStack(alignment: .leading, spacing: 0) {
-                            Text(y).font(.system(size: 13, weight: .semibold))
+                            Text(y).font(.system(.footnote, weight: .semibold))
                             Text(kind == .cost ? MonthMath.dollars(ytot[y]?.grid ?? 0)
                                  : MonthMath.fmt(pm.filter { $0.key.hasPrefix(y) }.values.reduce(0, +)))
-                                .font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
+                                .font(.system(.caption2)).foregroundStyle(.secondary).monospacedDigit()
                         }
                         .offset(y: base - 32)
                     }
@@ -242,7 +242,7 @@ struct YearRows: View {
             GeometryReader { geo in
                 let bw = (geo.size.width - lab) / 12
                 ForEach(0..<12, id: \.self) { i in
-                    Text(MonthMath.date(String(format: "2001-%02d-01", i + 1), "MMMMM")).font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(MonthMath.date(String(format: "2001-%02d-01", i + 1), "MMMMM")).font(.system(.caption2)).foregroundStyle(.secondary)
                         .position(x: lab + CGFloat(i) * bw + bw / 2, y: 8)
                 }
             }
@@ -272,7 +272,7 @@ struct MethodSheet: View {
                     Text("If credits ever came to more than a month's electricity charges, the extra would carry forward and be written off after 12 months. \(carried ? "That has happened in some months, and the app carries it." : "That hasn't happened yet. Even your sunniest month still bought more than it sent back, so every credit has been used on the bill it was earned on.")")
                     Text("Solar's saving is what the month would have cost with no panels, minus what it did cost. Power the house used straight from the panels is priced at the hours the sun was out, when time-of-use rates are higher.")
                     if !bt.isEmpty {
-                        Text("Estimates checked against your bills").font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary).padding(.top, 8)
+                        Text("Estimates checked against your bills").font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary).padding(.top, 8)
                         InfoRows(rows: bt.map { b -> (String, String, Color?) in
                             let off = n(b["off"])
                             return (MonthMath.date((b["month"] as? String ?? "") + "-01", "MMM yyyy"),
@@ -280,7 +280,7 @@ struct MethodSheet: View {
                         })
                     }
                 }
-                .font(.system(size: 15)).padding(20)
+                .font(.system(.subheadline)).padding(20)
             }
             .navigationTitle("How costs are worked out").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
@@ -304,10 +304,10 @@ struct EnergyView: View {
         let houseMonths = perMonth > 0 ? iInt((total / perMonth).rounded()) : nil
         let noteText = "At about 25 kWh per 100 km, what a Taycan uses in mixed driving.\(houseMonths.map { " It's also about \($0) months of what your house uses." } ?? "")"
         VStack(alignment: .leading, spacing: 0) {
-            Text("Generated by solar since \(since)").font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
+            Text("Generated by solar since \(since)").font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(MonthMath.fmt(total)).font(.system(size: 44, weight: .semibold)).tracking(-1.2).monospacedDigit().foregroundStyle(SK.sunColor)
-                Text("kWh").font(.system(size: 20, weight: .medium)).foregroundStyle(.secondary)
+                Text("kWh").font(.system(.title3, weight: .medium)).foregroundStyle(.secondary)
             }
             if total > 0 {
                 Button { note = true } label: {
@@ -316,18 +316,18 @@ struct EnergyView: View {
                         Text("Enough to drive an EV about \(MonthMath.fmt(km)) km")
                         Text("*").foregroundStyle(SK.sunColor).fontWeight(.semibold)
                     }
-                    .font(.system(size: 15)).padding(.vertical, 8).contentShape(Rectangle())
+                    .font(.system(.subheadline)).padding(.vertical, 8).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain).padding(.top, 6)
                 .popover(isPresented: $note) {
-                    Text(noteText).font(.system(size: 13)).foregroundStyle(.secondary).padding(16).frame(width: 260)
+                    Text(noteText).font(.system(.footnote)).foregroundStyle(.secondary).padding(16).frame(width: 260)
                         .presentationCompactAdaptation(.popover)
                 }
             }
             Text("kWh generated each month, with the year's total. Same scale every year.")
-                .font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary).padding(.top, 24)
+                .font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary).padding(.top, 24)
             YearRows(db: db, kind: .energy, openMonth: openMonth).padding(.top, 10)
-            Text("Tap a month to open it.").font(.system(size: 13)).foregroundStyle(.secondary).padding(.top, 6)
+            Text("Tap a month to open it.").font(.system(.footnote)).foregroundStyle(.secondary).padding(.top, 6)
             CO2Line(db: db).padding(.top, 18)
         }
     }
@@ -372,7 +372,7 @@ struct ClimateView: View {
 
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Heating and cooling, \(yr)\(sofar ? " so far" : "")").font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
+                Text("Heating and cooling, \(yr)\(sofar ? " so far" : "")").font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary)
                 Spacer()
                 StepButton(symbol: "chevron.left", label: "Previous year", target: i > 0 ? ys[i - 1] : nil) { year = $0 }
                 StepButton(symbol: "chevron.right", label: "Next year", target: i < ys.count - 1 ? ys[i + 1] : nil) { year = $0 }
@@ -393,14 +393,14 @@ struct ClimateView: View {
                     Text("The heat pump did all the heating; backup heat didn't run.")
                 }
             }
-            .font(.system(size: 17)).padding(.top, 14)
+            .font(.system(.body)).padding(.top, 14)
 
             HStack(spacing: 14) {
                 LegendDot(color: Palette.heat, text: "Heating")
                 LegendDot(color: Palette.aux, text: "Backup")
                 LegendDot(color: Palette.cool, text: "Cooling")
                 Spacer()
-                Text("hours a month").font(.system(size: 13)).foregroundStyle(.secondary)
+                Text("hours a month").font(.system(.footnote)).foregroundStyle(.secondary)
             }
             .padding(.top, 26)
             GeometryReader { geo in
@@ -443,17 +443,17 @@ struct ClimateView: View {
             }
             .frame(height: 210).padding(.top, 10)
             Text("Monthly average outdoor temperatures. Tap a month to open it.\(anyGhost ? " Faded bars are the same months in \((Int(yr) ?? 1) - 1), until this year's readings come in." : "")")
-                .font(.system(size: 13)).foregroundStyle(.secondary).padding(.top, 6)
+                .font(.system(.footnote)).foregroundStyle(.secondary).padding(.top, 6)
 
             Callout(days: days).padding(.top, 22)
             PerDegree(db: db).padding(.top, 22)
 
             NavigationLink { ColdView(db: db) } label: {
-                HStack { Text("How the house handles cold").font(.system(size: 17)); Spacer(); Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint) }
+                HStack { Text("How the house handles cold").font(.system(.body)); Spacer(); Image(systemName: "chevron.right").font(.system(.footnote, weight: .semibold)).foregroundStyle(Palette.faint) }
                     .padding(.vertical, 12).contentShape(Rectangle())
             }
             .buttonStyle(.plain).padding(.top, 18)
-            Text("From your ecobee thermostat's history and your meter readings. Costs are estimates.").font(.system(size: 13)).foregroundStyle(.secondary)
+            Text("From your ecobee thermostat's history and your meter readings. Costs are estimates.").font(.system(.footnote)).foregroundStyle(.secondary)
         }
     }
 }
@@ -474,9 +474,9 @@ struct Callout: View {
                 let kwh: Double? = w.allSatisfy { $0.grid != nil } ? w.reduce(0) { $0 + ($1.grid ?? 0) } : nil
                 let span = "\(MonthMath.shortDay(f.d)) to \(f.d.prefix(7) == l.d.prefix(7) ? String(Int(l.d.suffix(2)) ?? 0) : MonthMath.shortDay(l.d))"
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("\(span): the house couldn't keep up").font(.system(size: 17, weight: .semibold)).foregroundStyle(Palette.bad)
+                    Text("\(span): the house couldn't keep up").font(.system(.body, weight: .semibold)).foregroundStyle(Palette.bad)
                     Text("The heat ran all day\(w.allSatisfy { $0.aux > 12 } ? ", backup heat too," : "") and the house still sat at \(MonthMath.fmt(lo)) to \(MonthMath.fmt(hi))°C against a \(MonthMath.fmt(setv))°C setting.\(kwh.map { " Those \(w.count) days drew about \(MonthMath.fmt(($0 / 100).rounded() * 100)) kWh from the grid." } ?? "") Worth a service call before the next cold snap.")
-                        .font(.system(size: 13)).foregroundStyle(.secondary)
+                        .font(.system(.footnote)).foregroundStyle(.secondary)
                 }
                 .padding(14).frame(maxWidth: .infinity, alignment: .leading)
                 .background(Palette.well, in: RoundedRectangle(cornerRadius: 12))
@@ -510,13 +510,13 @@ struct PerDegree: View {
                 let sd = (a.set != nil && b.set != nil) ? a.set! - b.set! : 0
                 let why = abs(sd) >= 1 ? (sd > 0 && ch > 0 ? ", much of it from the warmer setting" : sd < 0 && ch < 0 ? ", much of it from the cooler setting" : "") : ""
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Heating per degree of cold").font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
+                    Text("Heating per degree of cold").font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary)
                     InfoRows(rows: [
                         (MonthMath.monthYear(pym), "\(MonthMath.fmt(b.per, 2)) h\(b.set.map { "  set to ⌀ \(MonthMath.fmt($0))°" } ?? "")", nil),
                         (MonthMath.monthYear(ym), "\(MonthMath.fmt(a.per, 2)) h\(a.set.map { "  set to ⌀ \(MonthMath.fmt($0))°" } ?? "")", nil),
                     ])
                     Text("Hours of heating for each degree a day averaged below 18°C. \(abs(ch) < 5 ? "About the same as a year before." : "About \(abs(ch))% \(ch > 0 ? "more" : "less") heating for the same cold\(why).")")
-                        .font(.system(size: 13)).foregroundStyle(.secondary)
+                        .font(.system(.footnote)).foregroundStyle(.secondary)
                 }
             }
         }
@@ -562,14 +562,14 @@ struct ColdView: View {
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if bk.isEmpty {
-                    Text("Not enough days with both thermostat and meter data yet.").font(.system(size: 15)).foregroundStyle(.secondary)
+                    Text("Not enough days with both thermostat and meter data yet.").font(.system(.subheadline)).foregroundStyle(.secondary)
                 } else {
                     richText(lead, size: 17)
                     HStack(spacing: 14) {
                         LegendDot(color: Palette.grid, text: "Grid")
                         LegendDot(color: Palette.aux, text: "Of that, backup heat")
                         Spacer()
-                        Text("⌀ kWh a day").font(.system(size: 13)).foregroundStyle(.secondary)
+                        Text("⌀ kWh a day").font(.system(.footnote)).foregroundStyle(.secondary)
                     }
                     .padding(.top, 18)
                     Canvas { ctx, size in
@@ -595,7 +595,7 @@ struct ColdView: View {
                     }
                     .frame(height: 230).padding(.top, 10)
                     Text("An average day at each outdoor temperature over the last year. Backup heat's share is estimated at \(MonthMath.fmt(auxKw, 1)) kW.")
-                        .font(.system(size: 13)).foregroundStyle(.secondary).padding(.top, 6)
+                        .font(.system(.footnote)).foregroundStyle(.secondary).padding(.top, 6)
                     InfoRows(rows: rows).padding(.top, 22)
                 }
             }
