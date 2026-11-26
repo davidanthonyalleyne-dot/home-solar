@@ -167,3 +167,20 @@ jobs:
             -authenticationKeyPath "$KEY_PATH" \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+  # Testers see these in TestFlight under "What to Test". Edit ios/WHATSNEW.txt with every update.
+  notes:
+    needs: testflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set "What to Test" from ios/WHATSNEW.txt
+        run: |
+          pip install -q pyjwt cryptography
+          mkdir -p "$RUNNER_TEMP/k"; echo "${{ secrets.ASC_KEY_P8 }}" > "$RUNNER_TEMP/k/key.p8"
+          export ASC_KEY_PATH="$RUNNER_TEMP/k/key.p8"
+          python3 scripts/asc_notes.py ca.davidalleyne.solar "${{ github.run_number }}" ios/WHATSNEW.txt

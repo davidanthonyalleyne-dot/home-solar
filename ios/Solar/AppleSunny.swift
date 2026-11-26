@@ -47,6 +47,7 @@ enum AppleSunny {
     Lead with the answer, with the key figure in bold using **double asterisks**. Write two or three short, plain sentences.
     No headings, no lists, no em dashes. Energy in kWh, money in dollars, temperatures in °C.
     If you use the forecast, say it's a forecast. If the facts and tools can't answer, say what's missing.
+    If the panels are making little or nothing and the facts say it is before sunrise or after sunset, say it is dark so zero is normal, and give the next sunrise time. Never call that a problem.
     Never write your own name or sign the answer.
     End with a final line, on its own, that begins "From " and names the data used, like "From your October bill".
     """
@@ -81,7 +82,7 @@ enum AppleSunny {
         let s = json["solar"] as? [String: Any] ?? [:]
         let n = { (x: Any?) in (x as? NSNumber)?.doubleValue }
         let today = SK.day(Date()), ym = String(today.prefix(7))
-        var lines = ["Today is \(MonthMath.date(today, "EEEE, MMMM d, yyyy")).",
+        var lines = ["Today is \(MonthMath.date(today, "EEEE, MMMM d, yyyy")).", "Sun right now: " + AskData.sunNote(),
                      "Months with data run from \(db.months.first ?? "?") to \(db.months.last ?? "?") (YYYY-MM)."]
         if let kw = n(s["nowKw"]) { lines.append("Panels right now: \(String(format: "%.2f", kw)) kW.") }
         if let t = n(s["today"]) { lines.append("Made so far today: \(String(format: "%.1f", t)) kWh.") }
