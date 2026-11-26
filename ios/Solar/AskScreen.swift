@@ -25,19 +25,19 @@ struct AskScreen: View {
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(alignment: .bottom) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("About your home's energy").font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
-                                Text("Ask Sunny").font(.system(size: 34, weight: .bold)).tracking(-0.5)
+                                Text("About your home's energy").font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary)
+                                Text("Ask Sunny").font(.system(.largeTitle, weight: .bold)).tracking(-0.5)
                             }
                             Spacer()
-                            if !ask.chats.isEmpty { Button("Past") { showPast = true }.font(.system(size: 17)) }
-                            if !ask.msgs.isEmpty { Button("New") { ask.newChat() }.font(.system(size: 17)).padding(.leading, 12) }
+                            if !ask.chats.isEmpty { Button("Past") { showPast = true }.font(.system(.body)) }
+                            if !ask.msgs.isEmpty { Button("New") { ask.newChat() }.font(.system(.body)).padding(.leading, 12) }
                         }
                         .tint(SK.sunColor)
                         if json == nil {
                             ProgressView().frame(maxWidth: .infinity).padding(.top, 120)
                         } else if !hasKey {
                             Text("Sunny answers with Apple Intelligence on iPhones that have it. \(AskModel.appleNote) Otherwise it needs a Claude API key: create one in the Anthropic Console and add it to the repository as a GitHub secret named ANTHROPIC_API_KEY. It's kept inside the encrypted data, so only your unlocked app can use it.")
-                                .font(.system(size: 17)).padding(.top, 20)
+                                .font(.system(.body)).padding(.top, 20)
                         } else if ask.msgs.isEmpty && !ask.listening {
                             Start(ask: ask, db: model.db ?? SolarDB(json!)) { q in Task { await ask.send(q, json: json) } }
                         } else {
@@ -67,18 +67,18 @@ struct Start: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Sunny is Solar's assistant. Ask about what the panels make, what you pay, and why. Sunny answers from the app's own data: every day of production, your meter readings and your bills.")
-                .font(.system(size: 17)).padding(.top, 18)
-            Text("Try asking").font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary).padding(.top, 24)
+                .font(.system(.body)).padding(.top, 18)
+            Text("Try asking").font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary).padding(.top, 24)
             ForEach(AskData.suggestions(db), id: \.self) { q in
                 Button { send(q) } label: {
-                    HStack { Text(q).multilineTextAlignment(.leading); Spacer(); Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint) }
-                        .font(.system(size: 17)).padding(.vertical, 13).contentShape(Rectangle())
+                    HStack { Text(q).multilineTextAlignment(.leading); Spacer(); Image(systemName: "chevron.right").font(.system(.footnote, weight: .semibold)).foregroundStyle(Palette.faint) }
+                        .font(.system(.body)).padding(.vertical, 13).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 Rectangle().fill(Palette.rule).frame(height: 1)
             }
             if !ask.chats.isEmpty {
-                Text("Recent").font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary).padding(.top, 24)
+                Text("Recent").font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary).padding(.top, 24)
                 ForEach(ask.chats.prefix(3)) { c in ChatRow(ask: ask, chat: c) }
             }
         }
@@ -92,18 +92,18 @@ struct Conversation: View {
         VStack(alignment: .leading, spacing: 16) {
             ForEach(Array(ask.msgs.enumerated()), id: \.offset) { i, m in
                 if m.role == "user" {
-                    Text(m.text).font(.system(size: 16)).padding(.horizontal, 14).padding(.vertical, 10)
+                    Text(m.text).font(.system(.callout)).padding(.horizontal, 14).padding(.vertical, 10)
                         .background(Palette.well, in: UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 18, bottomTrailingRadius: 4, topTrailingRadius: 18))
                         .frame(maxWidth: .infinity, alignment: .trailing).padding(.leading, 50)
                 } else if m.error == true {
-                    Text(m.text).font(.system(size: 15)).foregroundStyle(Palette.bad)
+                    Text(m.text).font(.system(.subheadline)).foregroundStyle(Palette.bad)
                 } else {
                     VStack(alignment: .leading, spacing: 10) {
                         AnswerView(text: m.text)
                         if m.spoken == true && i == ask.msgs.count - 1 {
                             Button { ask.speaking ? ask.voice.stopSpeaking() : ask.voice.speak(m.text) } label: {
                                 Label(ask.speaking ? "Reading aloud" : "Read again", systemImage: ask.speaking ? "speaker.wave.2.fill" : "speaker.wave.2")
-                                    .font(.system(size: 13, weight: .medium))
+                                    .font(.system(.footnote, weight: .medium))
                             }
                             .tint(SK.sunColor)
                         }
@@ -111,7 +111,7 @@ struct Conversation: View {
                 }
             }
             if ask.listening {
-                Text(ask.heard.isEmpty ? "Listening…" : ask.heard).font(.system(size: 16)).foregroundStyle(.secondary)
+                Text(ask.heard.isEmpty ? "Listening…" : ask.heard).font(.system(.callout)).foregroundStyle(.secondary)
                     .padding(.horizontal, 14).padding(.vertical, 10)
                     .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(SK.sunColor, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3])))
                     .frame(maxWidth: .infinity, alignment: .trailing).padding(.leading, 50)
@@ -120,7 +120,7 @@ struct Conversation: View {
                     .padding(.vertical, 8).accessibilityLabel("Sunny is thinking")
             } else if let last = ask.msgs.last, last.role == "user" {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("No answer came back. Try asking again.").font(.system(size: 15)).foregroundStyle(Palette.bad)
+                    Text("No answer came back. Try asking again.").font(.system(.subheadline)).foregroundStyle(Palette.bad)
                     Button("Ask again", action: retry).tint(SK.sunColor)
                 }
             }
@@ -155,7 +155,7 @@ struct AskBar: View {
                 .accessibilityLabel(ask.listening ? "Stop and ask" : "Ask out loud")
             }
             Text(ask.note ?? (ask.listening ? "Listening. Pause or tap to send." : "Sunny answers from your app's data, using \(engine)"))
-                .font(.system(size: 12)).foregroundStyle(ask.note != nil ? Palette.bad : Color.secondary)
+                .font(.system(.caption)).foregroundStyle(ask.note != nil ? Palette.bad : Color.secondary)
         }
         .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 8)
         .background(.bar)
@@ -172,8 +172,8 @@ struct ChatRow: View {
         HStack {
             Button { ask.open(chat); onOpen?() } label: {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(q.count > 70 ? String(q.prefix(68)) + "…" : q).font(.system(size: 16)).lineLimit(2).multilineTextAlignment(.leading)
-                    Text("\(AskData.when(chat.updated))\(n > 1 ? " · \(n) questions" : "")").font(.system(size: 13)).foregroundStyle(.secondary)
+                    Text(q.count > 70 ? String(q.prefix(68)) + "…" : q).font(.system(.callout)).lineLimit(2).multilineTextAlignment(.leading)
+                    Text("\(AskData.when(chat.updated))\(n > 1 ? " · \(n) questions" : "")").font(.system(.footnote)).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
             }
@@ -220,7 +220,7 @@ struct AnswerView: View {
                 case .chart(let c): AskChartView(c: c)
                 }
             }
-            if let s = parts.source { Text(s).font(.system(size: 12)).foregroundStyle(.secondary) }
+            if let s = parts.source { Text(s).font(.system(.caption)).foregroundStyle(.secondary) }
         }
     }
 
@@ -295,7 +295,7 @@ struct AskChartView: View {
                     let mx = max(1e-9, rs.map { max(0, $0.1) + (stacked ? max(0, $0.2 ?? 0) : 0) }.max() ?? 1)
                     ForEach(Array(rs.enumerated()), id: \.offset) { _, r in
                         HStack(spacing: 8) {
-                            Text(r.0).font(.system(size: 13)).foregroundStyle(.secondary).frame(width: 44, alignment: .leading).lineLimit(1)
+                            Text(r.0).font(.system(.footnote)).foregroundStyle(.secondary).frame(width: 44, alignment: .leading).lineLimit(1)
                             GeometryReader { g in
                                 HStack(spacing: 0) {
                                     Rectangle().fill(cols[0]).frame(width: g.size.width * max(0, r.1) / mx)
@@ -305,7 +305,7 @@ struct AskChartView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 3))
                             }
                             .frame(height: 14)
-                            Text(fmtV(stacked ? max(0, r.1) + max(0, r.2 ?? 0) : r.1)).font(.system(size: 13)).monospacedDigit().frame(width: 64, alignment: .trailing)
+                            Text(fmtV(stacked ? max(0, r.1) + max(0, r.2 ?? 0) : r.1)).font(.system(.footnote)).monospacedDigit().frame(width: 64, alignment: .trailing)
                         }
                     }
                     if ser.count > 1 { FlowRow(items: ser.enumerated().map { (cols[min($0, cols.count - 1)], $1, "") }) }
@@ -332,8 +332,8 @@ struct FlowRow: View {
             ForEach(Array(items.enumerated()), id: \.offset) { _, it in
                 HStack(spacing: 5) {
                     RoundedRectangle(cornerRadius: 2).fill(it.0).frame(width: 10, height: 10)
-                    Text(it.1).font(.system(size: 12))
-                    if !it.2.isEmpty { Text(it.2).font(.system(size: 12)).foregroundStyle(.secondary) }
+                    Text(it.1).font(.system(.caption))
+                    if !it.2.isEmpty { Text(it.2).font(.system(.caption)).foregroundStyle(.secondary) }
                 }
             }
         }
@@ -402,6 +402,7 @@ struct AreaPlot: View {
     let fmtV: (Double) -> String
     @State private var drawn: CGFloat = 0
     @State private var sel: Int?
+    @State private var sideways: Bool?   // scrub only once the drag is clearly sideways, so the chat still scrolls
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let top: CGFloat = 30, bot: CGFloat = 22
@@ -465,17 +466,20 @@ struct AreaPlot: View {
                 }
             }
             .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0)
+            .simultaneousGesture(DragGesture(minimumDistance: 0)
                 .onChanged { v in
                     guard n > 0 else { return }
+                    let moved = max(abs(v.translation.width), abs(v.translation.height))
+                    if sideways == nil, moved > 6 { sideways = abs(v.translation.width) > abs(v.translation.height) }
+                    if sideways == false { if sel != nil { sel = nil }; return }
                     let i = (0..<n).min(by: { abs(X($0) - v.location.x) < abs(X($1) - v.location.x) }) ?? 0
                     if i != sel { sel = i; UISelectionFeedbackGenerator().selectionChanged() }
                 }
-                .onEnded { _ in withAnimation(.easeOut(duration: 0.15)) { sel = nil } })
+                .onEnded { _ in sideways = nil; withAnimation(.easeOut(duration: 0.15)) { sel = nil } })
             .animation(.easeOut(duration: 0.12), value: sel)
         }
         .onAppear {
-            if reduceMotion { drawn = 1 } else { withAnimation(.timingCurve(0.85, 0, 0.15, 1, duration: 1.1)) { drawn = 1 } }
+            if reduceMotion { drawn = 1 } else { withAnimation(.smooth(duration: 0.6)) { drawn = 1 } }
         }
     }
 
@@ -491,7 +495,7 @@ struct AreaPlot: View {
             Text(fmtV(rows[i].1)).fontWeight(.semibold).foregroundStyle(cols[0]).monospacedDigit()
             if two, let v = rows[i].2 { Text("· \(names.count > 1 ? names[1] : "") \(fmtV(v))").foregroundStyle(.secondary).monospacedDigit() }
         }
-        .font(.system(size: 12))
+        .font(.system(.caption))
         .padding(.horizontal, 9).padding(.vertical, 3)
         .background(Color(uiColor: .systemBackground), in: RoundedRectangle(cornerRadius: 10))
     }

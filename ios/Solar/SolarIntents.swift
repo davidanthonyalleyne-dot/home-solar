@@ -105,7 +105,7 @@ struct StatSnippet: View {
                 Text(sub).font(.footnote).foregroundStyle(.secondary)
             }
             Spacer()
-            if let symbol { Image(systemName: symbol).font(.system(size: 34)).foregroundStyle(SK.sunColor) }
+            if let symbol { Image(systemName: symbol).font(.system(.largeTitle)).foregroundStyle(SK.sunColor) }
         }
         .padding(16)
     }

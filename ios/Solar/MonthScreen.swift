@@ -70,8 +70,8 @@ struct MonthBody: View {
             // header
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(String(ym.prefix(4))).font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
-                    Text(MonthMath.monthName(ym)).font(.system(size: 34, weight: .bold)).tracking(-0.5)
+                    Text(String(ym.prefix(4))).font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary)
+                    Text(MonthMath.monthName(ym)).font(.system(.largeTitle, weight: .bold)).tracking(-0.5)
                 }
                 Spacer()
                 HStack(spacing: 8) {
@@ -110,7 +110,7 @@ struct StepButton: View {
     let go: (String) -> Void
     var body: some View {
         Button { if let target { go(target) } } label: {
-            Image(systemName: symbol).font(.system(size: 15, weight: .semibold))
+            Image(systemName: symbol).font(.system(.subheadline, weight: .semibold))
                 .frame(width: 36, height: 36).background(Palette.well, in: Circle())
                 .contentShape(Rectangle().inset(by: -4))
         }
@@ -180,15 +180,15 @@ struct MoneyBlock: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .top, spacing: 16) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Paid to the grid").font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
+                        Text("Paid to the grid").font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary)
                         Text(grid.map { MonthMath.dollars($0) } ?? "–").font(.system(size: 44, weight: .semibold)).tracking(-1.2).monospacedDigit()
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     Button { if note != nil { showNote = true } } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 2) {
-                                Text("Saved by solar\(sofar ? " so far" : "")").font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
-                                if note != nil { Text("*").font(.system(size: 13, weight: .semibold)).foregroundStyle(SK.sunColor) }
+                                Text("Saved by solar\(sofar ? " so far" : "")").font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary)
+                                if note != nil { Text("*").font(.system(.footnote, weight: .semibold)).foregroundStyle(SK.sunColor) }
                             }
                             Text(saved.map { MonthMath.dollars($0) } ?? "–").font(.system(size: 44, weight: .semibold)).tracking(-1.2).monospacedDigit()
                                 .foregroundStyle(SK.sunColor)
@@ -197,7 +197,7 @@ struct MoneyBlock: View {
                     }
                     .buttonStyle(.plain)
                     .popover(isPresented: $showNote) {
-                        Text(note ?? "").font(.system(size: 13)).foregroundStyle(.secondary).padding(16).frame(width: 260)
+                        Text(note ?? "").font(.system(.footnote)).foregroundStyle(.secondary).padding(16).frame(width: 260)
                             .presentationCompactAdaptation(.popover)
                     }
                 }
@@ -210,20 +210,20 @@ struct MoneyBlock: View {
                     }
                     .frame(height: 10).clipShape(Capsule()).padding(.top, 18)
                     (Text("Without solar, \(MonthMath.monthName(ym)) would have cost ") + Text(MonthMath.dollars(w)).fontWeight(.bold) + Text("."))
-                        .font(.system(size: 17)).padding(.top, 14)
+                        .font(.system(.body)).padding(.top, 14)
                 } else if grid == nil {
                     Text(sofar ? "The grid cost shows once the month is over and the meter data is in." : "No meter data or bill for this month, so the grid cost isn't known.")
-                        .font(.system(size: 13)).foregroundStyle(.secondary).padding(.top, 8)
+                        .font(.system(.footnote)).foregroundStyle(.secondary).padding(.top, 8)
                 }
                 if isBill, db.bill(ym) != nil {
                     Button(action: openBill) {
-                        HStack { Text("From your Toronto Hydro bill"); Spacer(); Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.faint) }
-                            .font(.system(size: 15)).foregroundStyle(.secondary).padding(.vertical, 12).contentShape(Rectangle())
+                        HStack { Text("From your Toronto Hydro bill"); Spacer(); Image(systemName: "chevron.right").font(.system(.footnote, weight: .semibold)).foregroundStyle(Palette.faint) }
+                            .font(.system(.subheadline)).foregroundStyle(.secondary).padding(.vertical, 12).contentShape(Rectangle())
                     }
                     .buttonStyle(.plain).padding(.top, 6)
                 } else if grid != nil {
                     Text("\(t.hDays > 0 ? "Estimated from your meter" : "Estimated from the kWh on your later bills"). No bill on file for \(MonthMath.monthName(ym)).")
-                        .font(.system(size: 13)).foregroundStyle(.secondary).padding(.top, 8)
+                        .font(.system(.footnote)).foregroundStyle(.secondary).padding(.top, 8)
                 }
             }
         }
@@ -233,6 +233,8 @@ struct MoneyBlock: View {
 struct DayChart: View {
     let db: SolarDB, ym: String, selected: String?
     let tap: (String) -> Void
+    @State private var scrub: Int?          // the day under the finger while scrubbing, like Sunny's chart
+    @State private var sideways: Bool?      // the gesture only scrubs once it's clearly sideways, so vertical swipes still scroll
 
     var body: some View {
         let days = db.monthDays(ym)
@@ -253,7 +255,7 @@ struct DayChart: View {
                     if hasImp { LegendDot(color: Palette.grid, text: "Grid") }
                     if hasHome || !hasImp { LegendDot(color: SK.sunColor, text: "Solar") }
                     Spacer()
-                    Text("kWh a day").font(.system(size: 13)).foregroundStyle(.secondary)
+                    Text("kWh a day").font(.system(.footnote)).foregroundStyle(.secondary)
                 }
                 GeometryReader { geo in
                     let W = geo.size.width, H: CGFloat = 214, top: CGFloat = 28, bot: CGFloat = 20, right: CGFloat = 44
@@ -271,7 +273,7 @@ struct DayChart: View {
                         }
                         for (i, r) in days.enumerated() {
                             let x = CGFloat(i) * bw
-                            if r.d == selected {
+                            if scrub.map({ $0 == i }) ?? (r.d == selected) {
                                 ctx.fill(Path(roundedRect: CGRect(x: x, y: top - 6, width: bw, height: H - bot + 8 - top), cornerRadius: 3), with: .color(Palette.well))
                                 let cx = min(pw - 40, max(40, x + bw / 2))
                                 let lab = "\(MonthMath.shortDay(r.d)): \(val(r).map { MonthMath.kwh($0) + " kWh" } ?? "no data")"
@@ -292,15 +294,24 @@ struct DayChart: View {
                         }
                     }
                     .contentShape(Rectangle())
+                    // a still tap opens the day; dragging sideways reads each day with a tick, without leaving
                     .onTapGesture { p in
                         let i = iInt(p.x / bw)
                         if i >= 0, i < days.count { tap(days[i].d) }
                     }
+                    .simultaneousGesture(DragGesture(minimumDistance: 8)
+                        .onChanged { g in
+                            if sideways == nil { sideways = abs(g.translation.width) > abs(g.translation.height) }
+                            guard sideways == true, !days.isEmpty else { return }
+                            let i = min(days.count - 1, max(0, iInt(g.location.x / bw)))
+                            if i != scrub { scrub = i; UISelectionFeedbackGenerator().selectionChanged() }
+                        }
+                        .onEnded { _ in sideways = nil; scrub = nil })
                 }
                 .frame(height: 214)
                 .accessibilityElement()
                 .accessibilityLabel("Daily chart. Average \(MonthMath.kwh(avg)) kWh a day.")
-                Text("Tap a day to see it.").font(.system(size: 13)).foregroundStyle(.secondary)
+                Text("Tap a day to see it.").font(.system(.footnote)).foregroundStyle(.secondary)
             }
         }
     }
@@ -309,7 +320,7 @@ struct DayChart: View {
 struct LegendDot: View {
     let color: Color, text: String
     var body: some View {
-        HStack(spacing: 6) { RoundedRectangle(cornerRadius: 3).fill(color).frame(width: 12, height: 12); Text(text).font(.system(size: 13)).foregroundStyle(.secondary) }
+        HStack(spacing: 6) { RoundedRectangle(cornerRadius: 3).fill(color).frame(width: 12, height: 12); Text(text).font(.system(.footnote)).foregroundStyle(.secondary) }
     }
 }
 
@@ -376,7 +387,7 @@ struct Facts: View {
         let ls = lines
         if !ls.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                Text("What changed").font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary).padding(.bottom, 2)
+                Text("What changed").font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary).padding(.bottom, 2)
                 ForEach(Array(ls.enumerated()), id: \.offset) { i, l in
                     richText(l).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 11)
                     if i < ls.count - 1 { Rectangle().fill(Palette.rule).frame(height: 1) }
@@ -401,7 +412,7 @@ struct Heating: View {
             let most = max(1, ds.map { (db.th($0, 0) ?? 0) + (db.th($0, 1) ?? 0) }.max() ?? 1)
             let step = MonthMath.niceStep(most), ymax = ceil(most / step) * step
             VStack(alignment: .leading, spacing: 10) {
-                Text("Heating").font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
+                Text("Heating").font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary)
                 HStack(alignment: .top, spacing: 0) {
                     MiniTotal(label: "Heat pump", value: MonthMath.fmt(heat), unit: "hours")
                     Divider().padding(.horizontal, 10)
@@ -415,7 +426,7 @@ struct Heating: View {
                     LegendDot(color: Palette.heat, text: "Heat pump")
                     if aux > 0 { LegendDot(color: Palette.aux, text: "Backup heat") }
                     Spacer()
-                    Text("hours a day").font(.system(size: 13)).foregroundStyle(.secondary)
+                    Text("hours a day").font(.system(.footnote)).foregroundStyle(.secondary)
                 }
                 .padding(.top, 4)
                 Canvas { ctx, size in
@@ -443,9 +454,9 @@ struct Heating: View {
                 Group {
                     if dd > 15 && heat + aux > 0 { richText("About **\(MonthMath.fmt((heat + aux) / dd, 1)) hours** of heating for each degree the day averaged below 18°C.", size: 13) }
                     if aux > 0.5 { richText("!!Backup heat ran \(MonthMath.fmt(aux, 1)) hours.!! It uses two to three times the power of the heat pump for the same warmth.", size: 13) }
-                    else if heat > 5 { Text("No backup heat this month; the heat pump did it all.").font(.system(size: 13)) }
+                    else if heat > 5 { Text("No backup heat this month; the heat pump did it all.").font(.system(.footnote)) }
                     if fanAll >= 3 { richText("The fan ran all day on **\(fanAll) days**, which adds a few kWh a day.", size: 13) }
-                    Text("From your ecobee thermostat's history.").font(.system(size: 13))
+                    Text("From your ecobee thermostat's history.").font(.system(.footnote))
                 }
                 .foregroundStyle(.secondary)
             }
@@ -458,9 +469,9 @@ struct MiniTotal: View {
     var bad = false
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
-            Text(value).font(.system(size: 22, weight: .semibold)).monospacedDigit().foregroundStyle(bad ? Palette.bad : .primary)
-            Text(unit).font(.system(size: 13)).foregroundStyle(.secondary)
+            Text(label).font(.system(.footnote, weight: .medium)).foregroundStyle(.secondary)
+            Text(value).font(.system(.title2, weight: .semibold)).monospacedDigit().foregroundStyle(bad ? Palette.bad : .primary)
+            Text(unit).font(.system(.footnote)).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -486,12 +497,12 @@ struct Ledger: View {
                 DisclosureGroup(isExpanded: $open) {
                     VStack(spacing: 0) {
                         HStack { Spacer(); Text("Month").frame(width: 80, alignment: .trailing); Text("A day").frame(width: 64, alignment: .trailing) }
-                            .font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary).padding(.vertical, 8)
+                            .font(.system(.caption, weight: .medium)).foregroundStyle(.secondary).padding(.vertical, 8)
                         ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
                             Rectangle().fill(Palette.rule).frame(height: 1)
                             HStack {
                                 Image(systemName: r.0).font(.system(size: 14)).foregroundStyle(r.4 ? SK.sunColor : .secondary).frame(width: 20)
-                                Text(r.1).font(.system(size: 15)).foregroundStyle(r.5 ? .secondary : .primary)
+                                Text(r.1).font(.system(.subheadline)).foregroundStyle(r.5 ? .secondary : .primary)
                                 Spacer()
                                 Text(r.2).frame(width: 80, alignment: .trailing)
                                 Text(r.3).frame(width: 64, alignment: .trailing)
@@ -502,11 +513,11 @@ struct Ledger: View {
                             .padding(.vertical, 10)
                         }
                         if !gaps.isEmpty {
-                            Text(gaps.joined(separator: ", ") + ".").font(.system(size: 13)).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
+                            Text(gaps.joined(separator: ", ") + ".").font(.system(.footnote)).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
                         }
                     }
                 } label: {
-                    Text("Energy Consumption (in kWh)").font(.system(size: 17, weight: .semibold)).foregroundStyle(.primary)
+                    Text("Energy Consumption (in kWh)").font(.system(.body, weight: .semibold)).foregroundStyle(.primary)
                 }
                 .tint(.secondary)
             }
@@ -527,7 +538,7 @@ struct InfoRows: View {
                     Spacer()
                     Text(r.1).monospacedDigit().foregroundStyle(r.2 ?? Color.secondary)
                 }
-                .font(.system(size: 15)).padding(.vertical, 11)
+                .font(.system(.subheadline)).padding(.vertical, 11)
             }
         }
         .padding(.horizontal, 14)
@@ -599,9 +610,9 @@ struct BillSheet: View {
             let dc = db.num(ym, "deliveryCredit") ?? 0
             let prevBal = n(b["previous"])
             return AnyView(VStack(alignment: .leading, spacing: 12) {
-                Text("\(MonthMath.shortDay(from)) to \(MonthMath.shortDay(to)), \(to.prefix(4))").font(.system(size: 20, weight: .semibold))
+                Text("\(MonthMath.shortDay(from)) to \(MonthMath.shortDay(to)), \(to.prefix(4))").font(.system(.title3, weight: .semibold))
                 Text("\(days) days\((b["statement"] as? String).map { ", issued \(MonthMath.date($0, "MMMM d"))" } ?? "") · \(MonthMath.fmt(kwh > 0 ? current / kwh * 100 : 0, 1))¢ per kWh all in · \(b["season"] as? String ?? "") prices")
-                    .font(.system(size: 13)).foregroundStyle(.secondary)
+                    .font(.system(.footnote)).foregroundStyle(.secondary)
                 InfoRows(rows: r)
                 if pCredit > 0.5 {
                     richText("Net metering also takes about **\(MonthMath.money(dc))** off the delivery and regulatory lines, because those are charged on what you bought minus what you sent back. Toronto Hydro folds that into the lines rather than printing it. HST is charged as if neither credit applied, while the rebate is worked out after both.", size: 13)
@@ -610,7 +621,7 @@ struct BillSheet: View {
                 if abs(prevBal) >= 0.5 {
                     Text(prevBal > 0 ? "The amount due was \(MonthMath.money(n(b["due"]))), including \(MonthMath.money(prevBal)) carried over unpaid from the bill before."
                          : "The amount due was \(MonthMath.money(n(b["due"]))) after a \(MonthMath.money(-prevBal)) credit from the bill before.")
-                        .font(.system(size: 13)).foregroundStyle(.secondary)
+                        .font(.system(.footnote)).foregroundStyle(.secondary)
                 }
             })
         } else {

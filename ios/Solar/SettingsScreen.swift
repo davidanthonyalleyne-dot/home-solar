@@ -139,7 +139,7 @@ struct SetRow<V: View>: View {
     @ViewBuilder let value: () -> V
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: icon).font(.system(size: 15, weight: .medium)).foregroundStyle(.white)
+            Image(systemName: icon).font(.system(.subheadline, weight: .medium)).foregroundStyle(.white)
                 .frame(width: 29, height: 29).background(SK.sunColor, in: RoundedRectangle(cornerRadius: 7))
             Text(title)
             Spacer()
@@ -283,12 +283,12 @@ struct SettingsPage: View {
             Section {
                 if let c = SolarStatus.chain(json) {
                     ChainView(links: c.links).padding(.vertical, 6)
-                    Text(c.line).font(.system(size: 15)).foregroundStyle(c.level == "bad" ? Palette.bad : .secondary)
+                    Text(c.line).font(.system(.subheadline)).foregroundStyle(c.level == "bad" ? Palette.bad : .secondary)
                 }
                 ForEach(Array(rest.enumerated()), id: \.offset) { _, x in
                     HStack(alignment: .top, spacing: 10) {
                         Circle().fill(Fmt.statusColor(x.level)).frame(width: 8, height: 8).padding(.top, 6)
-                        VStack(alignment: .leading, spacing: 2) { Text(x.title).fontWeight(.semibold); if !x.note.isEmpty { Text(x.note).font(.system(size: 15)).foregroundStyle(.secondary) } }
+                        VStack(alignment: .leading, spacing: 2) { Text(x.title).fontWeight(.semibold); if !x.note.isEmpty { Text(x.note).font(.system(.subheadline)).foregroundStyle(.secondary) } }
                     }
                 }
                 if st.connect, let u = json["connectUrl"] as? String, let url = URL(string: u) {
