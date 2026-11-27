@@ -384,7 +384,7 @@ struct PreviewNow: View {
     }
     static var startTab: SolarTab {
         let a = ProcessInfo.processInfo.arguments
-        return a.contains("-month") ? .month : a.contains("-history") || a.contains("-energy") ? .history : a.contains("-ask") ? .ask
+        return a.contains("-month") || a.contains("-dayview") ? .month : a.contains("-history") || a.contains("-energy") ? .history : a.contains("-ask") ? .ask
             : a.contains("-settings") || a.contains("-solaredge") ? .settings : .now
     }
     @StateObject private var model: NowModel = {

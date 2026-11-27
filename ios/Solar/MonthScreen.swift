@@ -32,7 +32,14 @@ struct MonthScreen: View {
             }
         }
         .refreshable { await model.refresh(force: true) }
-        .task { await model.refresh() }
+        .task {
+            await model.refresh()
+            // the screenshot workflow opens a sample day with thermostat data
+            if PreviewNow.on, let i = ProcessInfo.processInfo.arguments.firstIndex(of: "-dayview") {
+                let a = ProcessInfo.processInfo.arguments
+                sheet = .day(i + 1 < a.count && !a[i + 1].hasPrefix("-") ? a[i + 1] : "2026-10-27")
+            }
+        }
         .sheet(item: $sheet) { k in
             if let db = model.db {
                 NavigationStack {
@@ -46,7 +53,7 @@ struct MonthScreen: View {
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { sheet = nil } } }
                 }
-                .presentationDetents([.medium, .large])
+                .presentationDetents(PreviewNow.on && ProcessInfo.processInfo.arguments.contains("-dayview") ? [.large] : [.medium, .large])
             }
         }
     }
@@ -576,10 +583,12 @@ struct DaySheet: View {
             if let s = db.th(d, 4) { t.append(("Thermostat set to", "⌀ \(MonthMath.fmt(s, 1))°", nil)) }
             if let ins = db.th(d, 5) { t.append(("Inside", "⌀ \(MonthMath.fmt(ins, 1))°\(db.th(d, 7).map { "  \(MonthMath.fmt($0))% humidity" } ?? "")", nil)) }
         }
+        let climate = db.climateDay(d)
         return VStack(spacing: 16) {
+            if let climate { ClimateDayView(c: climate, made: r.prod).padding(.bottom, 8) }
             InfoRows(rows: p)
             InfoRows(rows: w)
-            if !t.isEmpty { InfoRows(rows: t) }
+            if climate == nil && !t.isEmpty { InfoRows(rows: t) }
         }
     }
 }

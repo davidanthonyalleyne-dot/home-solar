@@ -38,6 +38,12 @@ struct SolarDB {
     func num(_ ym: String, _ k: String) -> Double? { (money[ym]?[k] as? NSNumber)?.doubleValue }
     func w(_ d: String, _ i: Int) -> Double? { guard let r = weather[d], r.count > i else { return nil }; return (r[i] as? NSNumber)?.doubleValue }
     func th(_ d: String, _ i: Int) -> Double? { guard let r = thermostat[d], r.count > i else { return nil }; return (r[i] as? NSNumber)?.doubleValue }
+    /// A day hour by hour from the ecobee, worked out by the build (nil when there's no file for it)
+    func climateDay(_ d: String) -> ClimateDay? {
+        guard let t = json["thermostat"] as? [String: Any], let c = (t["days"] as? [String: Any])?[d] as? [String: Any] else { return nil }
+        let solar = ((json["solar"] as? [String: Any])?["hours"] as? [String: [Any]])?[d]
+        return ClimateDay(c, solar: solar, estimate: t["estimate"] as? [String: Any])
+    }
 
     var months: [String] {
         var s = Set(hydro.keys.map { String($0.prefix(7)) })
@@ -198,6 +204,34 @@ extension SolarDB {
 extension Palette {
     static let gridEst = dyn(0x8E8E93, 0x6E6E73)
     static let cool = dyn(0x4F7FA8, 0x6FA3D6)
+}
+
+/// One day from the thermostat, hour by hour (24 values each, nil where the file has a gap)
+struct ClimateDay {
+    struct Note { let kind: String; let text: String }
+    let hp, aux, cool: [Double]
+    let set, cset, inside, out: [Double?]
+    let solar: [Double]?
+    let onPeak: [Bool]
+    let kwh, cost, fromSun: Double?
+    let auxMin, hpMin, coolMin: Int
+    let notes: [Note]
+    let heatPumpKw, backupKw: Double
+    var cooling: Bool { coolMin > hpMin + auxMin }
+
+    init(_ c: [String: Any], solar s: [Any]?, estimate: [String: Any]?) {
+        let n = { (x: Any?) in (x as? NSNumber)?.doubleValue }
+        let arr = { (k: String) -> [Double?] in let a = (c[k] as? [Any]) ?? []; return (0..<24).map { $0 < a.count ? n(a[$0]) : nil } }
+        hp = arr("hp").map { $0 ?? 0 }; aux = arr("aux").map { $0 ?? 0 }; cool = arr("cool").map { $0 ?? 0 }
+        set = arr("set"); cset = arr("cset"); inside = arr("in"); out = arr("out")
+        solar = s.map { a in (0..<24).map { $0 < a.count ? n(a[$0]) ?? 0 : 0 } }
+        let tou = c["tou"] as? [String] ?? []
+        onPeak = (0..<24).map { $0 < tou.count && tou[$0] == "on" }
+        kwh = n(c["kwh"]); cost = n(c["cost"]); fromSun = n(c["fromSun"])
+        auxMin = iInt(n(c["auxMin"]) ?? 0); hpMin = iInt(n(c["hpMin"]) ?? 0); coolMin = iInt(n(c["coolMin"]) ?? 0)
+        notes = (c["notes"] as? [[String: Any]] ?? []).compactMap { d in (d["text"] as? String).map { Note(kind: d["kind"] as? String ?? "", text: $0) } }
+        heatPumpKw = n(estimate?["heatPumpKw"]) ?? 2.6; backupKw = n(estimate?["backupKw"]) ?? 7.5
+    }
 }
 
 struct ClimDay { var d: String; var heat, aux, cool, fan: Double; var set, inside, out, grid: Double? }
