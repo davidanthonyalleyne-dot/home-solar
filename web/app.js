@@ -745,8 +745,90 @@
       if (th[4] != null) t.push(["Thermostat set to", `⌀ ${fmt(th[4], 1)}°`]);
       if (th[5] != null) t.push(["Inside", `⌀ ${fmt(th[5], 1)}°${th[7] != null ? ` <span class="sub">${fmt(th[7])}% humidity</span>` : ""}`]);
     }
+    const cd = state.data.thermostat && state.data.thermostat.days && state.data.thermostat.days[r.d];
+    if (cd) return climateDay(r.d, cd, r) + `<div class="gap"></div>` + rows(p) + `<div class="gap"></div>` + rows(w);
     return rows(p) + `<div class="gap"></div>` + rows(w) + (t.length ? `<div class="gap"></div>` + rows(t) : "");
   }
+
+  // a day with the thermostat: four small charts down the sheet, each showing one thing,
+  // then the notes the build wrote for the day
+  function climateDay(d, c, r) {
+    const W = 350, X0 = 34, PW = 314, x = (h) => X0 + (h / 24) * PW, f = (v) => v.toFixed(1);
+    const sol = (state.data.solar && state.data.solar.hours && state.data.solar.hours[d]) || null;
+    const cooling = c.coolMin > c.hpMin + c.auxMin;
+    const hoursAxis = (y) => [[0, "12 am", "start"], [6, "6 am", "middle"], [12, "noon", "middle"], [18, "6 pm", "middle"], [24, "12 am", "end"]]
+      .map(([h, l, a]) => `<text x="${f(x(h))}" y="${y}" class="ax" text-anchor="${a}">${l}</text>`).join("");
+    const pts = (arr, y) => arr.map((v, i) => v == null ? null : [x(i + 0.5), y(v)]);
+    const path = (ps) => { let s = "", pen = false; for (const p of ps) { if (!p) { pen = false; continue; } s += (pen ? "L" : "M") + f(p[0]) + " " + f(p[1]) + " "; pen = true; } return s; };
+    const sign = (v) => String(Math.round(v)).replace("-", "−") + "°";
+    // top numbers
+    const used = cooling ? "Cooling used" : "Heating used";
+    let top = `<div class="trio ruled cday-trio"><div><span class="l">${used}</span><span class="n heat">${fmt(c.kwh)} kWh</span><span class="s">about ${money(c.cost)}</span></div>`;
+    top += c.auxMin ? `<div><span class="l">Backup heat</span><span class="n bad">${c.auxMin} min</span><span class="s">the costly kind</span></div>`
+                    : `<div><span class="l">${cooling ? "Cooling ran" : "Heat pump ran"}</span><span class="n">${hm((cooling ? c.coolMin : c.hpMin) * 60000)}</span><span class="s">through the day</span></div>`;
+    top += sol ? `<div><span class="l">Solar made</span><span class="n sun">${fmt(r.prod != null ? r.prod : sol.reduce((a, b) => a + b, 0))} kWh</span><span class="s">${c.fromSun != null && c.kwh > 0.5 ? Math.round(100 * c.fromSun / c.kwh) + "% to " + (cooling ? "cooling" : "heating") : ""}</span></div>` : `<div></div>`;
+    top += `</div>`;
+    // 1. inside
+    const iv = c.in.filter((v) => v != null).concat(c.set.filter((v) => v != null), cooling ? c.cset.filter((v) => v != null) : []);
+    const lo = Math.floor(Math.min(...iv) - 0.5), hi = Math.ceil(Math.max(...iv) + 0.5), iy = (t) => 30 + (hi - t) / (hi - lo) * 145;
+    const sp = cooling ? c.cset : c.set;
+    let setPath = "", pen = false;
+    sp.forEach((v, i) => { if (v == null) { pen = false; return; } setPath += (pen ? `H${f(x(i))} V${f(iy(v))} ` : `M${f(x(i))} ${f(iy(v))} `) ; setPath += `H${f(x(i + 1))} `; pen = true; });
+    const ticks = []; for (let t = Math.ceil(lo); t <= hi; t += (hi - lo > 6 ? 2 : 1)) ticks.push(t);
+    const setVals = [...new Set(sp.filter((v) => v != null).map((v) => Math.round(v * 2) / 2))];
+    const peakI = c.in.reduce((b, v, i) => (v != null && (b < 0 || v > c.in[b]) ? i : b), -1);
+    // each set point labelled under the middle of its longest stretch, clear of the rising line
+    const runMid = (val) => { let best = [0, 0], a = -1; sp.forEach((v, i) => { const on = v != null && Math.round(v * 2) / 2 === val; if (on && a < 0) a = i; if ((!on || i === 23) && a >= 0) { const b = on ? 24 : i; if (b - a > best[1] - best[0]) best = [a, b]; a = -1; } }); return (best[0] + best[1]) / 2; };
+    const setLabels = setVals.slice(0, 3).map((v) => `<text x="${f(Math.min(Math.max(x(runMid(v)), 70), W - 40))}" y="${f(iy(v) + 16)}" class="ax" text-anchor="middle">set to ${fmt(v, v % 1 ? 1 : 0)}°</text>`).join("");
+    const inside = `<section class="cday"><h3>Inside the house</h3><p class="cap">The dashed line is what the thermostat was set to; the solid line is the actual temperature inside.</p>
+      <svg viewBox="0 0 ${W} 200" role="img" aria-label="Inside temperature through the day">
+      ${ticks.map((t) => `<line x1="${X0}" x2="${W}" y1="${f(iy(t))}" y2="${f(iy(t))}" class="grid"/><text x="0" y="${f(iy(t) + 4)}" class="ax">${t}°</text>`).join("")}
+      <path d="${setPath}" class="setp"/><path d="${path(pts(c.in, iy))}" class="inl"/>${setLabels}
+      ${peakI >= 0 ? `<circle cx="${f(x(peakI + 0.5))}" cy="${f(iy(c.in[peakI]))}" r="4.5" class="dot"/><text x="${f(Math.min(Math.max(x(peakI + 0.5), 70), W - 70))}" y="${f(iy(c.in[peakI]) - 11)}" class="lab" text-anchor="middle">${fmt(c.in[peakI], 1)}° at ${hourName(peakI)}</text>` : ""}
+      ${hoursAxis(196)}</svg></section>`;
+    // 2. outside
+    const ov = c.out.filter((v) => v != null);
+    let outside = "";
+    if (ov.length) {
+      const olo = Math.min(...ov), ohi = Math.max(...ov), span = Math.max(4, ohi - olo), oy = (t) => 30 + (ohi + span * 0.1 - t) / (span * 1.2) * 56;
+      const li = c.out.indexOf(olo), hiI = c.out.indexOf(ohi);
+      outside = `<section class="cday"><h3>Outside</h3><p class="cap">Coldest at ${hourName(li)}, warmest at ${hourName(hiI)}.</p>
+        <svg viewBox="0 0 ${W} 128" role="img" aria-label="Outside temperature through the day"><path d="${path(pts(c.out, oy))}" class="outl"/>
+        <circle cx="${f(x(li + 0.5))}" cy="${f(oy(olo))}" r="4.5" class="odot"/><text x="${f(Math.min(Math.max(x(li + 0.5), 50), W - 50))}" y="${f(oy(olo) + 20)}" class="olab" text-anchor="middle">${sign(olo)} at ${hourName(li)}</text>
+        <circle cx="${f(x(hiI + 0.5))}" cy="${f(oy(ohi))}" r="4.5" class="odot"/><text x="${f(Math.min(Math.max(x(hiI + 0.5), 50), W - 50))}" y="${f(oy(ohi) - 10)}" class="olab" text-anchor="middle">${sign(ohi)} at ${hourName(hiI)}</text>
+        ${hoursAxis(124)}</svg></section>`;
+    }
+    // 3. when the heat (or cooling) was on
+    const base = 150, H = 110, bw = PW / 24 - 3;
+    const bars = c.hp.map((m, i) => {
+      const a = c.aux[i] || 0, run = cooling ? (c.cool[i] || 0) : Math.max(m || 0, a);
+      const total = Math.min(60, run) / 60 * H, bh = cooling ? 0 : Math.min(a, 60) / 60 * H, hh = Math.max(0, total - bh);
+      return `<rect x="${f(x(i) + 1.5)}" y="${f(base - hh)}" width="${f(bw)}" height="${f(hh)}" rx="2" class="${cooling ? "b-cool" : "b-heat"}"/>` + (bh ? `<rect x="${f(x(i) + 1.5)}" y="${f(base - hh - bh)}" width="${f(bw)}" height="${f(bh)}" rx="2" class="b-aux"/>` : "");
+    }).join("");
+    const peaks = []; c.tou.forEach((t, i) => { if (t === "on") { if (peaks.length && peaks[peaks.length - 1][1] === i) peaks[peaks.length - 1][1] = i + 1; else peaks.push([i, i + 1]); } });
+    const firstAux = c.aux.findIndex((v) => v > 0);
+    const heat = `<section class="cday"><h3>When the ${cooling ? "cooling" : "heat"} was on</h3><p class="cap">Each bar is one hour; a full bar means it ran the whole hour.${c.auxMin ? " Red is the electric backup, which costs about three times as much to run." : ""}</p>
+      <p class="legend"><span><i class="lg-${cooling ? "cool" : "heat"}"></i>${cooling ? "Cooling" : "Heat pump"}</span>${c.auxMin ? `<span><i class="lg-aux"></i>Backup heat</span>` : ""}${peaks.length ? `<span><i class="lg-peak"></i>On-peak price</span>` : ""}</p>
+      <svg viewBox="0 0 ${W} 190" role="img" aria-label="Runtime for each hour of the day">
+      <text x="0" y="${base - H + 4}" class="ax">all hour</text><line x1="44" x2="${W}" y1="${base - H}" y2="${base - H}" class="grid"/><line x1="${X0}" x2="${W}" y1="${base}" y2="${base}" class="base"/>
+      ${bars}${firstAux >= 0 ? `<text x="${f(Math.min(x(firstAux), W - 190))}" y="22" class="alab">Backup heat from ${hourName(firstAux)}</text>` : ""}
+      ${peaks.map(([a, b]) => `<rect x="${f(x(a) + 1)}" y="${base + 6}" width="${f(x(b) - x(a) - 2)}" height="6" rx="2" class="peak"/>`).join("")}
+      ${hoursAxis(186)}</svg></section>`;
+    // 4. solar
+    let solarSec = "";
+    if (sol && sol.some((v) => v > 0)) {
+      const mx = Math.max(...sol), sb = 96, sh = 66, bi = sol.indexOf(mx), made = sol.reduce((a, b) => a + b, 0);
+      const on = sol.map((v, i) => v > 0.05 ? i : -1).filter((i) => i >= 0);
+      solarSec = `<section class="cday"><h3>What the panels made</h3><p class="cap">${fmt(made, 1)} kWh between ${hourName(on[0])} and ${hourName(on[on.length - 1] + 1)}${c.fromSun != null && c.kwh > 0.5 ? `; ${fmt(c.fromSun, 1)} kWh of it went to ${cooling ? "cooling" : "heating"}` : ""}.</p>
+        <svg viewBox="0 0 ${W} 120" role="img" aria-label="Solar production for each hour"><line x1="${X0}" x2="${W}" y1="${sb}" y2="${sb}" class="base"/>
+        ${sol.map((v, i) => v > 0 ? `<rect x="${f(x(i) + 1.5)}" y="${f(sb - v / mx * sh)}" width="${f(bw)}" height="${f(v / mx * sh)}" rx="2" class="b-sun"/>` : "").join("")}
+        <text x="${f(Math.min(Math.max(x(bi + 0.5), 60), W - 60))}" y="${sb - sh - 8}" class="slab" text-anchor="middle">${fmt(mx, 1)} kWh at ${hourName(bi)}</text>${hoursAxis(116)}</svg></section>`;
+    }
+    const notes = (c.notes || []).length ? `<section class="cday notes"><h3>What stood out</h3>${c.notes.map((n) => `<p>${mdLite(n.text)}</p>`).join("")}</section>` : "";
+    const est = state.data.thermostat.estimate || {};
+    return top + inside + outside + heat + solarSec + notes + `<p class="sub">From the ecobee file${sol ? ", SolarEdge" : ""} and Toronto Hydro's time-of-use prices. Energy is estimated from runtime (heat pump ${fmt(est.heatPumpKw || 2.6, 1)} kW, backup heat ${fmt(est.backupKw || 7.5, 1)} kW), before delivery and HST.</p>`;
+  }
+  const hourName = (h) => h % 24 === 0 ? "midnight" : h === 12 ? "noon" : `${h % 12} ${h < 12 ? "am" : "pm"}`;
 
   // a month from before the panels: just the bill (or bills) that ended in it
   function preSolarSheet(ym) {

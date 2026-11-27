@@ -300,6 +300,20 @@ def _day_of(t):
     return (t + dt.timedelta(hours=12)).date().isoformat()
 
 
+def _by_hour(qh):
+    """24 hourly kWh from [(local time, Wh)] quarter hours."""
+    out = [0.0] * 24
+    for t, v in qh:
+        if t and v:
+            out[t.astimezone(TZ).hour] += v / 1000
+    return [round(x, 2) for x in out]
+
+
+def _keep_hours(hrs, today):
+    cut = (today - dt.timedelta(days=400)).isoformat()
+    return {k: hrs[k] for k in sorted(hrs) if k >= cut}
+
+
 def fetch_daily(token, start, end, monthly=False):
     """Daily production (kWh) between two local dates. Falls back to month-sized
     requests if the API won't return the whole span in one call."""
@@ -611,6 +625,41 @@ def read_solaredge(prev):
                 except Exception as e:  # optional extras: never fail the build over them
                     solar.setdefault(key, None)  # so a missing feature isn't retried every run
                     log(f"solaredge: {key} unavailable: {e}")
+            # once a night, fill in hour-by-hour production for past days (for the thermostat day view),
+            # a week per call, newest first, up to 4 calls a night until a year is there
+            try:
+                hrs = dict(solar.get("hours") or {})
+                floor = max(today - dt.timedelta(days=366), dt.date.fromisoformat(solar["installed"]) if solar.get("installed") else today - dt.timedelta(days=366))
+                for _ in range(4):
+                    missing = [today - dt.timedelta(days=k) for k in range(1, 367) if (today - dt.timedelta(days=k)) >= floor and (today - dt.timedelta(days=k)).isoformat() not in hrs]
+                    if not missing:
+                        break
+                    b = missing[0]
+                    a = max(b - dt.timedelta(days=solar.get("hoursSpan", 7) - 1), floor)
+                    q = lambda a: api_get(access, f"/sites/{SITE}/energy", {
+                        "resolution": "QUARTER_HOUR", "unit": "WH",
+                        "from": _instant(dt.datetime.combine(a, dt.time(), TZ)),
+                        "to": _instant(dt.datetime.combine(b + dt.timedelta(days=1), dt.time(), TZ))})
+                    try:
+                        body = q(a)
+                    except RuntimeError as e:
+                        if a == b:
+                            raise
+                        log(f"solaredge: a week of quarter hours refused, going a day at a time ({e})")
+                        solar["hoursSpan"], a = 1, b
+                        body = q(a)
+                    got = {}
+                    for t, v in _series(body):
+                        if t:
+                            got.setdefault(t.astimezone(TZ).date(), []).append((t.astimezone(TZ), v))
+                    for k in range((b - a).days + 1):
+                        day = a + dt.timedelta(days=k)
+                        hrs[day.isoformat()] = _by_hour(got.get(day, []))
+                solar["hours"] = _keep_hours(hrs, today)
+            except AuthError:
+                raise
+            except Exception as e:
+                log(f"solaredge: hourly history unavailable: {e}")
             solar["historyDate"] = today.isoformat()
 
         if need["today"]:
@@ -621,6 +670,9 @@ def read_solaredge(prev):
             today_kwh = round(sum(v for _, v in qh if v) / 1000, 2)
             last = next(((t, v) for t, v in reversed(qh) if v is not None), None)
             solar["todayCurve"] = [[t.strftime("%H:%M"), round((v or 0) * 4 / 1000, 2)] for t, v in qh]
+            hrs = dict(solar.get("hours") or {})
+            hrs[today.isoformat()] = _by_hour(qh)
+            solar["hours"] = _keep_hours(hrs, today)
             solar["nowKw"] = round(last[1] * 4 / 1000, 2) if last and (now - last[0]) < dt.timedelta(minutes=45) else 0
             solar["updated"] = last[0].isoformat() if last else solar.get("updated")
             solar["today"], solar["todayDate"] = today_kwh, today.isoformat()
@@ -925,7 +977,8 @@ def encrypt_private_files():
 ECOBEE_DIR = ROOT / "data/ecobee"
 
 
-def ecobee_days(text):
+def ecobee_days(text, hourly=None):
+    """Daily sums. With `hourly` (a dict), also fills it with each day's 24 hours, for the day view."""
     import csv
     import io
     rows = [r for r in csv.reader(io.StringIO(text)) if r and not r[0].startswith("#")]
@@ -935,13 +988,39 @@ def ecobee_days(text):
     col = lambda name: head.index(name) if name in head else None
     c = {k: col(n) for k, n in (("heat", "Heat Stage 1 (sec)"), ("heat2", "Heat Stage 2 (sec)"), ("aux", "Aux Heat 1 (sec)"), ("aux2", "Aux Heat 2 (sec)"),
                                 ("cool", "Cool Stage 1 (sec)"), ("fan", "Fan (sec)"), ("set", "Heat Set Temp (C)"), ("in", "Current Temp (C)"),
-                                ("out", "Outdoor Temp (C)"), ("hum", "Current Humidity (%RH)"))}
+                                ("out", "Outdoor Temp (C)"), ("hum", "Current Humidity (%RH)"), ("cset", "Cool Set Temp (C)"))}
     num = lambda r, k: (float(r[c[k]]) if c[k] is not None and c[k] < len(r) and r[c[k]] not in ("", None) else None)
     acc = {}
     for r in rows[1:]:
         if len(r) < 3 or not re.match(r"\d{4}-\d{2}-\d{2}$", r[0]):
             continue
         a = acc.setdefault(r[0], {"heat": 0, "aux": 0, "cool": 0, "fan": 0, "set": [], "in": [], "out": [], "hum": []})
+        if hourly is not None:
+            try:
+                hr = int(r[1].split(":")[0])
+            except (ValueError, IndexError):
+                hr = None
+            if hr is not None and 0 <= hr < 24:
+                hd = hourly.setdefault(r[0], [None] * 24)
+                if hd[hr] is None:
+                    hd[hr] = {"heat": 0, "aux": 0, "cool": 0, "set": [], "cset": [], "in": [], "out": [], "runs": 0, "on": False}
+                h = hd[hr]
+                hs = (num(r, "heat") or 0) + (num(r, "heat2") or 0)
+                h["heat"] += hs
+                h["aux"] += (num(r, "aux") or 0) + (num(r, "aux2") or 0)
+                h["cool"] += num(r, "cool") or 0
+                for k in ("set", "in", "out"):
+                    v = num(r, k)
+                    if v is not None and v > -100:
+                        h[k].append(v)
+                v = num(r, "cset")
+                if v is not None and v > -100:
+                    h["cset"].append(v)
+                # count heat pump starts, for cycle length
+                prev_on = hourly.get("_on", False)
+                if hs > 0 and not prev_on:
+                    h["runs"] += 1
+                hourly["_on"] = hs > 0
         a["heat"] += (num(r, "heat") or 0) + (num(r, "heat2") or 0)
         a["aux"] += (num(r, "aux") or 0) + (num(r, "aux2") or 0)
         a["cool"] += num(r, "cool") or 0
@@ -959,17 +1038,137 @@ def ecobee_days(text):
 def read_thermostat():
     if not _passphrase() or not ECOBEE_DIR.exists():
         return None
-    daily = {}
+    daily, hourly = {}, {}
     for f in sorted(ECOBEE_DIR.glob("*.enc"), key=lambda f: f.stat().st_mtime):
         try:
-            daily.update(ecobee_days(unseal(json.loads(f.read_text())).decode("utf-8", "replace")))
+            h = {}
+            daily.update(ecobee_days(unseal(json.loads(f.read_text())).decode("utf-8", "replace"), h))
+            h.pop("_on", None)
+            hourly.update(h)
         except Exception as e:
             log(f"::warning::{f.name} couldn't be read: {e}")
     if not daily:
         return None
     ks = sorted(daily)
     return {"from": ks[0], "to": ks[-1], "columns": ["heatPumpH", "backupHeatH", "coolH", "fanH", "heatSetC", "indoorC", "outdoorC", "humidityPct"],
-            "daily": {k: daily[k] for k in ks}}
+            "daily": {k: daily[k] for k in ks}, "_hourly": hourly}
+
+
+# ---------- a day with the thermostat ----------
+# What each part draws, for turning runtime into energy. The Bosch 3-ton heat pump puts out
+# about 22,700 BTU/h (6.7 kW) at −8°C; at a COP near 2.5 it draws about 2.6 kW running.
+# The backup heat's size comes from data/system.json (7.5 kW, estimated there).
+HEAT_PUMP_KW = 2.6
+BACKUP_KW = 7.5
+
+
+def _dg(v, dp=0):
+    return f"{v:.{dp}f}°".replace("-", "−")
+
+
+def _hour_name(h):
+    return "midnight" if h % 24 == 0 else "noon" if h == 12 else f"{h % 12} {'am' if h < 12 else 'pm'}"
+
+
+def thermostat_days(thermo, solar):
+    """Hour-by-hour days for the day view, with the day's numbers and plain notes worked out here,
+    so the web app and the iPhone app show the same thing. Only the last 400 days are kept."""
+    hourly = (thermo or {}).pop("_hourly", None) or {}
+    if not hourly:
+        return
+    try:
+        import money
+    except Exception:
+        money = None
+    hours_solar = (solar or {}).get("hours") or {}
+    global BACKUP_KW
+    try:
+        BACKUP_KW = float(json.loads((ROOT / "data/system.json").read_text())["heating"]["backupHeat"]["kw"]) or BACKUP_KW
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    cutoff = (dt.datetime.now(TZ).date() - dt.timedelta(days=400)).isoformat()
+    days = {}
+    avg = lambda xs: round(sum(xs) / len(xs), 1) if xs else None
+    for d in sorted(hourly):
+        if d < cutoff:
+            continue
+        hs = hourly[d]
+        if sum(1 for h in hs if h) < 20:  # a part day at the edge of a file
+            continue
+        z = lambda f: [f(h) if h else None for h in hs]
+        hp = z(lambda h: round(h["heat"] / 60))
+        aux = z(lambda h: round(h["aux"] / 60))
+        cool = z(lambda h: round(h["cool"] / 60))
+        setp = z(lambda h: avg(h["set"]))
+        cset = z(lambda h: avg(h["cset"]))
+        ins = z(lambda h: avg(h["in"]))
+        out = z(lambda h: avg(h["out"]))
+        date = dt.date.fromisoformat(d)
+        price = money.prices(d) if money else {"off": 0.1, "mid": 0.15, "on": 0.2}
+        tou = [money.tou_period(dt.datetime.combine(date, dt.time(i))) if money else "off" for i in range(24)]
+        heat_kwh = [((hp[i] or 0) / 60 * HEAT_PUMP_KW) + ((aux[i] or 0) / 60 * BACKUP_KW) for i in range(24)]
+        cool_kwh = [(cool[i] or 0) / 60 * HEAT_PUMP_KW for i in range(24)]
+        use = [heat_kwh[i] + cool_kwh[i] for i in range(24)]
+        total = sum(use)
+        sol = hours_solar.get(d)
+        from_sun = sum(min(use[i], sol[i] or 0) for i in range(24)) if sol else None
+        cost = sum(use[i] * price[tou[i]] for i in range(24))
+        on_share = round(100 * sum(use[i] for i in range(24) if tou[i] == "on") / total) if total > 0.5 else 0
+        runs = sum((h or {}).get("runs", 0) for h in hs)
+        hp_min = sum(x or 0 for x in hp)
+        aux_min = sum(x or 0 for x in aux)
+        cool_min = sum(x or 0 for x in cool)
+        notes = []
+        # 1. backup heat, and whether a set point jump brought it on
+        if aux_min >= 5:
+            first = next(i for i in range(24) if (aux[i] or 0) > 0)
+            jump = None
+            for i in range(max(1, first - 2), first + 1):
+                if setp[i] is not None and setp[i - 1] is not None and setp[i] - setp[i - 1] >= 1:
+                    jump = (i, setp[i - 1], setp[i])
+            share = round(100 * sum((aux[i] or 0) / 60 * BACKUP_KW for i in range(24)) / total) if total else 0
+            if jump:
+                notes.append({"kind": "backup", "text": f"The {_hour_name(jump[0])} jump from {jump[1]:.0f}° to {jump[2]:.0f}° brought on **{aux_min} minutes of backup heat**, about {share}% of the day's heating energy. Starting the warm-up an hour earlier would likely let the heat pump do it alone."})
+            else:
+                o = out[first]
+                notes.append({"kind": "backup", "text": f"Backup heat ran **{aux_min} minutes**, starting around {_hour_name(first)}{' with ' + _dg(o) + ' outside' if o is not None else ''}, about {share}% of the day's heating energy."})
+        # 2. the sun doing some heating: heat off at midday while the house rose above the set point
+        if sol and hp_min:
+            quiet = [i for i in range(10, 17) if (hp[i] or 0) + (aux[i] or 0) <= 2 and ins[i] is not None and setp[i] is not None
+                     and ins[i] >= setp[i] + 0.5 and (sol[i] or 0) >= 0.5]
+            if len(quiet) >= 2:
+                top = max(ins[i] for i in quiet)
+                notes.append({"kind": "sun", "text": f"From {_hour_name(quiet[0])} to {_hour_name(quiet[-1] + 1)} the heat stayed off while the house rose to **{top:.1f}°, {top - setp[quiet[0]]:.1f}° over the set point**. That's the sun through the windows."})
+        # 3. how fast the house loses heat: the longest stretch of 3+ hours with no heating, indoors falling
+        best = None
+        i = 0
+        while i < 24:
+            j = i
+            while j < 24 and (hp[j] or 0) + (aux[j] or 0) == 0 and ins[j] is not None and out[j] is not None:
+                j += 1
+            if j - i >= 3 and (best is None or j - i > best[1] - best[0]):
+                best = (i, j)
+            i = max(j, i + 1)
+        if best and (cool_min == 0):
+            a, b = best
+            drop = ins[a] - ins[b - 1]
+            if drop >= 0.4:
+                rate = drop / (b - 1 - a)
+                o = sum(out[k] for k in range(a, b)) / (b - a)
+                if o < 12:
+                    notes.append({"kind": "loss", "text": f"With the heat off from {_hour_name(a)} to {_hour_name(b)}, the house cooled about **{rate:.1f}° an hour at {_dg(o)} outside**. Solar keeps this for every such night, so winters can be compared.",
+                                  "rate": round(rate, 2), "out": round(o, 1)})
+        # 4. on-peak share
+        if total >= 3 and on_share >= 30:
+            notes.append({"kind": "peak", "text": f"**{on_share}% of the {'heating' if cool_min < hp_min + aux_min else 'cooling'}** ran at on-peak prices."})
+        # 5. short cycling
+        if runs >= 6 and hp_min / runs < 10:
+            notes.append({"kind": "cycles", "text": f"The heat pump started {runs} times, averaging **{hp_min / runs:.0f} minutes a run**. Runs that short wear it faster; a technician can check why."})
+        days[d] = {"hp": hp, "aux": aux, "cool": cool, "set": setp, "cset": cset, "in": ins, "out": out, "tou": tou,
+                   "kwh": round(total, 1), "cost": round(cost, 2), "auxMin": aux_min, "hpMin": hp_min, "coolMin": cool_min,
+                   "fromSun": None if from_sun is None else round(from_sun, 1), "onShare": on_share, "runs": runs, "notes": notes}
+    thermo["days"] = days
+    thermo["estimate"] = {"heatPumpKw": HEAT_PUMP_KW, "backupKw": BACKUP_KW}
 
 
 # ---------- phone alerts (Web Push) ----------
@@ -1393,6 +1592,12 @@ def main():
     (ROOT / "problems.json").write_text(json.dumps({"alertsChecked": fresh_check, "problems": problems}, indent=1))
     pem, push_pub = vapid()
     money_out = _money(hydro, solar, weather)
+    thermo = read_thermostat()
+    try:
+        thermostat_days(thermo, solar)
+    except Exception as e:  # the day view is extra: never fail the build over it
+        log(f"::warning::thermostat day view failed: {e}")
+        (thermo or {}).pop("_hourly", None)
     try:
         extra = insight_alerts(money_out, solar, hydro, weather, dt.datetime.now(TZ).date())
         for _, _, t, b in extra:
@@ -1408,7 +1613,7 @@ def main():
         "push": {"publicKey": push_pub, "devices": [{"id": device_id(d), "prefs": d.get("prefs", {}), "app": bool(d.get("apns"))} for d in push_devices()]} if push_pub else None,
         "bills": (read_private("data/bills.json") or {}).get("bills"),
         "uploads": (read_private("data/uploads.json") or [])[-10:],
-        "thermostat": read_thermostat(),
+        "thermostat": thermo,
         # only ever published inside the encrypted data
         "uploadToken": (os.environ.get("UPLOAD_TOKEN") or None) if _passphrase() else None,
         "askKey": (os.environ.get("ANTHROPIC_API_KEY") or None) if _passphrase() else None,

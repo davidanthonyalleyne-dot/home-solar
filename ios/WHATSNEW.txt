@@ -1,4 +1,5 @@
-What's new in 1.10.4
-- Sunny knows the weather outside right now: temperature, feels-like and conditions.
-- Sunny can read your thermostat live through Apple Home: inside temperature, set point and whether it's heating or cooling. Turn it on in Settings, Sunny, and allow Home access.
-- The ecobee needs to be in the Home app for the inside reading to work.
+What's new in 1.11
+- Tap a day in Month to see it with the ecobee: inside temperature against the set point, outside temperature, an hour-by-hour bar for the heat pump and backup heat, and what the panels made.
+- The top of the day shows heating energy and roughly what it cost, how long the backup heat ran, and how much of the heating the panels covered.
+- "What stood out" notes explain the day: backup heat after a morning warm-up, the sun warming the house, how fast the house cools with the heat off, and heating at on-peak prices.
+- Needs an ecobee file added in Settings. Solar fills in hourly production for past days over the next couple of weeks.

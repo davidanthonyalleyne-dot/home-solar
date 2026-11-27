@@ -43,13 +43,21 @@ jobs:
           mkdir -p "$RUNNER_TEMP/screens"
           for mode in light dark; do
             xcrun simctl ui "$DEV" appearance $mode
-            for screen in now month history energy ask settings solaredge; do
+            for screen in now month dayview history energy ask settings solaredge; do
               xcrun simctl terminate "$DEV" ca.davidalleyne.solar || true
               HV=cost; [ "$screen" = energy ] && HV=energy
               xcrun simctl launch "$DEV" ca.davidalleyne.solar -previewNow -$screen -histView $HV
               sleep 6
               xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/screens/$screen-$mode.png"
             done
+          done
+          # every Settings page, light only
+          xcrun simctl ui "$DEV" appearance light
+          for pg in hydro thermostat system heating alerts export ask security; do
+            xcrun simctl terminate "$DEV" ca.davidalleyne.solar || true
+            xcrun simctl launch "$DEV" ca.davidalleyne.solar -previewNow -settingsPage $pg
+            sleep 5
+            xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/screens/set-$pg-light.png"
           done
           # the Excel export: made from the sample data, then opened with openpyxl to prove Excel can read it
           xcrun simctl ui "$DEV" appearance light
