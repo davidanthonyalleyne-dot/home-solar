@@ -51,6 +51,14 @@ jobs:
               xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/screens/$screen-$mode.png"
             done
           done
+          # every Settings page, light only
+          xcrun simctl ui "$DEV" appearance light
+          for pg in hydro thermostat system heating alerts export ask security; do
+            xcrun simctl terminate "$DEV" ca.davidalleyne.solar || true
+            xcrun simctl launch "$DEV" ca.davidalleyne.solar -previewNow -settingsPage $pg
+            sleep 5
+            xcrun simctl io "$DEV" screenshot "$RUNNER_TEMP/screens/set-$pg-light.png"
+          done
           # the Excel export: made from the sample data, then opened with openpyxl to prove Excel can read it
           xcrun simctl ui "$DEV" appearance light
           xcrun simctl terminate "$DEV" ca.davidalleyne.solar || true

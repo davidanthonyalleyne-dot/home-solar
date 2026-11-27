@@ -780,7 +780,7 @@
     // each set point labelled under the middle of its longest stretch, clear of the rising line
     const runMid = (val) => { let best = [0, 0], a = -1; sp.forEach((v, i) => { const on = v != null && Math.round(v * 2) / 2 === val; if (on && a < 0) a = i; if ((!on || i === 23) && a >= 0) { const b = on ? 24 : i; if (b - a > best[1] - best[0]) best = [a, b]; a = -1; } }); return (best[0] + best[1]) / 2; };
     const setLabels = setVals.slice(0, 3).map((v) => `<text x="${f(Math.min(Math.max(x(runMid(v)), 70), W - 40))}" y="${f(iy(v) + 16)}" class="ax" text-anchor="middle">set to ${fmt(v, v % 1 ? 1 : 0)}°</text>`).join("");
-    const inside = `<section class="cday"><h3>Inside the house</h3><p class="cap">The dashed line is what the thermostat was set to; the black line is the actual temperature inside.</p>
+    const inside = `<section class="cday"><h3>Inside the house</h3><p class="cap">The dashed line is what the thermostat was set to; the solid line is the actual temperature inside.</p>
       <svg viewBox="0 0 ${W} 200" role="img" aria-label="Inside temperature through the day">
       ${ticks.map((t) => `<line x1="${X0}" x2="${W}" y1="${f(iy(t))}" y2="${f(iy(t))}" class="grid"/><text x="0" y="${f(iy(t) + 4)}" class="ax">${t}°</text>`).join("")}
       <path d="${setPath}" class="setp"/><path d="${path(pts(c.in, iy))}" class="inl"/>${setLabels}

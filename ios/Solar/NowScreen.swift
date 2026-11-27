@@ -385,7 +385,7 @@ struct PreviewNow: View {
     static var startTab: SolarTab {
         let a = ProcessInfo.processInfo.arguments
         return a.contains("-month") || a.contains("-dayview") ? .month : a.contains("-history") || a.contains("-energy") ? .history : a.contains("-ask") ? .ask
-            : a.contains("-settings") || a.contains("-solaredge") ? .settings : .now
+            : a.contains("-settings") || a.contains("-solaredge") || a.contains("-settingsPage") ? .settings : .now
     }
     @StateObject private var model: NowModel = {
         let m = NowModel(cached: false)
@@ -396,6 +396,8 @@ struct PreviewNow: View {
                          lat: 43.64, lon: -79.43, weather: s.weather, tomorrow: (0, 4, -2), status: ("ok", "System normal"))
         m.preview = true
         if ProcessInfo.processInfo.arguments.contains("-solaredge") { m.settingsPath = ["solaredge"] }
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-settingsPage"), i + 1 < args.count { m.settingsPath = [args[i + 1]] }
         if let u = Bundle.main.url(forResource: "sample-data", withExtension: "json"), let d = try? Data(contentsOf: u) {
             m.json = try? JSONSerialization.jsonObject(with: d) as? [String: Any]
         }

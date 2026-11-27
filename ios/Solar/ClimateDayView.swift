@@ -15,7 +15,7 @@ struct ClimateDayView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             trio
-            section("Inside the house", "The dashed line is what the thermostat was set to; the black line is the actual temperature inside.") { InsideChart(c: c) }
+            section("Inside the house", "The dashed line is what the thermostat was set to; the solid line is the actual temperature inside.") { InsideChart(c: c) }
             if c.out.contains(where: { $0 != nil }) {
                 let (lo, li) = extreme(c.out, <), (hi, hiI) = extreme(c.out, >)
                 section("Outside", "Coldest at \(hourName(li)), warmest at \(hourName(hiI)).") {
