@@ -1588,6 +1588,17 @@
   }
   // a short memory of earlier conversations, so "like I asked yesterday" makes sense
   // the time in Toronto against today's sunrise and sunset, so Sunny can say "it's dark" instead of "nothing's happening"
+  function askOutsideNote(wx) {
+    const n = wx && wx.now;
+    if (!n || n.tempC == null) return "Outside right now: the weather service didn't answer just now.";
+    let s = `Outside right now: ${n.tempC.toFixed(1)}°C`;
+    if (n.feelsLikeC != null && Math.abs(n.feelsLikeC - n.tempC) >= 1) s += `, feels like ${Math.round(n.feelsLikeC)}°C`;
+    if (n.conditions) s += `, ${n.conditions}`;
+    if (n.windKmh >= 15) s += `, wind ${Math.round(n.windKmh)} km/h`;
+    if (n.snowCm > 0) s += ", snowing"; else if (n.precipMm > 0) s += ", precipitation falling";
+    return s + ". (The live thermostat reading is only available in the iPhone app.)";
+  }
+
   function askSunNote() {
     const now = new Date(), sun = sunTimes(torontoToday()), t = clock(now);
     if (now < sun.rise) return `It's ${t}, before sunrise. The sun comes up at ${clock(sun.rise)} and sets at ${clock(sun.set)}. The panels can't make power in the dark, so 0 kW now is normal.`;
@@ -1672,7 +1683,7 @@
     return askWx;
   }
 
-  const ASK_SYSTEM = `You are Sunny, the assistant inside Solar, a private app for one home in Toronto with rooftop solar. Answer the owner's questions using only the data provided. Lead with the answer, with the key figure in bold using **double asterisks**. Write two to four short, plain sentences; no headings, no bullet lists, no em dashes. Money in dollars, energy in kWh, temperatures in °C. The data includes live weather and a seven day forecast with expected solar per day; when you use it, say it's a forecast. If live weather is missing, say you couldn't get it right now. If something is estimated or missing, say so in a few words. A "Sun right now" note gives the time in Toronto with today's sunrise and sunset. When the panels are making little or nothing and it's before sunrise or after sunset, say so in the answer: it's dark, so zero is normal, and give the next sunrise time. Never call that a problem. If the data can't answer the question, say what's missing. Show, don't just tell: almost every answer with numbers should include a small chart, placed right after the sentence it supports. Use up to two chart blocks, each written exactly like this:
+  const ASK_SYSTEM = `You are Sunny, the assistant inside Solar, a private app for one home in Toronto with rooftop solar. Answer the owner's questions using only the data provided. Lead with the answer, with the key figure in bold using **double asterisks**. Write two to four short, plain sentences; no headings, no bullet lists, no em dashes. Money in dollars, energy in kWh, temperatures in °C. The data includes live weather and a seven day forecast with expected solar per day; when you use it, say it's a forecast. If live weather is missing, say you couldn't get it right now. If something is estimated or missing, say so in a few words. A "Sun right now" note gives the time in Toronto with today's sunrise and sunset. When the panels are making little or nothing and it's before sunrise or after sunset, say so in the answer: it's dark, so zero is normal, and give the next sunrise time. Never call that a problem. An "Outside right now" note gives the current temperature, feels-like and conditions at the house, and an "Inside right now" note, when present, gives the thermostat's live reading. Use them whenever the question touches weather, comfort, heating or cooling, or why the panels are making what they are, and say plainly if either couldn't be read just now. The daily thermostat columns are history from ecobee downloads, not live. If the data can't answer the question, say what's missing. Show, don't just tell: almost every answer with numbers should include a small chart, placed right after the sentence it supports. Use up to two chart blocks, each written exactly like this:
 \`\`\`chart
 {"type":"bars","unit":"kWh","series":["Grid","Solar"],"rows":[["Sep",1150,540],["Oct",1420,410]]}
 \`\`\`
@@ -1848,7 +1859,7 @@ Types: "bars" compares two to eight things (months, years, bills), stacked when 
         headers: { "content-type": "application/json", "x-api-key": state.data.askKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
         body: JSON.stringify({ model: ASK_MODEL, max_tokens: 1400,
           system: [{ type: "text", text: ASK_SYSTEM }, { type: "text", text: "The app's data:\n" + askContext(), cache_control: { type: "ephemeral" } },
-            { type: "text", text: "Sun right now: " + askSunNote() + "\n\nLive weather:\n" + (wx ? JSON.stringify(wx) : "not available right now") + (pastChatsNote() ? "\n\n" + pastChatsNote() : "") }],
+            { type: "text", text: "Sun right now: " + askSunNote() + "\n" + askOutsideNote(wx) + "\n\nLive weather:\n" + (wx ? JSON.stringify(wx) : "not available right now") + (pastChatsNote() ? "\n\n" + pastChatsNote() : "") }],
           messages: history }),
       });
       const j = await r.json().catch(() => ({}));

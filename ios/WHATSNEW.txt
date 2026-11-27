@@ -1,3 +1,4 @@
-What's new in 1.10.3
-- Sunny knows when the sun is down. Ask about the panels at night or before sunrise and it says it's dark, so zero is normal, and tells you when the sun comes up.
-- Works the same whether Sunny answers with Apple Intelligence or Claude.
+What's new in 1.10.4
+- Sunny knows the weather outside right now: temperature, feels-like and conditions.
+- Sunny can read your thermostat live through Apple Home: inside temperature, set point and whether it's heating or cooling. Turn it on in Settings, Sunny, and allow Home access.
+- The ecobee needs to be in the Home app for the inside reading to work.

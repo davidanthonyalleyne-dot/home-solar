@@ -6,7 +6,7 @@ options:
     tvOS: "17.0"
 settings:
   base:
-    MARKETING_VERSION: "1.10.3"
+    MARKETING_VERSION: "1.10.4"
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: M8GX2N7YR2
@@ -31,6 +31,7 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         NSMicrophoneUsageDescription: Solar uses the microphone when you tap the mic in Ask to talk to Sunny.
         NSSpeechRecognitionUsageDescription: Your spoken question to Sunny is turned into text on this iPhone.
+        NSHomeKitUsageDescription: Sunny reads your thermostat in Apple Home when you ask it something, so it knows the temperature inside. Nothing is saved.
         NSCameraUsageDescription: Solar uses the camera if you choose to photograph a Toronto Hydro bill to upload.
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UIBackgroundModes: [fetch]

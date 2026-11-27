@@ -156,6 +156,7 @@ struct SettingsPage: View {
     let onLock: () -> Void
     @State private var armed = false
     @State private var engine = SunnyEngine.chosen
+    @State private var indoorOn = Indoor.on
 
     static let titles = ["solaredge": "SolarEdge", "hydro": "Toronto Hydro", "thermostat": "ecobee thermostat", "system": "Solar system",
                          "heating": "Heating and cooling", "alerts": "Alerts", "ask": "Sunny", "security": "Security", "export": "Export data"]
@@ -244,6 +245,9 @@ struct SettingsPage: View {
                     row("Answers from", apple.ok ? "Apple Intelligence" : "Not set up")
                 }
                 row("Apple Intelligence", apple.note)
+                Toggle("Inside temperature from Apple Home", isOn: Binding(get: { indoorOn }, set: { indoorOn = $0; Indoor.on = $0; if $0 { Indoor.shared.start() } }))
+                    .tint(SK.sunColor)
+                if indoorOn { row("Thermostat", Indoor.shared.access) }
                 row("Saved conversations", count > 0 ? "\(count) on this phone" : "None")
                 row("Voice", "Recognized on this iPhone, read aloud by \(Voice.bestVoice()?.name ?? "the system voice")")
             } footer: {
@@ -251,6 +255,7 @@ struct SettingsPage: View {
                      ? "Sunny answers with Apple's model on this iPhone, so your questions and the data never leave it. It keeps answers short and doesn't draw charts. \(hasKey ? "If Apple's model can't answer, Sunny asks Claude instead, sending a summary of the app's data and the forecast." : "") Conversations stay on this phone."
                      : hasKey ? "Each question to Sunny sends Claude a summary of the app's data and the forecast, and Claude can answer with charts. Conversations stay on this phone. For the best voice, download Nathan in Settings, Accessibility, Spoken Content, Voices."
                      : "\(apple.note). Sunny can also use Claude: add an ANTHROPIC_API_KEY secret in GitHub.")
+                     + " Sunny always knows the weather outside right now. With Apple Home on, it also reads the thermostat's live temperature, set point and whether it's heating, at the moment you ask. Your ecobee needs to be added to the Home app first."
             }
             if count > 0 {
                 Section { Button(armed ? "Tap again to delete all" : "Delete all conversations", role: .destructive) { if armed { ChatStore.save([]); armed = false } else { armed = true } } }

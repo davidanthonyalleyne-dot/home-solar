@@ -8,7 +8,7 @@ import WebKit
 let askModelName = "claude-haiku-5-5"
 
 let askSystem = """
-You are Sunny, the assistant inside Solar, a private app for one home in Toronto with rooftop solar. Answer the owner's questions using only the data provided. Lead with the answer, with the key figure in bold using **double asterisks**. Write two to four short, plain sentences; no headings, no bullet lists, no em dashes. Money in dollars, energy in kWh, temperatures in °C. The data includes live weather and a seven day forecast with expected solar per day; when you use it, say it's a forecast. If live weather is missing, say you couldn't get it right now. If something is estimated or missing, say so in a few words. A "Sun right now" note gives the time in Toronto with today's sunrise and sunset. When the panels are making little or nothing and it's before sunrise or after sunset, say so in the answer: it's dark, so zero is normal, and give the next sunrise time. Never call that a problem. If the data can't answer the question, say what's missing. Show, don't just tell: almost every answer with numbers should include a small chart, placed right after the sentence it supports. Use up to two chart blocks, each written exactly like this:
+You are Sunny, the assistant inside Solar, a private app for one home in Toronto with rooftop solar. Answer the owner's questions using only the data provided. Lead with the answer, with the key figure in bold using **double asterisks**. Write two to four short, plain sentences; no headings, no bullet lists, no em dashes. Money in dollars, energy in kWh, temperatures in °C. The data includes live weather and a seven day forecast with expected solar per day; when you use it, say it's a forecast. If live weather is missing, say you couldn't get it right now. If something is estimated or missing, say so in a few words. A "Sun right now" note gives the time in Toronto with today's sunrise and sunset. When the panels are making little or nothing and it's before sunrise or after sunset, say so in the answer: it's dark, so zero is normal, and give the next sunrise time. Never call that a problem. An "Outside right now" note gives the current temperature, feels-like and conditions at the house, and an "Inside right now" note, when present, gives the thermostat's live reading. Use them whenever the question touches weather, comfort, heating or cooling, or why the panels are making what they are, and say plainly if either couldn't be read just now. The daily thermostat columns are history from ecobee downloads, not live. If the data can't answer the question, say what's missing. Show, don't just tell: almost every answer with numbers should include a small chart, placed right after the sentence it supports. Use up to two chart blocks, each written exactly like this:
 ```chart
 {"type":"bars","unit":"kWh","series":["Grid","Solar"],"rows":[["Sep",1150,540],["Oct",1420,410]]}
 ```
@@ -119,11 +119,17 @@ final class AskModel: ObservableObject {
         do {
             let db = SolarDB(json)
             let wx = await AskData.weather(db)
+            #if os(iOS)
+            let inside = await Indoor.shared.reading()
+            #else
+            let inside: String? = nil
+            #endif
+            let liveNow = "Sun right now: " + AskData.sunNote() + "\n" + AskData.outsideNote(wx) + (inside.map { "\n" + $0 } ?? "")
             #if os(iOS) && canImport(FoundationModels)
             // Apple Intelligence first, on this iPhone; Claude only if Apple can't answer and a key is set
             if SunnyEngine.chosen == .apple || key == nil, #available(iOS 26.0, *), SunnyEngine.appleStatus.ok {
                 do {
-                    let text = try await AppleSunny.answer(q, history: msgs.filter { $0.error != true }, db: db, json: json, weather: wx)
+                    let text = try await AppleSunny.answer(q, history: msgs.filter { $0.error != true }, db: db, json: json, weather: wx, now: liveNow)
                     msgs.append(ChatMsg(role: "assistant", text: text, spoken: spoken))
                     if spoken { voice.speak(text) }
                     busy = false; persist(); return
@@ -143,7 +149,7 @@ final class AskModel: ObservableObject {
                 "model": askModelName, "max_tokens": 1400,
                 "system": [["type": "text", "text": askSystem],
                            ["type": "text", "text": "The app's data:\n" + AskData.context(db), "cache_control": ["type": "ephemeral"]],
-                           ["type": "text", "text": "Sun right now: " + AskData.sunNote() + "\n\nLive weather:\n" + (wx ?? "not available right now") + pastNote()]],
+                           ["type": "text", "text": liveNow + "\n\nLive weather:\n" + (wx ?? "not available right now") + pastNote()]],
                 "messages": history,
             ]
             var r = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!, timeoutInterval: 90)
@@ -371,6 +377,19 @@ final class Voice: NSObject, AVSpeechSynthesizerDelegate {
 
 enum AskData {
     /// The time in Toronto against today's sunrise and sunset, so Sunny can say "it's dark" instead of "nothing's happening"
+    /// The weather at the house right now in one line, from the forecast fetched for this question
+    static func outsideNote(_ wx: String?) -> String {
+        guard let wx, let d = wx.data(using: .utf8), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+              let n = o["now"] as? [String: Any], let t = (n["tempC"] as? NSNumber)?.doubleValue else { return "Outside right now: the weather service didn't answer just now." }
+        var s = "Outside right now: \(String(format: "%.1f°C", t))"
+        if let f = (n["feelsLikeC"] as? NSNumber)?.doubleValue, abs(f - t) >= 1 { s += ", feels like \(String(format: "%.0f°C", f))" }
+        if let c = n["conditions"] as? String, !c.isEmpty { s += ", \(c)" }
+        if let w = (n["windKmh"] as? NSNumber)?.doubleValue, w >= 15 { s += ", wind \(Int(w.rounded())) km/h" }
+        if let sn = (n["snowCm"] as? NSNumber)?.doubleValue, sn > 0 { s += ", snowing" }
+        else if let p = (n["precipMm"] as? NSNumber)?.doubleValue, p > 0 { s += ", precipitation falling" }
+        return s + "."
+    }
+
     static func sunNote(_ now: Date = Date()) -> String {
         let sun = SK.sun(SK.day(now)), t = Fmt.clock(now)
         if now < sun.rise { return "It's \(t), before sunrise. The sun comes up at \(Fmt.clock(sun.rise)) and sets at \(Fmt.clock(sun.set)). The panels can't make power in the dark, so 0 kW now is normal." }
