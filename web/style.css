@@ -817,3 +817,35 @@ body.land.r-history main { padding-left: max(24px, calc(env(safe-area-inset-left
 .cday svg .b-sun { fill: var(--sun); }
 .cday svg .slab { font-size: 12px; font-weight: 600; fill: var(--sun); }
 .cday.notes p { margin: 0 0 10px; font-size: 15px; line-height: 1.45; }
+
+/* temperatures: inside, setting and outside on one scale */
+:root { --t-in: #f47230; --t-out: #257de0; --t-set: #8E8E93; --tip-bg: #F2F2F4; --tip-rule: #E6E6E9; }
+@media (prefers-color-scheme: dark) { :root { --t-in: #e76624; --t-out: #338ced; --t-set: #8E8E93; --tip-bg: #2C2C2E; --tip-rule: #3A3A3C; } }
+.temps .tlegend { gap: 16px; }
+.temps .lk { display: inline-block; width: 16px; height: 2px; border-radius: 1px; vertical-align: middle; }
+.temps .lk.ink { background: var(--t-in); } .temps .lk.outk { background: var(--t-out); }
+.temps .lk.setk { background: repeating-linear-gradient(90deg, var(--t-set) 0 4px, transparent 4px 7px); }
+.tchart { touch-action: pan-y; }
+.tchart .tin { fill: none; stroke: var(--t-in); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.tchart .tout { fill: none; stroke: var(--t-out); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.tchart .tset { fill: none; stroke: var(--t-set); stroke-width: 2; stroke-dasharray: 4 3; }
+.tchart .mk { stroke: var(--sheet); stroke-width: 2; }
+.tchart .mk.ink { fill: var(--t-in); } .tchart .mk.outk { fill: var(--t-out); } .tchart .mk.setk { fill: var(--t-set); }
+.tchart .leader { fill: none; stroke: var(--faint); stroke-width: 1; }
+.tchart .ename { font-size: 11px; fill: var(--muted); }
+.tchart .evalue { font-size: 13px; font-weight: 600; fill: var(--text); }
+.tchart .hit { fill: transparent; cursor: crosshair; }
+.tchart .cross { stroke: var(--muted); stroke-width: 1; }
+.tchart .tipbox { fill: var(--tip-bg); stroke: var(--tip-rule); }
+.tchart .thour { font-size: 12px; font-weight: 600; fill: var(--muted); }
+.tchart .key { stroke-width: 2; } .tchart .key.ink { stroke: var(--t-in); } .tchart .key.outk { stroke: var(--t-out); }
+.tchart .key.setk { stroke: var(--t-set); stroke-dasharray: 4 3; }
+.tchart .tval { font-size: 13px; font-weight: 600; fill: var(--text); }
+.tchart .tname { font-size: 11px; fill: var(--muted); }
+.temps .tfoot { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); margin-top: 4px; }
+.temps .ttoggle { min-height: 44px; padding: 0 14px; border: 1px solid var(--rule); border-radius: 22px; background: transparent; color: var(--text); font: inherit; font-size: 13px; white-space: nowrap; }
+.temps .ttable { font-size: 13px; font-variant-numeric: tabular-nums; margin-top: 6px; }
+.temps .trow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 6px 0; border-bottom: 1px solid var(--rule); }
+.temps .trow span + span { text-align: right; }
+.temps .trow.th { color: var(--muted); font-weight: 600; }
+.temps .trow .mute { color: var(--muted); }

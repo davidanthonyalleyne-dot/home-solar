@@ -1,5 +1,5 @@
-What's new in 1.11
-- Tap a day in Month to see it with the ecobee: inside temperature against the set point, outside temperature, an hour-by-hour bar for the heat pump and backup heat, and what the panels made.
-- The top of the day shows heating energy and roughly what it cost, how long the backup heat ran, and how much of the heating the panels covered.
-- "What stood out" notes explain the day: backup heat after a morning warm-up, the sun warming the house, how fast the house cools with the heat off, and heating at on-peak prices.
-- Needs an ecobee file added in Settings. Solar fills in hourly production for past days over the next couple of weeks.
+What's new in 1.11.1
+- The day view's inside and outside charts are now one Temperatures chart: inside, the thermostat setting and outside on the same scale.
+- Each line is labelled once at its right end, so labels no longer sit on top of the lines.
+- Touch and drag across the chart to read inside, set point and outside for any hour.
+- "Show as table" lists all three every two hours.

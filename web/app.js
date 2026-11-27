@@ -768,36 +768,8 @@
                     : `<div><span class="l">${cooling ? "Cooling ran" : "Heat pump ran"}</span><span class="n">${hm((cooling ? c.coolMin : c.hpMin) * 60000)}</span><span class="s">through the day</span></div>`;
     top += sol ? `<div><span class="l">Solar made</span><span class="n sun">${fmt(r.prod != null ? r.prod : sol.reduce((a, b) => a + b, 0))} kWh</span><span class="s">${c.fromSun != null && c.kwh > 0.5 ? Math.round(100 * c.fromSun / c.kwh) + "% to " + (cooling ? "cooling" : "heating") : ""}</span></div>` : `<div></div>`;
     top += `</div>`;
-    // 1. inside
-    const iv = c.in.filter((v) => v != null).concat(c.set.filter((v) => v != null), cooling ? c.cset.filter((v) => v != null) : []);
-    const lo = Math.floor(Math.min(...iv) - 0.5), hi = Math.ceil(Math.max(...iv) + 0.5), iy = (t) => 30 + (hi - t) / (hi - lo) * 145;
-    const sp = cooling ? c.cset : c.set;
-    let setPath = "", pen = false;
-    sp.forEach((v, i) => { if (v == null) { pen = false; return; } setPath += (pen ? `H${f(x(i))} V${f(iy(v))} ` : `M${f(x(i))} ${f(iy(v))} `) ; setPath += `H${f(x(i + 1))} `; pen = true; });
-    const ticks = []; for (let t = Math.ceil(lo); t <= hi; t += (hi - lo > 6 ? 2 : 1)) ticks.push(t);
-    const setVals = [...new Set(sp.filter((v) => v != null).map((v) => Math.round(v * 2) / 2))];
-    const peakI = c.in.reduce((b, v, i) => (v != null && (b < 0 || v > c.in[b]) ? i : b), -1);
-    // each set point labelled under the middle of its longest stretch, clear of the rising line
-    const runMid = (val) => { let best = [0, 0], a = -1; sp.forEach((v, i) => { const on = v != null && Math.round(v * 2) / 2 === val; if (on && a < 0) a = i; if ((!on || i === 23) && a >= 0) { const b = on ? 24 : i; if (b - a > best[1] - best[0]) best = [a, b]; a = -1; } }); return (best[0] + best[1]) / 2; };
-    const setLabels = setVals.slice(0, 3).map((v) => `<text x="${f(Math.min(Math.max(x(runMid(v)), 70), W - 40))}" y="${f(iy(v) + 16)}" class="ax" text-anchor="middle">set to ${fmt(v, v % 1 ? 1 : 0)}°</text>`).join("");
-    const inside = `<section class="cday"><h3>Inside the house</h3><p class="cap">The dashed line is what the thermostat was set to; the solid line is the actual temperature inside.</p>
-      <svg viewBox="0 0 ${W} 200" role="img" aria-label="Inside temperature through the day">
-      ${ticks.map((t) => `<line x1="${X0}" x2="${W}" y1="${f(iy(t))}" y2="${f(iy(t))}" class="grid"/><text x="0" y="${f(iy(t) + 4)}" class="ax">${t}°</text>`).join("")}
-      <path d="${setPath}" class="setp"/><path d="${path(pts(c.in, iy))}" class="inl"/>${setLabels}
-      ${peakI >= 0 ? `<circle cx="${f(x(peakI + 0.5))}" cy="${f(iy(c.in[peakI]))}" r="4.5" class="dot"/><text x="${f(Math.min(Math.max(x(peakI + 0.5), 70), W - 70))}" y="${f(iy(c.in[peakI]) - 11)}" class="lab" text-anchor="middle">${fmt(c.in[peakI], 1)}° at ${hourName(peakI)}</text>` : ""}
-      ${hoursAxis(196)}</svg></section>`;
-    // 2. outside
-    const ov = c.out.filter((v) => v != null);
-    let outside = "";
-    if (ov.length) {
-      const olo = Math.min(...ov), ohi = Math.max(...ov), span = Math.max(4, ohi - olo), oy = (t) => 30 + (ohi + span * 0.1 - t) / (span * 1.2) * 56;
-      const li = c.out.indexOf(olo), hiI = c.out.indexOf(ohi);
-      outside = `<section class="cday"><h3>Outside</h3><p class="cap">Coldest at ${hourName(li)}, warmest at ${hourName(hiI)}.</p>
-        <svg viewBox="0 0 ${W} 128" role="img" aria-label="Outside temperature through the day"><path d="${path(pts(c.out, oy))}" class="outl"/>
-        <circle cx="${f(x(li + 0.5))}" cy="${f(oy(olo))}" r="4.5" class="odot"/><text x="${f(Math.min(Math.max(x(li + 0.5), 50), W - 50))}" y="${f(oy(olo) + 20)}" class="olab" text-anchor="middle">${sign(olo)} at ${hourName(li)}</text>
-        <circle cx="${f(x(hiI + 0.5))}" cy="${f(oy(ohi))}" r="4.5" class="odot"/><text x="${f(Math.min(Math.max(x(hiI + 0.5), 50), W - 50))}" y="${f(oy(ohi) - 10)}" class="olab" text-anchor="middle">${sign(ohi)} at ${hourName(hiI)}</text>
-        ${hoursAxis(124)}</svg></section>`;
-    }
+    // 1. temperatures: inside, the setting and outside on one scale (labels at the line ends)
+    const inside = tempChart(c, cooling), outside = "";
     // 3. when the heat (or cooling) was on
     const base = 150, H = 110, bw = PW / 24 - 3;
     const bars = c.hp.map((m, i) => {
@@ -828,6 +800,65 @@
     const est = state.data.thermostat.estimate || {};
     return top + inside + outside + heat + solarSec + notes + `<p class="sub">From the ecobee file${sol ? ", SolarEdge" : ""} and Toronto Hydro's time-of-use prices. Energy is estimated from runtime (heat pump ${fmt(est.heatPumpKw || 2.6, 1)} kW, backup heat ${fmt(est.backupKw || 7.5, 1)} kW), before delivery and HST.</p>`;
   }
+  // Inside, the thermostat setting and outside on one scale. Each line is labelled once at its right
+  // end, in a column with thin leaders so labels never sit on a line; touching the chart shows a card
+  // with all three values for that hour, and "Show as table" lists them every two hours.
+  function tempChart(c, cooling) {
+    const W = 350, X0 = 34, PW = 252, XR = X0 + PW, top = 14, bot = 226, f = (v) => v.toFixed(1);
+    const x = (i) => X0 + (i + 0.5) / 24 * PW;
+    const sp = cooling ? c.cset : c.set;
+    const all = [...c.in, ...sp, ...c.out].filter((v) => v != null);
+    if (!all.length) return "";
+    const lo = Math.floor((Math.min(...all) - 1) / 5) * 5, hi = Math.ceil((Math.max(...all) + 1) / 5) * 5;
+    const y = (t) => top + (hi - t) / (hi - lo) * (bot - top);
+    const line = (a) => { let s = "", pen = false; a.forEach((v, i) => { if (v == null) { pen = false; return; } s += (pen ? "L" : "M") + f(x(i)) + " " + f(y(v)) + " "; pen = true; }); return s; };
+    let setPath = "", pen = false;
+    sp.forEach((v, i) => { const a = X0 + i / 24 * PW, b = X0 + (i + 1) / 24 * PW; if (v == null) { pen = false; return; } setPath += (pen ? `V${f(y(v))} ` : `M${f(a)} ${f(y(v))} `) + `H${f(b)} `; pen = true; });
+    const ticks = []; for (let t = lo; t <= hi; t += 5) ticks.push(t);
+    const deg = (v) => v == null ? "–" : (v.toFixed(1) + "°").replace("-", "−");
+    const last = (a) => { for (let i = 23; i >= 0; i--) if (a[i] != null) return [i, a[i]]; return null; };
+    let ends = [["Set to", last(sp), "setk"], ["Inside", last(c.in), "ink"], ["Outside", last(c.out), "outk"]]
+      .filter((e) => e[1]).map(([name, [i, v], cls]) => ({ name, v, cls, ly: y(v), lx: x(i) })).sort((a, b) => a.ly - b.ly);
+    let prev = -999; ends.forEach((e) => { e.ty = Math.max(e.ly, prev + 32, top + 6); prev = e.ty; });
+    const over = prev - (bot + 6); if (over > 0) ends.forEach((e) => { e.ty -= over; });
+    const endsSvg = ends.map((e) => `<circle cx="${f(e.lx)}" cy="${f(e.ly)}" r="4" class="mk ${e.cls}"/><path d="M${f(e.lx + 4)} ${f(e.ly)} L${XR + 8} ${f(e.ly)} L${XR + 12} ${f(e.ty + 4)}" class="leader"/>
+      <text x="${XR + 16}" y="${f(e.ty - 3)}" class="ename">${e.name}</text><text x="${XR + 16}" y="${f(e.ty + 12)}" class="evalue">${deg(e.v)}</text>`).join("");
+    const axis = [[0, "12 am", "start"], [6, "6 am", "middle"], [12, "noon", "middle"], [18, "6 pm", "middle"], [24, "12 am", "end"]]
+      .map(([h, l, an]) => `<text x="${f(X0 + h / 24 * PW)}" y="250" class="ax" text-anchor="${an}">${l}</text>`).join("");
+    const data = JSON.stringify({ i: c.in, s: sp, o: c.out, lo, hi });
+    const rows = []; for (let h = 0; h < 24; h += 2) rows.push(`<div class="trow"><span>${hourName(h)}</span><span>${deg(c.in[h])}</span><span class="mute">${deg(sp[h])}</span><span>${deg(c.out[h])}</span></div>`);
+    return `<section class="cday temps"><h3>Temperatures</h3><p class="cap">Inside, the thermostat setting and outside, by hour</p>
+      <p class="legend tlegend"><span><i class="lk ink"></i>Inside</span><span><i class="lk setk"></i>Set to</span><span><i class="lk outk"></i>Outside</span></p>
+      <svg viewBox="0 0 ${W} 262" class="tchart" role="img" aria-label="Inside ${deg(Math.min(...c.in.filter((v) => v != null)))} to ${deg(Math.max(...c.in.filter((v) => v != null)))}, outside ${deg(Math.min(...c.out.filter((v) => v != null)))} to ${deg(Math.max(...c.out.filter((v) => v != null)))}" data-t='${data}'>
+      ${ticks.map((t) => `<line x1="${X0}" x2="${XR}" y1="${f(y(t))}" y2="${f(y(t))}" class="grid"/><text x="${X0 - 8}" y="${f(y(t) + 4)}" class="ax" text-anchor="end">${String(t).replace("-", "−")}°</text>`).join("")}
+      <path d="${setPath}" class="tset"/><path d="${line(c.out)}" class="tout"/><path d="${line(c.in)}" class="tin"/>${endsSvg}<g class="tip"></g>${axis}
+      <rect x="${X0}" y="0" width="${PW}" height="232" class="hit"/></svg>
+      <div class="tfoot"><span>Touch the chart to read any hour.</span><button type="button" class="ttoggle">Show as table</button></div>
+      <div class="ttable" hidden><div class="trow th"><span>Hour</span><span>Inside</span><span>Set to</span><span>Outside</span></div>${rows.join("")}</div></section>`;
+  }
+  function tempTip(svg, h) {
+    const d = JSON.parse(svg.dataset.t), X0 = 34, PW = 252, top = 14, bot = 226, f = (v) => v.toFixed(1);
+    const g = svg.querySelector(".tip"); if (!g) return;
+    if (h == null) { g.innerHTML = ""; return; }
+    const x = X0 + (h + 0.5) / 24 * PW, y = (t) => top + (d.hi - t) / (d.hi - d.lo) * (bot - top);
+    const deg = (v) => v == null ? "–" : (v.toFixed(1) + "°").replace("-", "−");
+    const tx = x > 160 ? x - 130 : x + 10;
+    const dots = [["s", "setk"], ["o", "outk"], ["i", "ink"]].filter(([k]) => d[k][h] != null).map(([k, cls]) => `<circle cx="${f(x)}" cy="${f(y(d[k][h]))}" r="4" class="mk ${cls}"/>`).join("");
+    const rows = [["Inside", d.i[h], "ink"], ["Set to", d.s[h], "setk"], ["Outside", d.o[h], "outk"]].map(([n, v, cls], k) =>
+      `<line x1="${f(tx + 10)}" x2="${f(tx + 24)}" y1="${33 + k * 17}" y2="${33 + k * 17}" class="key ${cls}"/><text x="${f(tx + 30)}" y="${37 + k * 17}" class="tval">${deg(v)}</text><text x="${f(tx + 72)}" y="${37 + k * 17}" class="tname">${n}</text>`).join("");
+    g.innerHTML = `<line x1="${f(x)}" x2="${f(x)}" y1="${top}" y2="${bot}" class="cross"/>${dots}<rect x="${f(tx)}" y="0" width="120" height="76" rx="8" class="tipbox"/><text x="${f(tx + 10)}" y="18" class="thour">${hourName(h).replace(/^noon$/, "Noon")}</text>${rows}`;
+  }
+  document.addEventListener("pointermove", (e) => {
+    const svg = e.target.closest && e.target.closest("svg.tchart"); if (!svg) return;
+    const r = svg.getBoundingClientRect(), sx = (e.clientX - r.left) / r.width * 350;
+    tempTip(svg, Math.max(0, Math.min(23, Math.floor((sx - 34) / 252 * 24))));
+  });
+  document.addEventListener("pointerdown", (e) => {
+    const svg = e.target.closest && e.target.closest("svg.tchart");
+    if (svg) { const r = svg.getBoundingClientRect(), sx = (e.clientX - r.left) / r.width * 350; tempTip(svg, Math.max(0, Math.min(23, Math.floor((sx - 34) / 252 * 24)))); }
+    const b = e.target.closest && e.target.closest(".ttoggle");
+    if (b) { const t = b.closest(".temps").querySelector(".ttable"); t.hidden = !t.hidden; b.textContent = t.hidden ? "Show as table" : "Hide table"; }
+  });
   const hourName = (h) => h % 24 === 0 ? "midnight" : h === 12 ? "noon" : `${h % 12} ${h < 12 ? "am" : "pm"}`;
 
   // a month from before the panels: just the bill (or bills) that ended in it
